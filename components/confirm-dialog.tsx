@@ -1,20 +1,41 @@
 "use client";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import { useState } from "react";
 export function ConfirmDialog({
   trigger,
   title,
   description,
   confirmLabel,
   onConfirm,
+  pending = false,
+  processingLabel,
+  alternativeLabel,
+  onAlternative,
 }: {
   trigger: React.ReactNode;
   title: string;
   description: string;
   confirmLabel: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
+  pending?: boolean;
+  processingLabel?: string;
+  alternativeLabel?: string;
+  onAlternative?: () => void | Promise<void>;
 }) {
+  const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+  const run = async (action: () => void | Promise<void>) => {
+    setWorking(true);
+    try {
+      await action();
+      setOpen(false);
+    } finally {
+      setWorking(false);
+    }
+  };
+  const busy = pending || working;
   return (
-    <AlertDialog.Root>
+    <AlertDialog.Root open={open} onOpenChange={setOpen}>
       <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/70" />
@@ -24,12 +45,30 @@ export function ConfirmDialog({
             {description}
           </AlertDialog.Description>
           <div className="mt-6 flex flex-col-reverse gap-3 min-[360px]:flex-row min-[360px]:justify-end">
-            <AlertDialog.Cancel className="min-h-11 rounded-lg px-4">Cancel</AlertDialog.Cancel>
+            <AlertDialog.Cancel disabled={busy} className="min-h-11 rounded-lg px-4">
+              Cancel
+            </AlertDialog.Cancel>
+            {alternativeLabel && onAlternative && (
+              <AlertDialog.Action
+                onClick={(event) => {
+                  event.preventDefault();
+                  void run(onAlternative);
+                }}
+                disabled={busy}
+                className="min-h-11 rounded-lg border border-[var(--edge)] px-4 disabled:opacity-60"
+              >
+                {busy ? (processingLabel ?? "Working…") : alternativeLabel}
+              </AlertDialog.Action>
+            )}
             <AlertDialog.Action
-              onClick={onConfirm}
+              onClick={(event) => {
+                event.preventDefault();
+                void run(onConfirm);
+              }}
+              disabled={busy}
               className="min-h-11 rounded-lg bg-[var(--accent)] px-4 font-medium text-black"
             >
-              {confirmLabel}
+              {busy ? (processingLabel ?? confirmLabel) : confirmLabel}
             </AlertDialog.Action>
           </div>
         </AlertDialog.Content>

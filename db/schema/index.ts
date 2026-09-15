@@ -205,6 +205,14 @@ export const fuelType = pgEnum("fuel_type", ["PETROL", "DIESEL", "HYBRID", "ELEC
 export const gearboxType = pgEnum("gearbox_type", ["AUTOMATIC", "MANUAL"]);
 export const vehicleStatus = pgEnum("vehicle_status", ["AVAILABLE", "INACTIVE"]);
 export const pricingPeriod = pgEnum("pricing_period", ["DAILY", "WEEKLY", "MONTHLY"]);
+export const customerDocumentType = pgEnum("customer_document_type", [
+  "LICENCE_FRONT",
+  "LICENCE_BACK",
+  "SIGNATURE",
+  "CIVIL_ID",
+  "PASSPORT",
+  "VISA",
+]);
 
 export const vehicleBrands = pgTable(
   "vehicle_brands",
@@ -352,4 +360,69 @@ export const vehicleOdometerHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index("vehicle_odometer_vehicle_index").on(table.vehicleId, table.createdAt)],
+);
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerNumber: text("customer_number").notNull(),
+    name: text("name").notNull(),
+    mobile: text("mobile").notNull(),
+    email: text("email"),
+    address: text("address").notNull(),
+    remarks: text("remarks"),
+    civilIdNumber: text("civil_id_number"),
+    civilIdExpiry: date("civil_id_expiry"),
+    passportNumber: text("passport_number"),
+    passportExpiry: date("passport_expiry"),
+    visaNumber: text("visa_number"),
+    visaExpiry: date("visa_expiry"),
+    drivingLicenceNumber: text("driving_licence_number").notNull(),
+    drivingLicenceExpiry: date("driving_licence_expiry").notNull(),
+    sponsorDetails: text("sponsor_details"),
+    isActive: boolean("is_active").default(true).notNull(),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("customers_number_unique").on(table.customerNumber),
+    uniqueIndex("customers_mobile_unique").on(table.mobile),
+    index("customers_name_index").on(table.name),
+  ],
+);
+export const customerDocuments = pgTable(
+  "customer_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    type: customerDocumentType("type").notNull(),
+    objectKey: text("object_key").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("customer_document_type_unique").on(table.customerId, table.type)],
+);
+export const customerBlacklist = pgTable(
+  "customer_blacklist",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    description: text("description").notNull(),
+    startsAt: date("starts_at"),
+    endsAt: date("ends_at"),
+    isActive: boolean("is_active").default(true).notNull(),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (table) => [index("customer_blacklist_customer_index").on(table.customerId, table.createdAt)],
 );

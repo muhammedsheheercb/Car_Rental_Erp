@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   auditLogs,
@@ -196,5 +196,186 @@ export async function createVehicle(input: unknown, actor: Identity) {
       metadata: belowMinimum ? { reason: value.overrideReason } : {},
     });
     return vehicle;
+  });
+}
+
+/** Update all vehicle-owned records together so a form submission cannot leave a partial vehicle. */
+export async function updateVehicle(id: string, input: unknown, actor: Identity) {
+  const value = vehicleSchema.parse(input);
+  const [existing] = await db.select().from(vehicles).where(eq(vehicles.id, id)).limit(1);
+  if (!existing) throw new Error("Vehicle not found.");
+  if (
+    !can(actor, "fleet", "update", existing.branchId) ||
+    !can(actor, "fleet", "update", value.branchId)
+  )
+    throw new Error("FORBIDDEN");
+  const [model] = await db
+    .select()
+    .from(vehicleModels)
+    .where(and(eq(vehicleModels.id, value.modelId), eq(vehicleModels.brandId, value.brandId)))
+    .limit(1);
+  if (!model) throw new Error("Selected model does not belong to the brand.");
+  const prices = [value.daily, value.weekly, value.monthly];
+  if (
+    prices.some((price) => price.listRentBaisa < price.minimumRentBaisa) &&
+    !(actor.role === "ADMIN" || actor.role === "SUPER_ADMIN")
+  )
+    throw new Error("Price cannot be below the configured minimum.");
+  const belowMinimum = prices.some((price) => price.listRentBaisa < price.minimumRentBaisa);
+  if (belowMinimum && !value.overrideReason)
+    throw new Error("A price override reason is required.");
+  return db.transaction(async (tx) => {
+    await tx
+      .update(vehicles)
+      .set({
+        brandId: value.brandId,
+        modelId: value.modelId,
+        branchId: value.branchId,
+        year: value.year,
+        cylinderCount: value.cylinderCount,
+        color: value.color,
+        registrationNumber: value.registrationNumber,
+        fuelType: value.fuelType,
+        capacity: value.capacity,
+        gearbox: value.gearbox,
+        seatCount: value.seatCount,
+        engineNumber: value.engineNumber,
+        chassisNumber: value.chassisNumber,
+        purchaseDate: value.purchaseDate.toISOString().slice(0, 10),
+        currentOdometerKm: value.currentOdometerKm,
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicles.id, id));
+    await tx
+      .update(vehicleInsurance)
+      .set({
+        company: value.insuranceCompany,
+        policyNumber: value.insuranceNumber,
+        validUntil: value.insuranceValidUntil.toISOString().slice(0, 10),
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleInsurance.vehicleId, id));
+    await tx
+      .update(vehicleServiceSettings)
+      .set({
+        lastEngineServiceKm: value.lastEngineServiceKm,
+        lastGearOilChangeKm: value.lastGearOilChangeKm,
+        engineServiceIntervalKm: value.engineServiceIntervalKm,
+        gearOilIntervalKm: value.gearOilIntervalKm,
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleServiceSettings.vehicleId, id));
+    await tx
+      .update(vehicleRegistrations)
+      .set({
+        mulkiyaExpiryDate: value.mulkiyaExpiryDate.toISOString().slice(0, 10),
+        issuingDetail: value.mulkiyaIssuingDetail || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicleRegistrations.vehicleId, id));
+    for (const [period, price] of [
+      ["DAILY", value.daily],
+      ["WEEKLY", value.weekly],
+      ["MONTHLY", value.monthly],
+    ] as const)
+      await tx
+        .update(vehiclePricing)
+        .set({ ...price, lateFeeBaisa: value.lateFeeBaisa, updatedAt: new Date() })
+        .where(and(eq(vehiclePricing.vehicleId, id), eq(vehiclePricing.period, period)));
+    if (value.currentOdometerKm !== existing.currentOdometerKm)
+      await tx.insert(vehicleOdometerHistory).values({
+        vehicleId: id,
+        odometerKm: value.currentOdometerKm,
+        recordedBy: actor.id,
+        note: "Vehicle updated",
+      });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: belowMinimum ? "PRICE_OVERRIDDEN" : "VEHICLE_UPDATED",
+      entityType: "vehicle",
+      entityId: id,
+      branchId: value.branchId,
+      metadata: belowMinimum ? { reason: value.overrideReason } : {},
+    });
+  });
+}
+
+export async function deleteVehicle(id: string, actor: Identity, deactivate = false) {
+  const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.id, id)).limit(1);
+  if (!vehicle) throw new Error("Vehicle not found.");
+  if (!can(actor, "fleet", deactivate ? "update" : "delete", vehicle.branchId))
+    throw new Error("FORBIDDEN");
+  // This schema currently has no booking/rental/finance tables. Configuration records are not
+  // operational history; the database restricts unsafe deletes as those modules are introduced.
+  if (vehicle.status !== "AVAILABLE")
+    throw new Error("This vehicle is not available and cannot be deleted or deactivated.");
+  if (deactivate) {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(vehicles)
+        .set({
+          status: "INACTIVE",
+          isActive: false,
+          deactivatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(vehicles.id, id));
+      await tx.insert(auditLogs).values({
+        actorId: actor.id,
+        event: "VEHICLE_DEACTIVATED",
+        entityType: "vehicle",
+        entityId: id,
+        branchId: vehicle.branchId,
+      });
+    });
+    return { deactivated: true };
+  }
+  const [odometerHistory] = await db
+    .select({ total: count() })
+    .from(vehicleOdometerHistory)
+    .where(eq(vehicleOdometerHistory.vehicleId, id));
+  if ((odometerHistory?.total ?? 0) > 1)
+    throw new Error(
+      "This vehicle has operational history and cannot be deleted. Deactivate it instead.",
+    );
+  await db.transaction(async (tx) => {
+    await tx.delete(vehiclePricing).where(eq(vehiclePricing.vehicleId, id));
+    await tx.delete(vehicleRegistrations).where(eq(vehicleRegistrations.vehicleId, id));
+    await tx.delete(vehicleServiceSettings).where(eq(vehicleServiceSettings.vehicleId, id));
+    await tx.delete(vehicleInsurance).where(eq(vehicleInsurance.vehicleId, id));
+    await tx.delete(vehicleOdometerHistory).where(eq(vehicleOdometerHistory.vehicleId, id));
+    await tx.delete(vehicles).where(eq(vehicles.id, id));
+  });
+  return { deactivated: false };
+}
+
+export async function setVehicleActive(id: string, active: boolean, actor: Identity) {
+  const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.id, id)).limit(1);
+  if (!vehicle) throw new Error("Vehicle not found.");
+  if (!can(actor, "fleet", "update", vehicle.branchId)) throw new Error("FORBIDDEN");
+  if (!active && vehicle.status !== "AVAILABLE")
+    throw new Error(
+      "This vehicle is reserved, rented, overdue, transferred, in service, or otherwise unavailable and cannot be deactivated.",
+    );
+  if (active && vehicle.status !== "INACTIVE")
+    throw new Error("Only an inactive vehicle can be activated.");
+  await db.transaction(async (tx) => {
+    await tx
+      .update(vehicles)
+      .set({
+        status: active ? "AVAILABLE" : "INACTIVE",
+        isActive: active,
+        deactivatedAt: active ? null : new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(vehicles.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: active ? "VEHICLE_UPDATED" : "VEHICLE_DEACTIVATED",
+      entityType: "vehicle",
+      entityId: id,
+      branchId: vehicle.branchId,
+      metadata: { active },
+    });
   });
 }

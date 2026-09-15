@@ -14,6 +14,7 @@ export async function AppShell({
   const items = [
     { href: "/dashboard", label: t("dashboard"), module: "dashboard" },
     { href: "/fleet", label: "Fleet", module: "fleet" },
+    { href: "/customers", label: "Customers", module: "customers" },
     { href: "/admin/branches", label: t("branches"), module: "branches" },
     { href: "/admin/users", label: t("users"), module: "users" },
   ].filter((x) => identity && can(identity, x.module, "read"));

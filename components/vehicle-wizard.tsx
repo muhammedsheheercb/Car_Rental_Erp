@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
-import { createVehicleAction } from "@/app/[locale]/(protected)/fleet/actions";
+import { createVehicleAction, updateVehicleAction } from "@/app/[locale]/(protected)/fleet/actions";
+import { CalendarInput } from "./calendar-input";
 import { SearchableCombobox } from "./searchable-combobox";
 
 type Option = { id: string; name: string };
@@ -38,15 +39,22 @@ export function VehicleWizard({
   brands,
   models,
   branches,
+  vehicleId,
+  initialData,
+  onSuccess,
 }: {
   brands: Option[];
   models: Model[];
   branches: Branch[];
+  vehicleId?: string;
+  initialData?: Record<string, string>;
+  onSuccess?: (message: string) => void;
 }) {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Record<string, string>>({
     fuelType: "PETROL",
     gearbox: "AUTOMATIC",
+    ...initialData,
   });
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
@@ -61,15 +69,24 @@ export function VehicleWizard({
     [models, data.brandId],
   );
   const input = ([name, label, type = "text"]: [string, string, string?]) => (
-    <label key={name} className="block text-sm">
+    <label key={name} htmlFor={name} className="block text-sm">
       {label}
-      <input
-        type={type}
-        required={name !== "mulkiyaIssuingDetail"}
-        value={data[name] ?? ""}
-        onChange={(e) => set(name, e.target.value)}
-        className={cls}
-      />
+      {type === "date" ? (
+        <CalendarInput
+          id={name}
+          required={name !== "mulkiyaIssuingDetail"}
+          value={data[name] ?? ""}
+          onChange={(value) => set(name, value)}
+        />
+      ) : (
+        <input
+          type={type}
+          required={name !== "mulkiyaIssuingDetail"}
+          value={data[name] ?? ""}
+          onChange={(e) => set(name, e.target.value)}
+          className={cls}
+        />
+      )}
     </label>
   );
   const pricing = (period: string) => (
@@ -91,7 +108,7 @@ export function VehicleWizard({
           includedKm: Number(data[`${period}_includedKm`]),
           excessKmChargeBaisa: Number(data[`${period}_excessKmChargeBaisa`]),
         });
-        const result = await createVehicleAction({
+        const payload = {
           ...data,
           year: Number(data.year),
           cylinderCount: Number(data.cylinderCount),
@@ -105,22 +122,26 @@ export function VehicleWizard({
           daily: prices("daily"),
           weekly: prices("weekly"),
           monthly: prices("monthly"),
-        });
-        if (!result.ok || !result.id) {
+        };
+        const result = vehicleId
+          ? await updateVehicleAction(vehicleId, payload)
+          : await createVehicleAction(payload);
+        if (!result.ok || (!vehicleId && (!("id" in result) || !result.id))) {
           setError(result.message);
           return;
         }
-        window.location.assign("/en/fleet");
+        if (onSuccess) onSuccess(result.message);
+        else window.location.assign("/en/fleet");
       } catch {
         setError(
-          "Could not create vehicle. Check required values, uniqueness, and your price permission.",
+          `Could not ${vehicleId ? "update" : "create"} vehicle. Check required values, uniqueness, and your price permission.`,
         );
       }
     });
   return (
     <div className="mx-auto min-w-0 max-w-4xl">
-      <p className="text-sm text-[var(--accent)]">FLEET / CREATE</p>
-      <h1 className="mt-2 text-3xl font-semibold">New vehicle</h1>
+      <p className="text-sm text-[var(--accent)]">FLEET / {vehicleId ? "EDIT" : "CREATE"}</p>
+      <h1 className="mt-2 text-3xl font-semibold">{vehicleId ? "Edit vehicle" : "New vehicle"}</h1>
       <div className="mt-6 flex max-w-full gap-2 overflow-x-auto pb-1 text-xs [scrollbar-width:thin] sm:mt-7 sm:grid sm:grid-cols-4 sm:overflow-visible">
         {["Details", "Insurance", "Service", "Rental"].map((name, i) => (
           <div
@@ -217,7 +238,13 @@ export function VehicleWizard({
               onClick={submit}
               className="min-h-11 w-full rounded-lg bg-[var(--accent)] px-4 font-semibold text-black min-[360px]:w-auto"
             >
-              {pending ? "Saving…" : "Create vehicle"}
+              {pending
+                ? vehicleId
+                  ? "Updating…"
+                  : "Saving…"
+                : vehicleId
+                  ? "Update vehicle"
+                  : "Create vehicle"}
             </button>
           )}
         </div>

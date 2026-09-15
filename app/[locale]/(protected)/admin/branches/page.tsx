@@ -15,24 +15,63 @@ export default async function BranchesPage() {
         <p className="text-sm text-[var(--accent)]">ADMINISTRATION</p>
         <h1 className="mt-2 text-3xl font-semibold">Branches</h1>
         <div className="mt-6 max-w-full overflow-x-auto rounded-2xl border border-[var(--edge)] [overscroll-behavior-inline:contain] sm:mt-8">
-          <table className="min-w-[48rem] w-full text-start text-sm">
+          <table className="min-w-[48rem] w-full table-fixed text-start text-sm">
+            <colgroup>
+              <col className="w-[24%]" />
+              <col className="w-[34%]" />
+              <col className="w-[16%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10rem]" />
+            </colgroup>
             <thead className="bg-[var(--raised)] text-[var(--muted)]">
               <tr>
-                <th className="p-4">Branch</th>
-                <th className="p-4">Location</th>
-                <th className="p-4">Code</th>
-                <th className="p-4">Status</th>
-                <th />
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
+                >
+                  Branch
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
+                >
+                  Location
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
+                >
+                  Code
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
+                >
+                  Status
+                </th>
+                <th
+                  scope="col"
+                  className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {records.map((branch) => (
-                <tr key={branch.id} className="border-t border-[var(--edge)]">
-                  <td className="p-4 font-medium">{branch.name}</td>
-                  <td className="p-4">{branch.location}</td>
-                  <td className="p-4 font-mono">{branch.code}</td>
-                  <td className="p-4">{branch.isActive ? "Active" : "Inactive"}</td>
-                  <td className="p-2">
+                <tr
+                  key={branch.id}
+                  className="border-t border-[var(--edge)] align-middle hover:bg-white/5"
+                >
+                  <td className="break-words px-4 py-3 font-medium">{branch.name}</td>
+                  <td className="break-words px-4 py-3">{branch.location}</td>
+                  <td className="px-4 py-3 font-mono">{branch.code}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs">
+                      {branch.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-center">
                     {branch.isActive && actor.role === "SUPER_ADMIN" && (
                       <BranchActions branch={branch} />
                     )}

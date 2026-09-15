@@ -52,22 +52,57 @@ export default async function VehicleMaster({
           <MasterSearch initialValue={q} />
         </div>
         <div className="mt-5 max-w-full overflow-x-auto rounded-2xl border border-[var(--edge)] [overscroll-behavior-inline:contain]">
-          <table className="min-w-[42rem] w-full text-start text-sm">
+          <table className="min-w-[42rem] w-full table-fixed text-start text-sm">
+            <colgroup>
+              <col className="w-[24%]" />
+              <col className="w-[42%]" />
+              <col className="w-[16%]" />
+              <col className="w-[11rem]" />
+            </colgroup>
             <thead className="bg-[var(--raised)] text-[var(--muted)]">
               <tr>
-                <th className="p-4">Brand</th>
-                <th className="p-4">Models</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Actions</th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
+                >
+                  Brand
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
+                >
+                  Models
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
+                >
+                  Status
+                </th>
+                <th
+                  scope="col"
+                  className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {records.map((brand) => (
-                <tr key={brand.id} className="border-t border-[var(--edge)]">
-                  <td className="p-4 font-medium">{brand.name}</td>
-                  <td className="p-4 text-[var(--muted)]">{brand.models}</td>
-                  <td className="p-4">{brand.active ? "Active" : "Inactive"}</td>
-                  <td className="p-2">
+                <tr
+                  key={brand.id}
+                  className="border-t border-[var(--edge)] align-middle hover:bg-white/5"
+                >
+                  <td className="break-words px-4 py-3 font-medium">{brand.name}</td>
+                  <td className="break-words px-4 py-3 text-[var(--muted)]" title={brand.models}>
+                    {brand.models}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs">
+                      {brand.active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-center">
                     {brand.active && (
                       <div className="flex">
                         <BrandEditButton id={brand.id} name={brand.name} models={brand.models} />

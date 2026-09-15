@@ -116,3 +116,42 @@ export const vehicleSchema = z
         message: "Cannot exceed current odometer.",
       });
   });
+
+const optionalDate = z
+  .union([z.coerce.date(), z.literal("").transform(() => undefined)])
+  .optional();
+export const customerSchema = z
+  .object({
+    name: trimmed.max(160),
+    mobile: z
+      .string()
+      .trim()
+      .regex(
+        /^(?:\+968\s?)?[279]\d{7}$|^\+[1-9]\d{7,14}$/,
+        "Enter a valid Oman or international mobile number.",
+      ),
+    email: z.union([z.literal(""), z.string().trim().email()]).optional(),
+    address: trimmed.max(500),
+    remarks: z.string().trim().max(2000).optional(),
+    civilIdNumber: z.string().trim().max(80).optional(),
+    civilIdExpiry: optionalDate,
+    passportNumber: z.string().trim().max(80).optional(),
+    passportExpiry: optionalDate,
+    visaNumber: z.string().trim().max(80).optional(),
+    visaExpiry: optionalDate,
+    drivingLicenceNumber: trimmed.max(80),
+    drivingLicenceExpiry: z.coerce.date(),
+    sponsorDetails: z.string().trim().max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    for (const [number, expiry, label] of [
+      [value.civilIdNumber, value.civilIdExpiry, "Civil ID"],
+      [value.passportNumber, value.passportExpiry, "Passport"],
+      [value.visaNumber, value.visaExpiry, "Visa"],
+    ] as const)
+      if ((number && !expiry) || (!number && expiry))
+        ctx.addIssue({
+          code: "custom",
+          message: `${label} number and expiry must be entered together.`,
+        });
+  });

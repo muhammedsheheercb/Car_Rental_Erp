@@ -1,5 +1,5 @@
 "use server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import {
@@ -12,7 +12,15 @@ import {
   vehicleServiceSettings,
   vehicles,
 } from "@/db/schema";
-import { createBrand, createVehicle, deleteBrand, updateBrand } from "@/features/fleet/service";
+import {
+  createBrand,
+  createVehicle,
+  deleteBrand,
+  deleteVehicle,
+  setVehicleActive,
+  updateBrand,
+  updateVehicle,
+} from "@/features/fleet/service";
 import { requirePermission } from "@/lib/auth";
 import { brandSchema, vehicleSchema } from "@/lib/validation";
 
@@ -67,6 +75,72 @@ export async function createVehicleAction(input: unknown) {
     };
   }
 }
+export async function updateVehicleAction(id: string, input: unknown) {
+  const actor = await requirePermission("fleet", "update");
+  const parsed = vehicleSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the vehicle details." };
+  try {
+    await updateVehicle(id, parsed.data, actor);
+    revalidatePath("/en/fleet");
+    return { ok: true, message: "Vehicle updated successfully." };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message === "FORBIDDEN"
+          ? "You do not have permission to update this vehicle."
+          : error instanceof Error
+            ? error.message
+            : "We could not update this vehicle.",
+    };
+  }
+}
+export async function deleteVehicleAction(id: string, deactivate = false) {
+  const actor = await requirePermission("fleet", deactivate ? "update" : "delete");
+  try {
+    const result = await deleteVehicle(id, actor, deactivate);
+    revalidatePath("/en/fleet");
+    return {
+      ok: true,
+      message: result.deactivated
+        ? "Vehicle deactivated successfully."
+        : "Vehicle deleted successfully.",
+      deactivated: result.deactivated,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message === "FORBIDDEN"
+          ? "You do not have permission to change this vehicle."
+          : error instanceof Error
+            ? error.message
+            : "We could not delete this vehicle.",
+    };
+  }
+}
+export async function setVehicleActiveAction(id: string, active: boolean) {
+  const actor = await requirePermission("fleet", "update");
+  try {
+    await setVehicleActive(id, active, actor);
+    revalidatePath("/en/fleet");
+    return {
+      ok: true,
+      message: active ? "Vehicle activated successfully." : "Vehicle deactivated successfully.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message === "FORBIDDEN"
+          ? "You do not have permission to change this vehicle."
+          : error instanceof Error
+            ? error.message
+            : "We could not change this vehicle status.",
+    };
+  }
+}
 export async function deleteBrandAction(id: string, deactivate = false) {
   const actor = await requirePermission("fleet", "delete");
   try {
@@ -103,9 +177,18 @@ export async function getVehicleDetailsAction(id: string) {
   const [vehicle] = await db
     .select({
       id: vehicles.id,
+      brandId: vehicles.brandId,
+      modelId: vehicles.modelId,
+      branchId: vehicles.branchId,
       number: vehicles.vehicleNumber,
       year: vehicles.year,
+      cylinderCount: vehicles.cylinderCount,
       color: vehicles.color,
+      fuelType: vehicles.fuelType,
+      capacity: vehicles.capacity,
+      gearbox: vehicles.gearbox,
+      seatCount: vehicles.seatCount,
+      purchaseDate: vehicles.purchaseDate,
       registration: vehicles.registrationNumber,
       chassis: vehicles.chassisNumber,
       engine: vehicles.engineNumber,
@@ -117,12 +200,14 @@ export async function getVehicleDetailsAction(id: string) {
       model: vehicleModels.name,
       branch: branches.name,
       insuranceCompany: vehicleInsurance.company,
-      insuranceNumber: vehicleInsurance.policyNumber,
       insuranceUntil: vehicleInsurance.validUntil,
+      insuranceNumber: vehicleInsurance.policyNumber,
       mulkiyaUntil: vehicleRegistrations.mulkiyaExpiryDate,
       issuingDetail: vehicleRegistrations.issuingDetail,
       engineInterval: vehicleServiceSettings.engineServiceIntervalKm,
       gearInterval: vehicleServiceSettings.gearOilIntervalKm,
+      lastEngineServiceKm: vehicleServiceSettings.lastEngineServiceKm,
+      lastGearOilChangeKm: vehicleServiceSettings.lastGearOilChangeKm,
     })
     .from(vehicles)
     .innerJoin(vehicleBrands, eq(vehicles.brandId, vehicleBrands.id))
@@ -139,6 +224,31 @@ export async function getVehicleDetailsAction(id: string) {
     )
     .limit(1);
   if (!vehicle) throw new Error("Vehicle not found or access is restricted.");
-  const pricing = await db.select().from(vehiclePricing).where(eq(vehiclePricing.vehicleId, id));
-  return { ...vehicle, pricing };
+  const [pricing, brandOptions, modelOptions, branchOptions] = await Promise.all([
+    db.select().from(vehiclePricing).where(eq(vehiclePricing.vehicleId, id)),
+    db
+      .select({ id: vehicleBrands.id, name: vehicleBrands.name })
+      .from(vehicleBrands)
+      .where(eq(vehicleBrands.isActive, true))
+      .orderBy(asc(vehicleBrands.name)),
+    db
+      .select({ id: vehicleModels.id, brandId: vehicleModels.brandId, name: vehicleModels.name })
+      .from(vehicleModels)
+      .where(eq(vehicleModels.isActive, true))
+      .orderBy(asc(vehicleModels.name)),
+    actor.role === "SUPER_ADMIN"
+      ? db
+          .select({ id: branches.id, name: branches.name, code: branches.code })
+          .from(branches)
+          .where(eq(branches.isActive, true))
+      : db
+          .select({ id: branches.id, name: branches.name, code: branches.code })
+          .from(branches)
+          .where(and(inArray(branches.id, actor.branchIds), eq(branches.isActive, true))),
+  ]);
+  return {
+    ...vehicle,
+    pricing,
+    formOptions: { brands: brandOptions, models: modelOptions, branches: branchOptions },
+  };
 }

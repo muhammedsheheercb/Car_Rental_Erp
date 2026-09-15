@@ -1,14 +1,21 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
-export function MasterSearch({ initialValue }: { initialValue: string }) {
+export function MasterSearch({
+  initialValue,
+  placeholder = "Search brand or model",
+}: {
+  initialValue: string;
+  placeholder?: string;
+}) {
   const [value, setValue] = useState(initialValue);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pending, start] = useTransition();
   function update(next: string) {
     setValue(next);
     if (timer.current) clearTimeout(timer.current);
@@ -17,7 +24,7 @@ export function MasterSearch({ initialValue }: { initialValue: string }) {
       if (next.trim()) params.set("q", next.trim());
       else params.delete("q");
       params.delete("page");
-      router.replace(`${pathname}${params.size ? `?${params}` : ""}`);
+      start(() => router.replace(`${pathname}${params.size ? `?${params}` : ""}`));
     }, 280);
   }
   useEffect(
@@ -31,7 +38,7 @@ export function MasterSearch({ initialValue }: { initialValue: string }) {
       <input
         value={value}
         onChange={(event) => update(event.target.value)}
-        placeholder="Search brand or model"
+        placeholder={placeholder}
         className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3"
       />
       {value && (
@@ -43,6 +50,7 @@ export function MasterSearch({ initialValue }: { initialValue: string }) {
           Clear
         </button>
       )}
+      {pending && <span className="self-center text-xs text-[var(--muted)]">Searching…</span>}
     </div>
   );
 }

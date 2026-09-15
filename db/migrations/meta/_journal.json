@@ -22,6 +22,20 @@
       "when": 1789388907429,
       "tag": "0002_reflective_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789389000000,
+      "tag": "0003_customers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789389100000,
+      "tag": "0004_blacklist_description",
+      "breakpoints": true
     }
   ]
 }
