@@ -9,6 +9,7 @@ type Model = Option & { brandId: string };
 type Branch = Option & { code: string };
 const fields: Record<number, [string, string, string?][]> = {
   1: [
+    ["vehicleNumber", "Unique vehicle number"],
     ["year", "Year", "number"],
     ["cylinderCount", "Cylinder count", "number"],
     ["color", "Color"],
@@ -75,14 +76,35 @@ export function VehicleWizard({
         <CalendarInput
           id={name}
           required={name !== "mulkiyaIssuingDetail"}
-          value={data[name] ?? ""}
+          value={
+            data[name] ??
+            (
+              { lateGraceMinutes: "60", lateWindowHours: "4", overdueFineBaisa: "5000" } as Record<
+                string,
+                string
+              >
+            )[name] ??
+            ""
+          }
           onChange={(value) => set(name, value)}
         />
       ) : (
         <input
-          type={type}
+          id={name}
+          type={type === "number" ? "text" : type}
+          inputMode={type === "number" ? "numeric" : undefined}
+          pattern={type === "number" ? "[0-9]+" : undefined}
           required={name !== "mulkiyaIssuingDetail"}
-          value={data[name] ?? ""}
+          value={
+            data[name] ??
+            (
+              { lateGraceMinutes: "60", lateWindowHours: "4", overdueFineBaisa: "5000" } as Record<
+                string,
+                string
+              >
+            )[name] ??
+            ""
+          }
           onChange={(e) => set(name, e.target.value)}
           className={cls}
         />
@@ -119,6 +141,9 @@ export function VehicleWizard({
           engineServiceIntervalKm: Number(data.engineServiceIntervalKm),
           gearOilIntervalKm: Number(data.gearOilIntervalKm),
           lateFeeBaisa: Number(data.lateFeeBaisa),
+          lateGraceMinutes: Number(data.lateGraceMinutes ?? 60),
+          lateWindowHours: Number(data.lateWindowHours ?? 4),
+          overdueFineBaisa: Number(data.overdueFineBaisa ?? 5000),
           daily: prices("daily"),
           weekly: prices("weekly"),
           monthly: prices("monthly"),
@@ -210,7 +235,14 @@ export function VehicleWizard({
             {pricing("Daily")}
             {pricing("Weekly")}
             {pricing("Monthly")}
-            {input(["lateFeeBaisa", "Common late fee (baisa)", "number"])}
+            {input(["lateFeeBaisa", "Hourly late fee (baisa)", "number"])}
+            {input(["lateGraceMinutes", "Free late grace (minutes, default 60)", "number"])}
+            {input(["lateWindowHours", "Chargeable hourly window (hours, default 4)", "number"])}
+            {input([
+              "overdueFineBaisa",
+              "Fine per completed overdue day (baisa, default 5000)",
+              "number",
+            ])}
             {input(["overrideReason", "Price override reason (only below minimum)"])}
           </div>
         )}

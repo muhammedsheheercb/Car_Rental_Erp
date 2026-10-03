@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseOmanDateTime } from "@/features/rentals/booking-calculations";
 
 const trimmed = z.string().trim().min(1, "Required");
 export const loginSchema = z.object({
@@ -56,6 +57,7 @@ const pricing = z.object({
 });
 export const vehicleSchema = z
   .object({
+    vehicleNumber: z.string().trim().min(2).max(40),
     brandId: z.string().uuid(),
     modelId: z.string().uuid(),
     branchId: z.string().uuid(),
@@ -88,6 +90,9 @@ export const vehicleSchema = z
     weekly: pricing,
     monthly: pricing,
     lateFeeBaisa: nonnegative,
+    lateGraceMinutes: z.coerce.number().int().min(0).max(120).default(60),
+    lateWindowHours: z.coerce.number().int().min(0).max(20).default(4),
+    overdueFineBaisa: nonnegative.default(5000),
     overrideReason: z.string().trim().max(500).optional(),
   })
   .superRefine((value, ctx) => {
@@ -155,3 +160,57 @@ export const customerSchema = z
           message: `${label} number and expiry must be entered together.`,
         });
   });
+
+export const reservationSchema = z.object({
+  customerId: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  branchId: z.string().uuid(),
+  pickupBranchId: z.string().uuid(),
+  returnBranchId: z.string().uuid(),
+  startsAt: z.string().transform((value, ctx) => {
+    try {
+      return parseOmanDateTime(value);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Enter a valid pickup date/time in Oman time." });
+      return z.NEVER;
+    }
+  }),
+  rentDuration: z.coerce.number().int().min(1).max(365),
+  freeKm: z.coerce.number().int().min(0).max(2_147_483_647),
+  pickupOdometerKm: z.coerce.number().int().min(0).max(2_147_483_647),
+  openKm: z.preprocess((value) => value === "on" || value === true, z.boolean()),
+  downPaymentBaisa: z.coerce.number().int().min(0).max(2_147_483_647),
+  paymentMode: z.enum(["CASH", "CARD", "BANK_TRANSFER"]),
+  pricingPeriod: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
+  dailyRateBaisa: z.coerce.number().int().min(0).max(2_147_483_647),
+  includedKm: z.coerce.number().int().min(0).max(2_147_483_647),
+  excessKmChargeBaisa: z.coerce.number().int().min(0).max(2_147_483_647),
+  lateFeeBaisa: z.coerce.number().int().min(0).max(2_147_483_647),
+  depositBaisa: z.coerce.number().int().min(0).max(2_147_483_647),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+export const extensionSchema = z.object({
+  rentalId: z.string().uuid(),
+  duration: z.coerce.number().int().min(1).max(365),
+  remarks: z.string().trim().min(1, "Remarks are required.").max(1000),
+});
+export const cancellationSchema = z
+  .object({
+    rentalId: z.string().uuid(),
+    confirmed: z.literal("on", { error: "Confirm Cancel Agreement." }),
+    startingKm: z.coerce.number().int().min(0).max(2_147_483_647),
+    endingKm: z.coerce.number().int().min(0).max(2_147_483_647),
+    remarks: z.string().trim().min(1, "Remarks are required.").max(1000),
+  })
+  .refine((value) => value.endingKm >= value.startingKm, {
+    message: "Ending KM cannot be below starting KM.",
+    path: ["endingKm"],
+  });
+export const damageSchema = z.object({
+  rentalId: z.string().uuid(),
+  phase: z.enum(["BEFORE_RENTAL", "AFTER_RETURN"]),
+  location: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(1000),
+  remarks: z.string().trim().max(1000).optional(),
+});

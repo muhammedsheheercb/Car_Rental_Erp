@@ -18,6 +18,7 @@ function formValues(data: NonNullable<Details>) {
     key: "listRentBaisa" | "minimumRentBaisa" | "includedKm" | "excessKmChargeBaisa",
   ) => String(data.pricing.find((price) => price.period === period)?.[key] ?? "");
   return {
+    vehicleNumber: data.number,
     brandId: data.brandId,
     modelId: data.modelId,
     branchId: data.branchId,
@@ -43,6 +44,9 @@ function formValues(data: NonNullable<Details>) {
     mulkiyaExpiryDate: date(data.mulkiyaUntil),
     mulkiyaIssuingDetail: data.issuingDetail ?? "",
     lateFeeBaisa: String(data.pricing[0]?.lateFeeBaisa ?? ""),
+    lateGraceMinutes: String(data.pricing[0]?.lateGraceMinutes ?? 60),
+    lateWindowHours: String(data.pricing[0]?.lateWindowHours ?? 4),
+    overdueFineBaisa: String(data.pricing[0]?.overdueFineBaisa ?? 5000),
     ...Object.fromEntries(
       ["DAILY", "WEEKLY", "MONTHLY"].flatMap((period) => [
         [`${period.toLowerCase()}_listRentBaisa`, rate(period, "listRentBaisa")],

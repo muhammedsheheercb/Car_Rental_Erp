@@ -1,9 +1,9 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   auditLogs,
+  rentals,
   vehicleBrands,
   vehicleInsurance,
   vehicleModels,
@@ -128,7 +128,7 @@ export async function createVehicle(input: unknown, actor: Identity) {
     const [vehicle] = await tx
       .insert(vehicles)
       .values({
-        vehicleNumber: `VH-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`,
+        vehicleNumber: value.vehicleNumber,
         brandId: value.brandId,
         modelId: value.modelId,
         branchId: value.branchId,
@@ -179,6 +179,9 @@ export async function createVehicle(input: unknown, actor: Identity) {
           excessKmChargeBaisa: number;
         }),
         lateFeeBaisa: value.lateFeeBaisa,
+        lateGraceMinutes: value.lateGraceMinutes,
+        lateWindowHours: value.lateWindowHours,
+        overdueFineBaisa: value.overdueFineBaisa,
       })),
     );
     await tx.insert(vehicleOdometerHistory).values({
@@ -228,6 +231,7 @@ export async function updateVehicle(id: string, input: unknown, actor: Identity)
     await tx
       .update(vehicles)
       .set({
+        vehicleNumber: value.vehicleNumber,
         brandId: value.brandId,
         modelId: value.modelId,
         branchId: value.branchId,
@@ -280,7 +284,14 @@ export async function updateVehicle(id: string, input: unknown, actor: Identity)
     ] as const)
       await tx
         .update(vehiclePricing)
-        .set({ ...price, lateFeeBaisa: value.lateFeeBaisa, updatedAt: new Date() })
+        .set({
+          ...price,
+          lateFeeBaisa: value.lateFeeBaisa,
+          lateGraceMinutes: value.lateGraceMinutes,
+          lateWindowHours: value.lateWindowHours,
+          overdueFineBaisa: value.overdueFineBaisa,
+          updatedAt: new Date(),
+        })
         .where(and(eq(vehiclePricing.vehicleId, id), eq(vehiclePricing.period, period)));
     if (value.currentOdometerKm !== existing.currentOdometerKm)
       await tx.insert(vehicleOdometerHistory).values({
@@ -305,12 +316,17 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
   if (!vehicle) throw new Error("Vehicle not found.");
   if (!can(actor, "fleet", deactivate ? "update" : "delete", vehicle.branchId))
     throw new Error("FORBIDDEN");
-  // This schema currently has no booking/rental/finance tables. Configuration records are not
-  // operational history; the database restricts unsafe deletes as those modules are introduced.
   if (vehicle.status !== "AVAILABLE")
     throw new Error("This vehicle is not available and cannot be deleted or deactivated.");
   if (deactivate) {
     await db.transaction(async (tx) => {
+      await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+      const [commitment] = await tx
+        .select({ id: rentals.id })
+        .from(rentals)
+        .where(and(eq(rentals.vehicleId, id), inArray(rentals.status, ["RESERVED", "ACTIVE"])))
+        .limit(1);
+      if (commitment) throw new Error("Vehicle has a pending reservation or active rental.");
       await tx
         .update(vehicles)
         .set({
@@ -339,6 +355,13 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
       "This vehicle has operational history and cannot be deleted. Deactivate it instead.",
     );
   await db.transaction(async (tx) => {
+    await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+    const [history] = await tx
+      .select({ id: rentals.id })
+      .from(rentals)
+      .where(eq(rentals.vehicleId, id))
+      .limit(1);
+    if (history) throw new Error("Vehicle has rental history. Deactivate it instead.");
     await tx.delete(vehiclePricing).where(eq(vehiclePricing.vehicleId, id));
     await tx.delete(vehicleRegistrations).where(eq(vehicleRegistrations.vehicleId, id));
     await tx.delete(vehicleServiceSettings).where(eq(vehicleServiceSettings.vehicleId, id));
@@ -360,6 +383,15 @@ export async function setVehicleActive(id: string, active: boolean, actor: Ident
   if (active && vehicle.status !== "INACTIVE")
     throw new Error("Only an inactive vehicle can be activated.");
   await db.transaction(async (tx) => {
+    const [current] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for("update");
+    const [commitment] = await tx
+      .select({ id: rentals.id })
+      .from(rentals)
+      .where(and(eq(rentals.vehicleId, id), inArray(rentals.status, ["RESERVED", "ACTIVE"])))
+      .limit(1);
+    if (commitment) throw new Error("Vehicle has a pending reservation or active rental.");
+    if (!current || (active ? current.status !== "INACTIVE" : current.status !== "AVAILABLE"))
+      throw new Error("Vehicle status changed. Refresh the fleet page.");
     await tx
       .update(vehicles)
       .set({

@@ -339,6 +339,9 @@ export const vehiclePricing = pgTable(
     includedKm: integer("included_km").notNull(),
     excessKmChargeBaisa: integer("excess_km_charge_baisa").notNull(),
     lateFeeBaisa: integer("late_fee_baisa").notNull(),
+    lateGraceMinutes: integer("late_grace_minutes").default(60).notNull(),
+    lateWindowHours: integer("late_window_hours").default(4).notNull(),
+    overdueFineBaisa: integer("overdue_fine_baisa").default(5000).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -388,6 +391,9 @@ export const customers = pgTable(
   (table) => [
     uniqueIndex("customers_number_unique").on(table.customerNumber),
     uniqueIndex("customers_mobile_unique").on(table.mobile),
+    uniqueIndex("customers_driving_licence_unique").on(table.drivingLicenceNumber),
+    uniqueIndex("customers_civil_id_unique").on(table.civilIdNumber),
+    uniqueIndex("customers_passport_unique").on(table.passportNumber),
     index("customers_name_index").on(table.name),
   ],
 );
@@ -426,3 +432,309 @@ export const customerBlacklist = pgTable(
   },
   (table) => [index("customer_blacklist_customer_index").on(table.customerId, table.createdAt)],
 );
+
+// Financial values are integer baisa (1 OMR = 1,000 baisa). This keeps agreements,
+// invoices and ledgers exact and makes the audit trail safe to aggregate.
+export const rentalStatus = pgEnum("rental_status", [
+  "RESERVED",
+  "ACTIVE",
+  "RETURNED",
+  "CANCELLED",
+]);
+export const paymentMethod = pgEnum("payment_method", ["CASH", "CARD", "BANK_TRANSFER", "ONLINE"]);
+export const paymentDirection = pgEnum("payment_direction", ["RECEIPT", "PAYBACK"]);
+export const ledgerEntryType = pgEnum("ledger_entry_type", [
+  "RENT_CHARGE",
+  "DEPOSIT",
+  "PAYMENT",
+  "PAYBACK",
+  "FINE",
+  "LEGAL_FINE",
+  "DAMAGE",
+  "ADJUSTMENT",
+]);
+export const serviceStatus = pgEnum("service_status", ["SCHEDULED", "IN_PROGRESS", "COMPLETED"]);
+
+export const rentals = pgTable(
+  "rentals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agreementNumber: text("agreement_number").notNull(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    pickupBranchId: uuid("pickup_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    returnBranchId: uuid("return_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    status: rentalStatus("status").default("RESERVED").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    expectedReturnAt: timestamp("expected_return_at", { withTimezone: true }).notNull(),
+    pricingPeriod: pricingPeriod("pricing_period").default("DAILY").notNull(),
+    rentDuration: integer("rent_duration").default(1).notNull(),
+    additionalDayRentBaisa: integer("additional_day_rent_baisa").default(0).notNull(),
+    cancellationWindowMinutes: integer("cancellation_window_minutes").default(15).notNull(),
+    freeKm: integer("free_km").default(0).notNull(),
+    openKm: boolean("open_km").default(false).notNull(),
+    actualReturnAt: timestamp("actual_return_at", { withTimezone: true }),
+    pickupOdometerKm: integer("pickup_odometer_km"),
+    returnOdometerKm: integer("return_odometer_km"),
+    dailyRateBaisa: integer("daily_rate_baisa").notNull(),
+    includedKm: integer("included_km").notNull(),
+    excessKmChargeBaisa: integer("excess_km_charge_baisa").notNull(),
+    lateFeeBaisa: integer("late_fee_baisa").notNull(),
+    lateGraceMinutes: integer("late_grace_minutes").default(60).notNull(),
+    lateWindowHours: integer("late_window_hours").default(4).notNull(),
+    overdueFineBaisa: integer("overdue_fine_baisa").default(5000).notNull(),
+    depositBaisa: integer("deposit_baisa").default(0).notNull(),
+    subtotalBaisa: integer("subtotal_baisa").default(0).notNull(),
+    taxBaisa: integer("tax_baisa").default(0).notNull(),
+    totalBaisa: integer("total_baisa").default(0).notNull(),
+    notes: text("notes"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("rentals_agreement_number_unique").on(table.agreementNumber),
+    index("rentals_vehicle_status_dates_index").on(table.vehicleId, table.status, table.startsAt),
+    index("rentals_branch_status_index").on(table.branchId, table.status, table.startsAt),
+    index("rentals_customer_index").on(table.customerId, table.createdAt),
+  ],
+);
+
+export const rentalCharges = pgTable(
+  "rental_charges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rentalId: uuid("rental_id")
+      .notNull()
+      .references(() => rentals.id, { onDelete: "restrict" }),
+    type: ledgerEntryType("type").notNull(),
+    description: text("description").notNull(),
+    component: text("component").default("RENTAL").notNull(),
+    amountBaisa: integer("amount_baisa").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("rental_charges_rental_index").on(table.rentalId, table.createdAt)],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiptNumber: text("receipt_number").notNull(),
+    kind: text("kind").$type<"ADVANCE" | "RECEIPT" | "PAYBACK" | "REVERSAL">().default("RECEIPT").notNull(),
+    requestId: uuid("request_id").defaultRandom().notNull(),
+    rentalId: uuid("rental_id").references(() => rentals.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    direction: paymentDirection("direction").notNull(),
+    method: paymentMethod("method").notNull(),
+    amountBaisa: integer("amount_baisa").notNull(),
+    reference: text("reference"),
+    note: text("note"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    recordedBy: uuid("recorded_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("payments_receipt_number_unique").on(table.receiptNumber),
+    uniqueIndex("payments_request_unique").on(table.requestId),
+    index("payments_customer_index").on(table.customerId, table.receivedAt),
+    index("payments_rental_index").on(table.rentalId, table.receivedAt),
+  ],
+);
+
+export const customerLedger = pgTable(
+  "customer_ledger",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    rentalId: uuid("rental_id").references(() => rentals.id, { onDelete: "restrict" }),
+    paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "restrict" }),
+    type: ledgerEntryType("type").notNull(),
+    debitBaisa: integer("debit_baisa").default(0).notNull(),
+    creditBaisa: integer("credit_baisa").default(0).notNull(),
+    description: text("description").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("customer_ledger_customer_index").on(table.customerId, table.createdAt)],
+);
+
+export const vehicleTransfers = pgTable(
+  "vehicle_transfers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "restrict" }),
+    fromBranchId: uuid("from_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    toBranchId: uuid("to_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    transferredAt: timestamp("transferred_at", { withTimezone: true }).defaultNow().notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [index("vehicle_transfers_vehicle_index").on(table.vehicleId, table.transferredAt)],
+);
+
+export const vehicleServices = pgTable(
+  "vehicle_services",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "restrict" }),
+    status: serviceStatus("status").default("SCHEDULED").notNull(),
+    type: text("type").notNull(),
+    dueDate: date("due_date"),
+    dueOdometerKm: integer("due_odometer_km"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    costBaisa: integer("cost_baisa").default(0).notNull(),
+    vendor: text("vendor"),
+    note: text("note"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [index("vehicle_services_due_index").on(table.vehicleId, table.status, table.dueDate)],
+);
+
+export const rentalExtensions = pgTable(
+  "rental_extensions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rentalId: uuid("rental_id")
+      .notNull()
+      .references(() => rentals.id, { onDelete: "restrict" }),
+    previousExpectedReturnAt: timestamp("previous_expected_return_at", {
+      withTimezone: true,
+    }).notNull(),
+    newExpectedReturnAt: timestamp("new_expected_return_at", { withTimezone: true }).notNull(),
+    duration: integer("duration").notNull(),
+    period: pricingPeriod("period").notNull(),
+    additionalRentBaisa: integer("additional_rent_baisa").notNull(),
+    approvedBy: uuid("approved_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }).defaultNow().notNull(),
+    remarks: text("remarks").notNull(),
+  },
+  (table) => [index("rental_extensions_rental_index").on(table.rentalId, table.approvedAt)],
+);
+
+export const rentalCancellations = pgTable(
+  "rental_cancellations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rentalId: uuid("rental_id")
+      .notNull()
+      .references(() => rentals.id, { onDelete: "restrict" }),
+    previousStatus: rentalStatus("previous_status").notNull(),
+    startingKm: integer("starting_km").notNull(),
+    endingKm: integer("ending_km").notNull(),
+    remarks: text("remarks").notNull(),
+    overridden: boolean("overridden").default(false).notNull(),
+    cancelledBy: uuid("cancelled_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("rental_cancellations_rental_unique").on(table.rentalId)],
+);
+
+export const vehicleDamageEvidence = pgTable(
+  "vehicle_damage_evidence",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rentalId: uuid("rental_id")
+      .notNull()
+      .references(() => rentals.id, { onDelete: "restrict" }),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    phase: text("phase").$type<"BEFORE_RENTAL" | "AFTER_RETURN">().notNull(),
+    location: text("location").notNull(),
+    description: text("description").notNull(),
+    remarks: text("remarks"),
+    objectKey: text("object_key").notNull(),
+    contentType: text("content_type").notNull(),
+    recordedBy: uuid("recorded_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("vehicle_damage_rental_phase_index").on(table.rentalId, table.phase)],
+);
+
+export const paymentCorrections = pgTable("payment_corrections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  originalPaymentId: uuid("original_payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  reversalPaymentId: uuid("reversal_payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  replacementPaymentId: uuid("replacement_payment_id").references(() => payments.id, { onDelete: "restrict" }),
+  reason: text("reason").notNull(),
+  correctedBy: uuid("corrected_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  correctedAt: timestamp("corrected_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("payment_corrections_original_unique").on(table.originalPaymentId)]);
+export const refundApprovals = pgTable("refund_approvals", {
+  id: uuid("id").defaultRandom().primaryKey(), requestId: uuid("request_id").notNull(),
+  rentalId: uuid("rental_id").notNull().references(() => rentals.id, { onDelete: "restrict" }),
+  amountBaisa: integer("amount_baisa").notNull(), balanceCreditBaisa: integer("balance_credit_baisa").notNull(),
+  remarks: text("remarks").notNull(),
+  approvedBy: uuid("approved_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("refund_approvals_request_unique").on(table.requestId), index("refund_approvals_rental_index").on(table.rentalId)]);
+export const financeFines = pgTable("finance_fines", {
+  id: uuid("id").defaultRandom().primaryKey(), requestId: uuid("request_id").notNull(),
+  kind: text("kind").$type<"NORMAL" | "LEGAL">().notNull(),
+  rentalId: uuid("rental_id").notNull().references(() => rentals.id, { onDelete: "restrict" }),
+  vehicleId: uuid("vehicle_id").notNull().references(() => vehicles.id, { onDelete: "restrict" }),
+  customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+  branchId: uuid("branch_id").notNull().references(() => branches.id, { onDelete: "restrict" }),
+  dateFrom: timestamp("date_from", { withTimezone: true }).notNull(), dateTo: timestamp("date_to", { withTimezone: true }).notNull(),
+  amountBaisa: integer("amount_baisa").notNull(), details: text("details").notNull(), remarks: text("remarks"),
+  bookingSnapshot: jsonb("booking_snapshot").$type<Record<string, string | number | null>>().notNull(),
+  isDeleted: boolean("is_deleted").default(false).notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  ...timestamps,
+}, (table) => [uniqueIndex("finance_fines_request_unique").on(table.requestId), index("finance_fines_vehicle_index").on(table.vehicleId, table.kind)]);
+export const legalFineHistory = pgTable("legal_fine_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fineId: uuid("fine_id").notNull().references(() => financeFines.id, { onDelete: "restrict" }),
+  action: text("action").$type<"CREATED" | "EDITED" | "DELETED">().notNull(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(), reason: text("reason").notNull(),
+  actorId: uuid("actor_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

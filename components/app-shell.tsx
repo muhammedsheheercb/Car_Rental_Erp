@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { can, getIdentity } from "@/lib/auth";
 import { LogoutButton } from "./logout-button";
+import { OperationalFilters } from "./operational-filters";
 export async function AppShell({
   children,
   locale,
@@ -15,11 +16,12 @@ export async function AppShell({
     { href: "/dashboard", label: t("dashboard"), module: "dashboard" },
     { href: "/fleet", label: "Fleet", module: "fleet" },
     { href: "/customers", label: "Customers", module: "customers" },
+    { href: "/rentals", label: t("rentals"), module: "rentals" },
     { href: "/admin/branches", label: t("branches"), module: "branches" },
     { href: "/admin/users", label: t("users"), module: "users" },
   ].filter((x) => identity && can(identity, x.module, "read"));
   return (
-    <div className="mx-auto min-h-screen min-w-0 max-w-7xl px-3 pb-8 sm:px-4 md:px-8">
+    <div className="mx-auto min-h-screen min-w-0 max-w-7xl px-3 pb-24 sm:px-4 md:px-8 lg:pb-8">
       <header className="flex min-h-16 min-w-0 items-center justify-between gap-2 border-b border-[var(--edge)] sm:min-h-20 sm:gap-4">
         <Link
           href={`/${locale}/dashboard`}
@@ -27,7 +29,7 @@ export async function AppShell({
         >
           MUSCAT <span className="text-[var(--accent)]">CARS</span>
         </Link>
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-3 lg:flex xl:gap-6">
           {items.map((item) => (
             <Link
               key={item.href}
@@ -39,6 +41,7 @@ export async function AppShell({
           ))}
         </nav>
         <div className="flex min-w-0 items-center gap-1 sm:gap-3">
+          <OperationalFilters />
           <Link
             href={`/${locale === "en" ? "ar" : "en"}/dashboard`}
             className="min-h-11 content-center px-1 text-xs sm:text-sm"
@@ -49,7 +52,7 @@ export async function AppShell({
         </div>
       </header>
       <main className="min-w-0 py-5 sm:py-8">{children}</main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid min-h-[5rem] grid-flow-col auto-cols-fr items-center border-t border-[var(--edge)] bg-[#121211]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid min-h-[5rem] grid-flow-col auto-cols-fr items-center border-t border-[var(--edge)] bg-[#121211]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {items.map((item) => (
           <Link
             key={item.href}

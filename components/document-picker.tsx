@@ -7,15 +7,20 @@ export function DocumentPicker({
   label,
   required = false,
   existing,
+  onChange,
 }: {
   label: string;
   required?: boolean;
-  existing?: { objectKey: string; contentType: string; sizeBytes: number };
+  existing?: { id: string; objectKey: string; contentType: string; sizeBytes: number };
+  onChange?: (file: File | null, width: number, height: number) => void;
 }) {
   const [selected, setSelected] = useState<Selected | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const existingUrl = existing ? `/api/customer-documents/${existing.id}` : undefined;
+  const previewUrl = selected?.url ?? existingUrl;
   useEffect(
     () => () => {
       if (selected) URL.revokeObjectURL(selected.url);
@@ -35,10 +40,26 @@ export function DocumentPicker({
         setError("This image could not be read.");
         return;
       }
-      setSelected((old) => {
-        if (old) URL.revokeObjectURL(old.url);
-        return { file, url, width: image.naturalWidth, height: image.naturalHeight };
-      });
+      const maxSide = 2200;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          const optimized = blob
+            ? new File([blob], `${crypto.randomUUID()}.jpg`, { type: "image/jpeg" })
+            : file;
+          setSelected((old) => {
+            if (old) URL.revokeObjectURL(old.url);
+            return { file: optimized, url, width: canvas.width, height: canvas.height };
+          });
+          onChange?.(optimized, canvas.width, canvas.height);
+        },
+        "image/jpeg",
+        0.82,
+      );
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
@@ -89,6 +110,7 @@ export function DocumentPicker({
                 onClick={() => {
                   URL.revokeObjectURL(selected.url);
                   setSelected(null);
+                  onChange?.(null, 0, 0);
                 }}
                 className="min-h-9 px-2 text-red-300"
               >
@@ -98,19 +120,42 @@ export function DocumentPicker({
           </div>
         </div>
       ) : existing ? (
-        <div className="mt-3 rounded-lg border border-[var(--edge)] bg-black/20 p-3 text-sm">
-          <p className="font-medium text-[var(--accent)]">Existing private document</p>
-          <p className="mt-1 break-all text-xs text-[var(--muted)]">{existing.objectKey}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            {existing.contentType} · {(existing.sizeBytes / 1024 / 1024).toFixed(2)} MB
-          </p>
-          <button
-            type="button"
-            onClick={() => picker.current?.click()}
-            className="mt-3 min-h-10 rounded-lg border border-[var(--edge)] px-3"
-          >
-            Replace
-          </button>
+        <div className="mt-3 flex min-w-0 gap-3">
+          {/* biome-ignore lint/performance/noImgElement: authenticated private images require direct previews */}
+          <img
+            src={existingUrl}
+            alt={`${label} preview`}
+            onLoad={() => setPreviewFailed(false)}
+            onError={() => setPreviewFailed(true)}
+            className="h-20 w-28 shrink-0 rounded-lg border border-[var(--edge)] object-contain"
+          />
+          <div className="min-w-0 text-sm">
+            <p className="font-medium">Saved document</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              {(existing.sizeBytes / 1024 / 1024).toFixed(2)} MB
+            </p>
+            {previewFailed && (
+              <p role="alert" className="mt-1 text-xs text-red-300">
+                Could not load the document preview.
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="min-h-9 rounded border border-[var(--edge)] px-2"
+              >
+                View
+              </button>
+              <button
+                type="button"
+                onClick={() => picker.current?.click()}
+                className="min-h-9 rounded border border-[var(--edge)] px-2"
+              >
+                Replace
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -160,9 +205,9 @@ export function DocumentPicker({
           >
             {/* biome-ignore lint/performance/noImgElement: local object URLs require direct previews */}
             <img
-              src={selected?.url ?? ""}
+              src={previewUrl}
               alt={`${label} full preview`}
-              className="max-h-[80dvh] rounded-xl object-contain"
+              className="max-h-[80dvh] max-w-full rounded-xl object-contain"
             />
             <button
               type="button"

@@ -36,6 +36,41 @@
       "when": 1789389100000,
       "tag": "0004_blacklist_description",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790759520000,
+      "tag": "0005_rental_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790841600000,
+      "tag": "0006_customer_identity_and_rental_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790841700000,
+      "tag": "0007_booking_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790841800000,
+      "tag": "0008_rental_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790841900000,
+      "tag": "0009_finance_modules",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
 import { auditLogs, customerBlacklist, customerDocuments, customers } from "@/db/schema";
 import { requirePermission } from "@/lib/auth";
+import { putPrivateCustomerDocument } from "@/lib/r2";
 import { customerSchema } from "@/lib/validation";
 
 export async function saveCustomerAction(input: unknown, id?: string) {
@@ -22,20 +23,26 @@ export async function saveCustomerAction(input: unknown, id?: string) {
     drivingLicenceExpiry: value.drivingLicenceExpiry.toISOString().slice(0, 10),
   };
   try {
-    if (id)
+    if (id) {
       await db
         .update(customers)
         .set({ ...databaseValue, updatedAt: new Date() })
         .where(eq(customers.id, id));
-    else
-      await db.insert(customers).values({
+      revalidatePath("/en/customers");
+      return { ok: true, id, message: "Customer updated successfully." };
+    }
+    const [created] = await db
+      .insert(customers)
+      .values({
         ...databaseValue,
         customerNumber: `CU-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`,
-      });
+      })
+      .returning({ id: customers.id });
     revalidatePath("/en/customers");
     return {
       ok: true,
-      message: id ? "Customer updated successfully." : "Customer created successfully.",
+      id: created.id,
+      message: "Customer details saved. Add the required documents.",
     };
   } catch (error) {
     return {
@@ -44,6 +51,54 @@ export async function saveCustomerAction(input: unknown, id?: string) {
         error instanceof Error
           ? "A customer with that mobile number already exists."
           : "Could not save customer.",
+    };
+  }
+}
+export async function uploadCustomerDocumentAction(
+  customerId: string,
+  type: "LICENCE_FRONT" | "LICENCE_BACK" | "SIGNATURE",
+  file: File,
+  width: number,
+  height: number,
+) {
+  await requirePermission("customers", "update");
+  const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+  if (!allowed.has(file.type) || file.size < 1 || file.size > 5 * 1024 * 1024)
+    return { ok: false, message: "Use a JPEG, PNG, or WebP image up to 5 MB." };
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1)
+    return { ok: false, message: "The document image is invalid." };
+  const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const key = `customers/${customerId}/${type.toLowerCase()}/${randomUUID()}.${extension}`;
+  try {
+    await putPrivateCustomerDocument(key, file);
+    await db
+      .insert(customerDocuments)
+      .values({
+        customerId,
+        type,
+        objectKey: key,
+        contentType: file.type,
+        sizeBytes: file.size,
+        width,
+        height,
+      })
+      .onConflictDoUpdate({
+        target: [customerDocuments.customerId, customerDocuments.type],
+        set: {
+          objectKey: key,
+          contentType: file.type,
+          sizeBytes: file.size,
+          width,
+          height,
+          updatedAt: new Date(),
+        },
+      });
+    revalidatePath("/en/customers");
+    return { ok: true, message: "Document uploaded." };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Could not upload document.",
     };
   }
 }

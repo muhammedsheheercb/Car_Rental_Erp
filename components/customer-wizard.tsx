@@ -1,6 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
-import { saveCustomerAction } from "@/app/[locale]/(protected)/customers/actions";
+import {
+  saveCustomerAction,
+  uploadCustomerDocumentAction,
+} from "@/app/[locale]/(protected)/customers/actions";
 import { CalendarInput } from "./calendar-input";
 import { DocumentPicker } from "./document-picker";
 import { useToast } from "./toast";
@@ -34,27 +37,60 @@ export function CustomerWizard({
 }: {
   customerId?: string;
   initialData?: Record<string, string>;
-  existingDocuments?: { type: string; objectKey: string; contentType: string; sizeBytes: number }[];
+  existingDocuments?: {
+    id: string;
+    type: string;
+    objectKey: string;
+    contentType: string;
+    sizeBytes: number;
+  }[];
   onSuccess?: (message: string) => void;
 }) {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Record<string, string>>(initialData ?? {});
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  const [savedCustomerId, setSavedCustomerId] = useState(customerId);
+  const [documentFiles, setDocumentFiles] = useState<
+    Record<string, { file: File; width: number; height: number }>
+  >({});
   const { show } = useToast();
   const set = (key: string, value: string) => setData((old) => ({ ...old, [key]: value }));
-  const submit = () =>
+  const saveDetails = () =>
     start(async () => {
       const result = await saveCustomerAction(data, customerId);
       if (!result.ok) {
         setError(result.message);
         return;
       }
-      if (onSuccess) onSuccess(result.message);
-      else {
-        show(result.message);
-        window.location.assign("/en/customers");
+      setSavedCustomerId(result.id);
+      setError("");
+      setStep(2);
+      show(result.message);
+    });
+  const submitDocuments = () =>
+    start(async () => {
+      if (!savedCustomerId) return setError("Save customer details before uploading documents.");
+      const missing = documents.filter(
+        ([type, , required]) =>
+          required &&
+          !documentFiles[type] &&
+          !existingDocuments.some((document) => document.type === type),
+      );
+      if (missing.length)
+        return setError("Licence front, licence back, and signature are required.");
+      for (const [type, item] of Object.entries(documentFiles)) {
+        const result = await uploadCustomerDocumentAction(
+          savedCustomerId,
+          type as "LICENCE_FRONT" | "LICENCE_BACK" | "SIGNATURE",
+          item.file,
+          item.width,
+          item.height,
+        );
+        if (!result.ok) return setError(result.message);
       }
+      if (onSuccess) onSuccess("Customer saved with documents.");
+      else window.location.assign("/en/customers");
     });
   return (
     <div className="mx-auto max-w-4xl">
@@ -123,6 +159,14 @@ export function CustomerWizard({
                 label={label}
                 required={required}
                 existing={existingDocuments.find((document) => document.type === key)}
+                onChange={(file, width, height) =>
+                  setDocumentFiles((old) => {
+                    const next = { ...old };
+                    if (file) next[key] = { file, width, height };
+                    else delete next[key];
+                    return next;
+                  })
+                }
               />
             ))}
           </div>
@@ -139,7 +183,7 @@ export function CustomerWizard({
           {step === 1 ? (
             <button
               type="button"
-              onClick={() => setStep(2)}
+              onClick={saveDetails}
               className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-black"
             >
               Continue
@@ -148,7 +192,7 @@ export function CustomerWizard({
             <button
               type="button"
               disabled={pending}
-              onClick={submit}
+              onClick={submitDocuments}
               className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-black"
             >
               {pending
