@@ -112,3 +112,292 @@ select:focus-visible {
     padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
   }
 }
+@media print {
+  body {
+    background: white;
+    color: black;
+    padding: 0;
+  }
+  header,
+  nav {
+    /* biome-ignore lint/complexity/noImportantStyles: override navigation utility styles in printed records. */
+    display: none !important;
+  }
+  main {
+    /* biome-ignore lint/complexity/noImportantStyles: remove screen layout spacing in print. */
+    padding: 0 !important;
+  }
+  main:not(:has(.print-document)) p,
+  main:not(:has(.print-document)) td,
+  main:not(:has(.print-document)) th {
+    /* biome-ignore lint/complexity/noImportantStyles: ensure readable printed financial records. */
+    color: black !important;
+  }
+}
+
+.document-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.print-document {
+  width: 100%;
+  max-width: 190mm;
+  min-height: 277mm;
+  margin: 0 auto;
+  padding: 9mm;
+  background: #fff;
+  color: #18273b;
+  font-family: Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 35px #0003;
+  overflow-wrap: anywhere;
+}
+.document-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 5mm;
+  border-bottom: 2px solid #183953;
+  padding-bottom: 4mm;
+  margin-bottom: 5mm;
+}
+.document-brand {
+  font-size: 20pt;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #183953;
+}
+.document-brand span {
+  color: #947026;
+}
+.document-heading p {
+  margin: 1mm 0;
+  font-size: 9pt;
+}
+.document-heading-right {
+  text-align: end;
+  max-width: 55%;
+}
+.document-heading h1 {
+  font-size: 17pt;
+  font-weight: 700;
+  margin: 0;
+  color: #183953;
+}
+.document-number {
+  font-weight: 700;
+}
+.document-body {
+  flex: 1;
+}
+.print-document section {
+  margin-bottom: 4mm;
+}
+.print-document h2 {
+  background: #e9eff5;
+  border-inline-start: 3px solid #947026;
+  padding: 2mm 3mm;
+  margin: 0 0 3mm;
+  color: #183953;
+  font-size: 10pt;
+  font-weight: 700;
+}
+.document-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5mm 5mm;
+}
+.document-fields div {
+  border-bottom: 1px solid #dce2e9;
+  padding: 0.5mm 0 1mm;
+}
+.document-fields dt {
+  font-size: 8pt;
+  line-height: 1.15;
+  color: #506176;
+}
+.document-fields dd {
+  margin: 0.5mm 0 0;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.document-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 9pt;
+}
+.document-table th {
+  background: #edf2f6;
+  color: #183953;
+  font-weight: 700;
+}
+.document-table td,
+.document-table th {
+  border: 1px solid #d5dce5;
+  padding: 2mm;
+  text-align: start;
+}
+.document-table .document-money {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  width: 27mm;
+}
+.document-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 6mm;
+  margin: 4mm 0;
+}
+.document-totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 3mm;
+  padding: 2mm 0;
+  border-bottom: 1px solid #d5dce5;
+}
+.document-totals dd {
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.document-remarks {
+  white-space: pre-wrap;
+  font-size: 9pt;
+}
+.document-signatures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9mm;
+  break-inside: avoid;
+  margin-top: 6mm;
+}
+.document-signatures-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5mm;
+}
+.document-signature {
+  text-align: center;
+}
+.document-signature-space {
+  height: 22mm;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.document-signature-space img {
+  max-height: 20mm;
+  width: 100%;
+  object-fit: contain;
+}
+.document-signature-label {
+  border-top: 1px solid #6d7b8a;
+  padding-top: 2mm;
+  margin: 0;
+  font-size: 9pt;
+  font-weight: 700;
+}
+.document-signature p:last-child {
+  font-size: 8pt;
+  margin-top: 1mm;
+}
+.document-footer {
+  border-top: 1px solid #d5dce5;
+  margin-top: 5mm;
+  padding-top: 2mm;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2mm;
+  color: #506176;
+  font-size: 7pt;
+}
+@media (max-width: 600px) {
+  .print-document {
+    padding: 4mm;
+    font-size: 9pt;
+    min-height: 0;
+  }
+  .document-brand {
+    font-size: 15pt;
+  }
+  .document-heading h1 {
+    font-size: 13pt;
+  }
+  .document-totals {
+    grid-template-columns: 1fr;
+  }
+}
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+@media print {
+  html,
+  body {
+    background: #fff;
+    color-scheme: light;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+  }
+  [data-app-ui] {
+    display: none;
+  }
+  [data-app-shell] {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    min-height: 0;
+  }
+  .document-controls {
+    display: none;
+  }
+  .print-document {
+    max-width: none;
+    width: 190mm;
+    min-height: 277mm;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    font-size: 10pt;
+  }
+  .print-document,
+  .print-document * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .document-heading h1 {
+    font-size: 17pt;
+  }
+  .document-brand {
+    font-size: 20pt;
+  }
+  .document-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .document-heading,
+  .document-fields div,
+  .document-table tr,
+  .document-totals div,
+  .document-footer {
+    break-inside: avoid;
+  }
+  .document-table thead {
+    display: table-header-group;
+  }
+  main:has(.print-document) {
+    margin: 0;
+  }
+  .print-document p,
+  .print-document td,
+  .print-document th {
+    color: inherit;
+  }
+}

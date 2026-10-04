@@ -13,6 +13,7 @@ import {
   vehicleServiceSettings,
   vehicles,
 } from "@/db/schema";
+import { fleetAlertSettings } from "@/features/maintenance/settings";
 import { availableFleet } from "@/features/rentals/availability";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
@@ -25,9 +26,10 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   const day = formatOmanDateTime(now).slice(0, 10);
   const todayStart = parseOmanDateTime(`${day}T00:00`);
   const todayEnd = new Date(parseOmanDateTime(`${day}T00:00`).getTime() + 86_400_000 - 1);
-  const in30Days = new Date(now);
-  in30Days.setTime(in30Days.getTime() + 30 * 86_400_000);
-  const date30 = formatOmanDateTime(in30Days).slice(0, 10);
+  const policy = await fleetAlertSettings();
+  const expiryLimitDate = new Date(now);
+  expiryLimitDate.setTime(expiryLimitDate.getTime() + policy.expirySoonDays * 86_400_000);
+  const expiryLimit = formatOmanDateTime(expiryLimitDate).slice(0, 10);
   const vehicleScope =
     user.role === "SUPER_ADMIN" ? undefined : inArray(vehicles.branchId, user.branchIds);
   const rentalScope =
@@ -108,7 +110,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
         and(
           vehicleScope,
           gte(vehicleRegistrations.mulkiyaExpiryDate, day),
-          lte(vehicleRegistrations.mulkiyaExpiryDate, date30),
+          lte(vehicleRegistrations.mulkiyaExpiryDate, expiryLimit),
         ),
       ),
     db
@@ -119,7 +121,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
         and(
           vehicleScope,
           gte(vehicleInsurance.validUntil, day),
-          lte(vehicleInsurance.validUntil, date30),
+          lte(vehicleInsurance.validUntil, expiryLimit),
         ),
       ),
     db.select({ value: count() }).from(customers).where(eq(customers.isActive, true)),
@@ -184,8 +186,8 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
     ["Today Reserve", todayReservations[0]?.value ?? 0],
     ["Late Car", lateVehicles[0]?.value ?? 0],
     ["Near service", nearService[0]?.value ?? 0],
-    ["Mulkiya expiring (30 days)", mulkiyaExpiring[0]?.value ?? 0],
-    ["Insurance expiring (30 days)", insuranceExpiring[0]?.value ?? 0],
+    [`Mulkiya expiry alerts (${policy.expirySoonDays} days)`, mulkiyaExpiring[0]?.value ?? 0],
+    [`Insurance expiry alerts (${policy.expirySoonDays} days)`, insuranceExpiring[0]?.value ?? 0],
     ["Active customers", activeCustomers[0]?.value ?? 0],
     ["Outstanding payments", formatOMR(outstanding[0]?.value ?? 0)],
     ["Advance collected", formatOMR(advances[0]?.value ?? 0)],

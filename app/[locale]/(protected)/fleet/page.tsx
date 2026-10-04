@@ -17,6 +17,7 @@ import {
   operationalBlocking,
   vehicleCommitmentStatus,
 } from "@/features/rentals/availability";
+import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import { requirePermission } from "@/lib/auth";
 export default async function FleetPage({
   searchParams,
@@ -37,7 +38,7 @@ export default async function FleetPage({
   const [{ q = "", branch, brand, model, registration, page = "1", filter = "all" }, { locale }] =
     await Promise.all([searchParams, params]);
   const currentPage = Math.max(1, Number(page) || 1);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatOmanDateTime(new Date()).slice(0, 10);
   const filterWhere =
     filter === "available"
       ? availableFleet
@@ -112,6 +113,11 @@ export default async function FleetPage({
         <div className="min-w-0">
           <p className="text-sm text-[var(--accent)]">FLEET</p>
           <h1 className="mt-2 text-3xl font-semibold">Vehicles</h1>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <Link href={`/${locale}/service` as never}>Service</Link>
+            <Link href={`/${locale}/near-to-service` as never}>Near To Service</Link>
+            <Link href={`/${locale}/expiry` as never}>Expiry</Link>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <Link

@@ -45,6 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <Toast.Provider>
         {children}
         <Toast.Root
+          data-app-ui
           open={Boolean(notice)}
           duration={notice?.tone === "loading" ? Infinity : 4500}
           onOpenChange={(open) => {
@@ -66,7 +67,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             ×
           </Toast.Close>
         </Toast.Root>
-        <Toast.Viewport />
+        <Toast.Viewport data-app-ui />
       </Toast.Provider>
     </ToastContext.Provider>
   );

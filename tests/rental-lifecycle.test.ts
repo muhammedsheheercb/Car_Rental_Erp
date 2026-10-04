@@ -291,3 +291,29 @@ describe("contract lifecycle transactions", () => {
     ).rejects.toThrow("format");
   });
 });
+
+it("rejects a stale return that locked the previous vehicle before a swap", async () => {
+  state.reads = [
+    [rental],
+    [vehicle],
+    [{ ...rental, vehicleId: "00000000-0000-4000-8000-000000000002" }],
+  ];
+  await expect(
+    returnContract({ rentalId: id, returnedAt: "2026-10-01T12:00", endingKm: "1000" }, actor),
+  ).rejects.toThrow("Vehicle changed");
+  expect(state.writes).toHaveLength(0);
+});
+it("rejects a return before the current vehicle segment began", async () => {
+  prepare({ ...rental, segmentStartedAt: new Date("2026-10-01T07:00Z") } as typeof rental);
+  await expect(
+    returnContract({ rentalId: id, returnedAt: "2026-10-01T10:00", endingKm: "1000" }, actor),
+  ).rejects.toThrow("Return time");
+  expect(state.writes).toHaveLength(0);
+});
+it("does not accept an ending odometer below a customer-service reading", async () => {
+  state.reads = [[rental], [{ ...vehicle, currentOdometerKm: 1200 }], [rental]];
+  await expect(
+    returnContract({ rentalId: id, returnedAt: "2026-10-01T12:00", endingKm: "1100" }, actor),
+  ).rejects.toThrow("latest recorded");
+  expect(state.writes).toHaveLength(0);
+});

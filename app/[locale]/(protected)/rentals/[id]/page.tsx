@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RentalLatePreview } from "@/components/rental-late-preview";
 import { RentalLifecycleForms } from "@/components/rental-lifecycle-forms";
@@ -15,6 +16,7 @@ import {
   vehicleModels,
   vehicles,
 } from "@/db/schema";
+import { totals } from "@/features/finance/service";
 import { formatOMR } from "@/features/rentals/calculations";
 import { cancellationPolicy } from "@/features/rentals/late-charges";
 import { can, requirePermission } from "@/lib/auth";
@@ -25,9 +27,13 @@ const date = (value: Date) =>
     dateStyle: "medium",
     timeStyle: "short",
   });
-export default async function AgreementPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgreementPage({
+  params,
+}: {
+  params: Promise<{ id: string; locale: string }>;
+}) {
   const actor = await requirePermission("rentals", "read");
-  const { id } = await params;
+  const { id, locale } = await params;
   if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) notFound();
   const [record] = await db
     .select({
@@ -50,6 +56,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
     )
     .limit(1);
   if (!record) notFound();
+  const financial = await totals(db, id);
   const [extensions, cancellations, evidence, charges] = await Promise.all([
     db
       .select({ history: rentalExtensions, user: users.displayName })
@@ -87,6 +94,23 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">Agreement {rental.agreementNumber}</h1>
+      <div className="flex flex-wrap gap-3">
+        {can(actor, "rentals", "print", rental.branchId) && (
+          <Link className="btn" href={`/${locale}/documents/agreement/${id}` as never}>
+            Print Agreement A4
+          </Link>
+        )}
+        {rental.status === "ACTIVE" && canUpdate && (
+          <Link className="btn" href={`/${locale}/transfers?booking=${id}` as never}>
+            Transfer Vehicle
+          </Link>
+        )}
+        {can(actor, "finance", "read", rental.branchId) && (
+          <Link className="btn" href={`/${locale}/invoices?booking=${id}` as never}>
+            Invoice
+          </Link>
+        )}
+      </div>
       <p className="text-sm text-[var(--muted)]">
         {rental.status} · {record.branch} · All dates and times are Oman time.
       </p>
@@ -194,6 +218,13 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
       </section>
       <section className="rounded-xl border border-[var(--edge)] p-4">
         <h2 className="text-lg font-semibold">Financial components</h2>
+        <p className="mt-3 text-xl font-semibold">
+          Invoice balance: {formatOMR(financial.balance)}
+        </p>
+        <p>
+          Payback approved: {formatOMR(financial.approvedBaisa)} · Returned:{" "}
+          {formatOMR(financial.returnedBaisa)} · Remaining: {formatOMR(financial.remainingBaisa)}
+        </p>
         {charges.map((charge) => (
           <p key={charge.id} className="mt-2 break-words text-sm">
             {charge.component.replaceAll("_", " ")} · {charge.description} ·{" "}

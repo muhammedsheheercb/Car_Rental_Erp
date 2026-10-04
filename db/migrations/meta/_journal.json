@@ -71,6 +71,20 @@
       "when": 1790841900000,
       "tag": "0009_finance_modules",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791014700000,
+      "tag": "0010_swaps_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791020000000,
+      "tag": "0011_service_documents_signatures",
+      "breakpoints": true
     }
   ]
 }

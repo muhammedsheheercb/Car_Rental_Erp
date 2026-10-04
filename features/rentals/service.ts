@@ -221,4 +221,3 @@ export async function activateRental(rentalId: string, pickupOdometerKm: number,
     return { ...rental, status: "ACTIVE" as const, pickupOdometerKm, actorId };
   });
 }
-

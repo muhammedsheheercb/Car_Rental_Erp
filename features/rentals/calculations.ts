@@ -61,7 +61,13 @@ export function calculateRentalCharge(input: {
   const overdueFineBaisa = late.overdueFineBaisa;
   const subtotalBaisa =
     rentalBaisa + excessBaisa + additionalRentalBaisa + lateBaisa + overdueFineBaisa;
-  const taxBaisa = Math.round(subtotalBaisa * (input.taxRate ?? 0));
+  const rateText = String(input.taxRate ?? 0);
+  if (!/^\d+(\.\d{1,6})?$/.test(rateText) || (input.taxRate ?? 0) > 1)
+    throw new Error("Invalid tax rate.");
+  const [wholeTax, fractionalTax = ""] = rateText.split(".");
+  const denominator = 10n ** BigInt(fractionalTax.length);
+  const numerator = BigInt(wholeTax) * denominator + BigInt(fractionalTax || "0");
+  const taxBaisa = Number((BigInt(subtotalBaisa) * numerator + denominator / 2n) / denominator);
   return {
     days,
     drivenKm,

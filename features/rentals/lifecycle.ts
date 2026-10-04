@@ -32,6 +32,8 @@ async function lockRental(tx: Tx, id: string, actor: Identity) {
     .where(eq(vehicles.id, candidate.vehicleId))
     .for("update");
   const [rental] = await tx.select().from(rentals).where(eq(rentals.id, id)).for("update");
+  if (!rental || !vehicle || rental.vehicleId !== vehicle.id)
+    throw new Error("Vehicle changed. Reload the booking and try again.");
   return { rental, vehicle };
 }
 const boundedMoney = (value: number) => {
@@ -142,6 +144,8 @@ export async function cancelAgreement(raw: unknown, actor: Identity) {
       );
     if (input.startingKm !== (rental.pickupOdometerKm ?? vehicle.currentOdometerKm))
       throw new Error("Starting KM must match the agreement.");
+    if (rental.status === "ACTIVE" && input.endingKm < vehicle.currentOdometerKm)
+      throw new Error("Ending KM cannot be below the latest recorded vehicle KM.");
     await tx.insert(rentalCancellations).values({
       rentalId: rental.id,
       previousStatus: rental.status,
@@ -203,8 +207,10 @@ export async function returnContract(
   return db.transaction(async (tx) => {
     const { rental, vehicle } = await lockRental(tx, raw.rentalId, actor);
     if (rental.status !== "ACTIVE") throw new Error("Only active rentals can be returned.");
-    if (returnedAt < rental.startsAt || returnedAt > new Date())
+    if (returnedAt < (rental.segmentStartedAt ?? rental.startsAt) || returnedAt > new Date())
       throw new Error("Return time must be between pickup and now in Oman time.");
+    if (endingKm < vehicle.currentOdometerKm)
+      throw new Error("Ending KM cannot be below the latest recorded vehicle KM.");
     const late = calculateLateCharges({
       expectedReturnAt: rental.expectedReturnAt,
       assessedAt: returnedAt,
@@ -255,6 +261,7 @@ export async function returnContract(
       .set({
         status: "RETURNED",
         actualReturnAt: returnedAt,
+        returnedBy: actor.id,
         returnOdometerKm: endingKm,
         subtotalBaisa: boundedMoney(rental.subtotalBaisa + added),
         totalBaisa: boundedMoney(rental.totalBaisa + added),

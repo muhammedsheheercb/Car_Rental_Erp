@@ -75,3 +75,110 @@ are derived from the agreement; photo views enforce the rental branch permission
 Take Photo and Upload Photo accept JPEG, PNG and WebP up to 5 MB. Lifecycle and
 financial rule tests are in `tests/late-charges.test.ts` and
 `tests/rental-lifecycle.test.ts`.
+
+## Finance modules
+
+Finance navigation opens Advance, Payback, Receipts, Fine and Legal Fine. Access
+uses branch-scoped `finance:read/create/update/delete/approve` permissions.
+Payments and matching ledger entries are posted in one transaction with a locked
+agreement and a unique submission ID. Invoice balances include advances,
+receipts, fines, refund adjustments and paybacks.
+
+Refund approval records an additional entitlement and any required ledger credit;
+payback payments retain history and cannot exceed either the remaining approved
+entitlement or available customer credit. Receipt corrections post a reversal
+and optional replacement; a zero replacement amount voids the receipt. Receipts
+with approved refunds require accountant review before correction.
+
+Normal fines use the selected vehicle's booking history and post a charge and
+ledger debit. Legal fines snapshot booking/customer details, show the selected
+vehicle's previous legal fines, and never post rental charges. Legal fine edits
+and soft deletion retain before/after history and require a reason. List filters
+and financial dates use Oman time. Record views support browser printing.
+
+## Customer vehicle transfer and invoices
+
+`/en/transfers` searches active bookings and selects replacement vehicles. This
+customer swap is separate from branch-to-branch fleet transfers. Rental update
+permissions apply to the booking and replacement branches. Vehicle rows lock in
+UUID order before the rental row; the transaction posts charges/payment, records
+both odometers and immutable history, releases the old vehicle, and occupies the
+replacement together. Reservations, service and pending fleet transfers block
+replacement selection. Concurrent stale requests cannot release the wrong car.
+The original rent, booking number, business branch and return deadline are
+preserved. Consumed KM is deducted from standard allowance first, then free KM;
+only unused allowances carry forward. Fine attribution follows vehicle segments.
+
+`/en/invoices` supports booking search, status and Oman date filters, pagination,
+draft editing, immutable finalized views, printing and audited void/reversal.
+Opening Invoice from an agreement preselects its booking. Active agreements can
+have drafts; return/cancellation is required before finalization so ending KM and
+late charges are settled. Finalization requires `finance:approve`, and deletion
+uses void records (finalized voids also require approval). Washing/petrol charges
+and discount post as explicit ledger entries; existing transfer balances are
+already in that ledger and are never charged twice. Advances/receipts and paybacks
+are accounted for, corrected receipts are excluded, and received amounts cannot
+exceed both the invoice and ledger outstanding amount. Security deposits appear
+separately, are included in collection, and remain held pending approved refund.
+All money columns now use PostgreSQL `NUMERIC(15,0)` in whole baisa, with exact
+integer/BigInt calculations; OMR text accepts at most three decimal places.
+
+Tests: `tests/transfers-invoices.test.ts`,
+`tests/transfer-invoice-service.test.ts`; browser fixtures:
+`node scripts/transfer-invoice-controls-check.mjs`. With the application running
+on port 3001, `node --env-file=.env scripts/transfer-invoice-browser-check.mjs`
+checks live pages and the schema. `node --env-file=.env
+scripts/transfer-invoice-db-check.mjs` runs real transaction/rollback checks using
+session-local temporary table copies; it never changes application records.
+
+## A4 documents, service, expiry and user signatures
+
+Agreement, Invoice and Legal Fine views link to dedicated A4 previews under
+`/en/documents/{agreement|invoice|legal-fine|receipt}/{id}`. Document access requires
+both read and print permission for the record branch. The shared layout uses
+real agreement/customer/vehicle and financial data, preserves colors, excludes
+application navigation/controls, and has two signature positions before return
+(Customer and Authorized Staff), or three after return (adding Return Received
+By). Returns now retain the actual receiving staff ID. Authorized Staff uses the
+printing user's signature, with a fallback to the document creator's configured
+signature; each image is labelled with its actual owner's name. The common
+`components/print-document.tsx` template can be adapted to a supplied reference
+image. Long records paginate on A4 with aligned tables and unbroken signature
+blocks; browser printing waits for signature images/fonts to load.
+
+Service is available under `/en/service` using branch-scoped fleet permissions.
+Company services can be scheduled, started, completed or cancelled. Starting
+company work checks active rentals/reservations and other work in progress.
+Completed records are immutable. Completion updates the odometer and the relevant
+engine/gear-oil service marker, appends history and an exact baisa expense/payment
+record in the same transaction. Service By Customer requires a matching occupied
+booking and records the customer-paid expense separately from rental invoices.
+Customer associations are derived server-side. Expenses are recorded only at
+completion; cancellation preserves history. Return/cancellation KM cannot be
+below the latest recorded service/vehicle reading.
+
+Near To Service (`/en/near-to-service`) uses last service KM plus interval minus
+current KM and includes engine and gear-oil work. Expiry (`/en/expiry`) includes
+Mulkiya and Insurance, classifies Expired / Expiring Soon / Valid, and uses Oman
+calendar dates; expiry remains valid through the stated date. Settings stores
+shared thresholds (defaults: 1,000 KM and 30 days). Administrator settings update
+permission is required to change these thresholds; dashboard expiry alerts use
+the same setting.
+
+Settings also provides User Signature selection, Take Photo, Upload Signature
+and preview/save. PNG/JPEG/WebP images up to 5 MB are validated and stored in
+private R2. Updating a signature retains earlier versions and the uploading user.
+Normal users with settings update permission manage their own signature;
+administrators additionally need user update permission and branch access to
+manage other users. Private preview routes require authentication and authorized
+ownership, set no-store/nosniff/security headers, and never expose public storage
+URLs. Authorized document pages embed only the signatures needed for their
+permitted document.
+
+Verification scripts: `scripts/maintenance-controls-check.mjs` tests forms and
+exports before/after A4 fixture PDFs in `/tmp`; `scripts/maintenance-browser-check.mjs`
+checks live pages on port 3001 using a temporary admin session;
+`scripts/maintenance-db-check.mjs` tests actual service transactions/rollback in
+transaction-local temporary tables. `scripts/signature-storage-check.mjs` writes,
+reads and deletes a temporary private R2 test object and verifies denial of
+unsigned S3 access without altering any configured user signature.
