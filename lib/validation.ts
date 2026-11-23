@@ -10,6 +10,28 @@ export const passwordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(12).max(128),
 });
+export const settingsPasswordSchema = passwordSchema
+  .extend({
+    confirmPassword: z.string().min(1, "Confirm your new password."),
+  })
+  .superRefine((value, ctx) => {
+    if (value.newPassword !== value.confirmPassword)
+      ctx.addIssue({
+        code: "custom",
+        path: ["confirmPassword"],
+        message: "New password and confirmation do not match.",
+      });
+    if (value.currentPassword === value.newPassword)
+      ctx.addIssue({
+        code: "custom",
+        path: ["newPassword"],
+        message: "Choose a different password from your current password.",
+      });
+  });
+export const userPreferencesSchema = z.object({
+  tableDensity: z.enum(["comfortable", "compact"]).default("comfortable"),
+  dateFormat: z.enum(["DMY", "YMD"]).default("DMY"),
+});
 export const branchSchema = z.object({
   name: trimmed.max(120),
   location: trimmed.max(120),
@@ -20,20 +42,51 @@ export const branchSchema = z.object({
     .regex(/^[A-Z0-9-]{2,16}$/),
 });
 export const branchCreateSchema = branchSchema.omit({ code: true });
+const permissionEntry = z
+  .string()
+  .regex(/^[a-z_]+:(create|read|update|delete|print|export|approve|override_price)$/);
 export const userSchema = z.object({
   username: z
     .string()
     .trim()
     .toLowerCase()
-    .regex(/^[a-z0-9._-]{3,64}$/),
+    .regex(/^[a-z0-9._-]{3,64}$/, "Username must be 3–64 lowercase letters, digits, ., _, or -."),
   displayName: trimmed.max(120),
-  initialPassword: z.string().min(12).max(128),
+  initialPassword: z
+    .string()
+    .min(12, "Password must be at least 12 characters.")
+    .max(128, "Password must be 128 characters or fewer."),
   role: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]),
   branchIds: z.array(z.string().uuid()),
-  permissions: z.array(
-    z.string().regex(/^[a-z_]+:(create|read|update|delete|print|export|approve|override_price)$/),
-  ),
+  permissions: z.array(permissionEntry),
 });
+export const userUpdateSchema = z.object({
+  displayName: trimmed.max(120),
+  role: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]),
+  branchIds: z.array(z.string().uuid()),
+  permissions: z.array(permissionEntry),
+});
+const optionalIsoDate = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Use YYYY-MM-DD date format.")
+  .optional()
+  .transform((v) => (v ? v : undefined));
+export const blacklistEntrySchema = z
+  .object({
+    reason: trimmed.max(300),
+    description: trimmed.max(2000),
+    startsAt: optionalIsoDate,
+    endsAt: optionalIsoDate,
+  })
+  .superRefine((value, ctx) => {
+    if (value.startsAt && value.endsAt && value.endsAt < value.startsAt)
+      ctx.addIssue({
+        code: "custom",
+        path: ["endsAt"],
+        message: "End date cannot be before start date.",
+      });
+  });
 
 const nonnegative = z.coerce.number().int().min(0);
 export const normalizeMasterName = (value: string) =>

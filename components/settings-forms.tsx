@@ -1,6 +1,8 @@
 "use client";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { settingsAction } from "@/app/[locale]/(protected)/settings/actions";
+import { compressImageFile } from "@/lib/image-compress";
+
 export function AlertSettingsForm({
   nearServiceKm,
   expirySoonDays,
@@ -10,10 +12,18 @@ export function AlertSettingsForm({
 }) {
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
   return (
-    <form action={action} className="grid gap-4 rounded-xl border border-[var(--edge)] p-4">
+    <form
+      action={action}
+      className="grid gap-4 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5"
+    >
       <input type="hidden" name="operation" value="alerts" />
-      <h2 className="text-xl font-semibold">Fleet Alert Thresholds</h2>
-      <label>
+      <div>
+        <h2 className="text-lg font-semibold">Fleet Alert Thresholds</h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Shared operational thresholds for Near To Service and Mulkiya/Insurance expiry alerts.
+        </p>
+      </div>
+      <label className="block text-sm">
         Near To Service — KM remaining
         <input
           name="nearServiceKm"
@@ -21,10 +31,10 @@ export function AlertSettingsForm({
           pattern="[0-9]+"
           defaultValue={nearServiceKm}
           required
-          className="input mt-1"
+          className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
         />
       </label>
-      <label>
+      <label className="block text-sm">
         Expiring Soon — days remaining
         <input
           name="expirySoonDays"
@@ -32,17 +42,30 @@ export function AlertSettingsForm({
           pattern="[0-9]+"
           defaultValue={expirySoonDays}
           required
-          className="input mt-1"
+          className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
         />
       </label>
-      {state.error && <p role="alert">{state.error}</p>}
-      {state.message && <p role="status">{state.message}</p>}
-      <button type="submit" className="btn" disabled={pending}>
-        Save Thresholds
+      {state.error && (
+        <p role="alert" className="text-sm text-red-300">
+          {state.error}
+        </p>
+      )}
+      {state.message && (
+        <p role="status" className="text-sm text-[var(--accent)]">
+          {state.message}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-50"
+        disabled={pending}
+      >
+        {pending ? "Saving…" : "Save Thresholds"}
       </button>
     </form>
   );
 }
+
 export function SignatureForm({
   users,
   initialUser,
@@ -55,9 +78,16 @@ export function SignatureForm({
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
   const [userId, setUserId] = useState(initialUser);
   const [file, setFile] = useState<File | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [preview, setPreview] = useState("");
   const [error, setError] = useState("");
+  const [compressing, setCompressing] = useState(false);
+  const [hasStrokes, setHasStrokes] = useState(false);
   const submitted = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
     if (!file) {
       setPreview("");
@@ -67,35 +97,144 @@ export function SignatureForm({
     setPreview(src);
     return () => URL.revokeObjectURL(src);
   }, [file]);
+
   const current = existing.find((s) => s.userId === userId);
-  const selectFile = (value: File | null) => {
+
+  const attachFile = (nextFile: File, width?: number, height?: number) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(nextFile);
+    if (submitted.current) submitted.current.files = transfer.files;
+    setFile(nextFile);
+    setDimensions(width && height ? { width, height } : null);
+  };
+
+  const selectFile = async (value: File | null) => {
     setError("");
     if (!value) return;
     if (
       !["image/png", "image/jpeg", "image/webp"].includes(value.type) ||
-      value.size > 5 * 1024 * 1024
+      value.size > 10 * 1024 * 1024
     ) {
       setError("Use a PNG, JPEG or WebP image up to 5 MB.");
       return;
     }
-    const transfer = new DataTransfer();
-    transfer.items.add(value);
-    if (submitted.current) submitted.current.files = transfer.files;
-    setFile(value);
+    setCompressing(true);
+    try {
+      const compressed = await compressImageFile(value, {
+        maxDimension: 1400,
+        quality: 0.85,
+        maxInputBytes: 10 * 1024 * 1024,
+        maxOutputBytes: 5 * 1024 * 1024,
+        preserveTransparency: true,
+      });
+      attachFile(compressed.file, compressed.width, compressed.height);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Use a PNG, JPEG or WebP image up to 5 MB.",
+      );
+    } finally {
+      setCompressing(false);
+    }
   };
+
+  const getPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = getPoint(event);
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!point || !ctx) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drawingRef.current = true;
+    lastPointRef.current = point;
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#111827";
+    ctx.fill();
+    setHasStrokes(true);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current) return;
+    const point = getPoint(event);
+    const prev = lastPointRef.current;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!point || !prev || !ctx) return;
+    ctx.beginPath();
+    ctx.moveTo(prev.x, prev.y);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+    lastPointRef.current = point;
+  };
+
+  const handlePointerUp = () => {
+    drawingRef.current = false;
+    lastPointRef.current = null;
+  };
+
+  const clearPad = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasStrokes(false);
+  };
+
+  const applyDrawing = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasStrokes) return;
+    setError("");
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setError("Could not capture drawn signature. Please try again.");
+        return;
+      }
+      const drawn = new File([blob], "drawn-signature.png", {
+        type: "image/png",
+        lastModified: Date.now(),
+      });
+      attachFile(drawn, canvas.width, canvas.height);
+    }, "image/png");
+  };
+
   return (
-    <form action={action} className="grid gap-4 rounded-xl border border-[var(--edge)] p-4">
+    <form
+      action={action}
+      className="grid gap-5 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5"
+    >
       <input type="hidden" name="operation" value="signature" />
-      <h2 className="text-xl font-semibold">User Signature</h2>
-      <label>
+      <div>
+        <h2 className="text-lg font-semibold">User Signature</h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Draw on the pad, capture with your camera, or upload an image. Files are compressed
+          automatically before private storage.
+        </p>
+      </div>
+
+      <label className="block text-sm">
         Select User
         <select
           name="userId"
-          className="input mt-1"
+          className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
           value={userId}
           onChange={(e) => {
             setUserId(e.target.value);
             setFile(null);
+            setDimensions(null);
+            setError("");
+            clearPad();
             if (submitted.current) submitted.current.value = "";
           }}
         >
@@ -106,8 +245,44 @@ export function SignatureForm({
           ))}
         </select>
       </label>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">Draw signature</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={clearPad}
+              disabled={!hasStrokes}
+              className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-xs disabled:opacity-50"
+            >
+              Clear pad
+            </button>
+            <button
+              type="button"
+              onClick={applyDrawing}
+              disabled={!hasStrokes}
+              className="min-h-9 rounded-lg border border-[var(--accent)] px-3 text-xs font-medium text-[var(--accent)] disabled:opacity-50"
+            >
+              Use drawing
+            </button>
+          </div>
+        </div>
+        <canvas
+          ref={canvasRef}
+          width={640}
+          height={180}
+          aria-label="Signature drawing pad"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className="h-36 w-full touch-none rounded-xl border border-[var(--edge)] bg-white"
+        />
+      </div>
+
       <div className="flex flex-wrap gap-3">
-        <label className="btn cursor-pointer">
+        <label className="min-h-11 cursor-pointer content-center rounded-lg border border-[var(--edge)] px-4 text-sm font-medium hover:bg-white/5">
           Take Photo
           <input
             type="file"
@@ -115,19 +290,19 @@ export function SignatureForm({
             capture="environment"
             className="sr-only"
             onChange={(e) => {
-              selectFile(e.target.files?.[0] ?? null);
+              void selectFile(e.target.files?.[0] ?? null);
               e.currentTarget.value = "";
             }}
           />
         </label>
-        <label className="btn cursor-pointer">
+        <label className="min-h-11 cursor-pointer content-center rounded-lg border border-[var(--edge)] px-4 text-sm font-medium hover:bg-white/5">
           Upload Signature
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
             className="sr-only"
             onChange={(e) => {
-              selectFile(e.target.files?.[0] ?? null);
+              void selectFile(e.target.files?.[0] ?? null);
               e.currentTarget.value = "";
             }}
           />
@@ -142,24 +317,52 @@ export function SignatureForm({
           aria-label="Selected signature file"
         />
       </div>
+
+      {compressing && (
+        <p className="text-xs text-[var(--muted)]" role="status">
+          Optimising signature image…
+        </p>
+      )}
+
       {(preview || current) && (
-        <div className="rounded-lg bg-white p-3">
-          {/* biome-ignore lint/performance/noImgElement: uploaded/private authenticated signature image. */}
-          <img
-            src={preview || `/api/user-signatures/${current?.id}`}
-            alt="Signature preview"
-            className="h-28 w-full object-contain"
-          />
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--muted)]">
+            {preview
+              ? `Ready to save: ${file?.name} (${((file?.size ?? 0) / 1024).toFixed(1)} KB${dimensions ? ` · ${dimensions.width}×${dimensions.height}` : ""})`
+              : "Currently saved signature"}
+          </p>
+          <div className="rounded-xl bg-white p-3">
+            {/* biome-ignore lint/performance/noImgElement: uploaded/private authenticated signature image. */}
+            <img
+              src={preview || `/api/user-signatures/${current?.id}`}
+              alt="Signature preview"
+              className="h-28 w-full object-contain"
+            />
+          </div>
         </div>
       )}
-      <p className="text-sm text-[var(--muted)]">
-        PNG, JPEG or WebP up to 5 MB. Your signature is stored privately and used on authorized
-        printed documents.
+
+      <p className="text-xs text-[var(--muted)]">
+        PNG, JPEG or WebP up to 5 MB. Saved signatures are stored privately in Cloudflare R2 and
+        automatically appear on authorized printed bills and agreements.
       </p>
-      {(error || state.error) && <p role="alert">{error || state.error}</p>}
-      {state.message && <p role="status">{state.message}</p>}
-      <button type="submit" className="btn" disabled={pending || !file || !!error}>
-        Save Signature
+
+      {(error || state.error) && (
+        <p role="alert" className="text-sm text-red-300">
+          {error || state.error}
+        </p>
+      )}
+      {state.message && (
+        <p role="status" className="text-sm text-[var(--accent)]">
+          {state.message}
+        </p>
+      )}
+      <button
+        type="submit"
+        className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-50"
+        disabled={pending || compressing || !file || !!error}
+      >
+        {pending ? "Saving…" : "Save Signature"}
       </button>
     </form>
   );
