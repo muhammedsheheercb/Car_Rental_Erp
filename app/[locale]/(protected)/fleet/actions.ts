@@ -1,10 +1,14 @@
 "use server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { db } from "@/db/client";
 import {
   branches,
+  customers,
+  rentals,
   vehicleBrands,
+  vehicleImages,
   vehicleInsurance,
   vehicleModels,
   vehiclePricing,
@@ -17,12 +21,23 @@ import {
   createVehicle,
   deleteBrand,
   deleteVehicle,
+  saveVehicleImage,
   setVehicleActive,
   updateBrand,
   updateVehicle,
 } from "@/features/fleet/service";
-import { requirePermission } from "@/lib/auth";
+import { requireIdentity, requirePermission } from "@/lib/auth";
 import { brandSchema, vehicleSchema } from "@/lib/validation";
+
+const uuidSchema = z.string().uuid();
+
+function revalidateFleetPaths() {
+  for (const locale of ["en", "ar"]) {
+    revalidatePath(`/${locale}/fleet`);
+    revalidatePath(`/${locale}/operations/available`);
+    revalidatePath(`/${locale}/dashboard`);
+  }
+}
 
 export async function createBrandAction(formData: FormData) {
   const actor = await requirePermission("fleet", "create");
@@ -66,12 +81,36 @@ export async function createVehicleAction(input: unknown) {
   }
   try {
     const vehicle = await createVehicle(parsed.data, actor);
-    revalidatePath("/en/fleet");
+    revalidateFleetPaths();
     return { ok: true, message: "Vehicle created successfully.", id: vehicle.id };
   } catch (error) {
     return {
       ok: false,
       message: error instanceof Error ? error.message : "We could not create this vehicle.",
+    };
+  }
+}
+export async function uploadVehicleImageAction(vehicleId: string, formData: FormData) {
+  const actor = await requireIdentity();
+  if (!uuidSchema.safeParse(vehicleId).success) return { ok: false, message: "Invalid vehicle." };
+  const file = formData.get("file");
+  const width = Number(formData.get("width"));
+  const height = Number(formData.get("height"));
+  if (!(file instanceof File) || !file.size)
+    return { ok: false, message: "Select a vehicle image to upload." };
+  try {
+    const saved = await saveVehicleImage(vehicleId, file, width, height, actor);
+    revalidateFleetPaths();
+    return { ok: true, id: saved.id, message: "Vehicle image uploaded successfully." };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message === "FORBIDDEN"
+          ? "You do not have permission to upload images for this vehicle."
+          : error instanceof Error && error.name !== "DrizzleQueryError"
+            ? error.message
+            : "Could not upload vehicle image.",
     };
   }
 }
@@ -82,7 +121,7 @@ export async function updateVehicleAction(id: string, input: unknown) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the vehicle details." };
   try {
     await updateVehicle(id, parsed.data, actor);
-    revalidatePath("/en/fleet");
+    revalidateFleetPaths();
     return { ok: true, message: "Vehicle updated successfully." };
   } catch (error) {
     return {
@@ -224,31 +263,69 @@ export async function getVehicleDetailsAction(id: string) {
     )
     .limit(1);
   if (!vehicle) throw new Error("Vehicle not found or access is restricted.");
-  const [pricing, brandOptions, modelOptions, branchOptions] = await Promise.all([
-    db.select().from(vehiclePricing).where(eq(vehiclePricing.vehicleId, id)),
-    db
-      .select({ id: vehicleBrands.id, name: vehicleBrands.name })
-      .from(vehicleBrands)
-      .where(eq(vehicleBrands.isActive, true))
-      .orderBy(asc(vehicleBrands.name)),
-    db
-      .select({ id: vehicleModels.id, brandId: vehicleModels.brandId, name: vehicleModels.name })
-      .from(vehicleModels)
-      .where(eq(vehicleModels.isActive, true))
-      .orderBy(asc(vehicleModels.name)),
-    actor.role === "SUPER_ADMIN"
-      ? db
-          .select({ id: branches.id, name: branches.name, code: branches.code })
-          .from(branches)
-          .where(eq(branches.isActive, true))
-      : db
-          .select({ id: branches.id, name: branches.name, code: branches.code })
-          .from(branches)
-          .where(and(inArray(branches.id, actor.branchIds), eq(branches.isActive, true))),
-  ]);
+  const [pricing, brandOptions, modelOptions, branchOptions, primaryImages, activeBookings] =
+    await Promise.all([
+      db.select().from(vehiclePricing).where(eq(vehiclePricing.vehicleId, id)),
+      db
+        .select({ id: vehicleBrands.id, name: vehicleBrands.name })
+        .from(vehicleBrands)
+        .where(eq(vehicleBrands.isActive, true))
+        .orderBy(asc(vehicleBrands.name)),
+      db
+        .select({ id: vehicleModels.id, brandId: vehicleModels.brandId, name: vehicleModels.name })
+        .from(vehicleModels)
+        .where(eq(vehicleModels.isActive, true))
+        .orderBy(asc(vehicleModels.name)),
+      actor.role === "SUPER_ADMIN"
+        ? db
+            .select({ id: branches.id, name: branches.name, code: branches.code })
+            .from(branches)
+            .where(eq(branches.isActive, true))
+        : db
+            .select({ id: branches.id, name: branches.name, code: branches.code })
+            .from(branches)
+            .where(and(inArray(branches.id, actor.branchIds), eq(branches.isActive, true))),
+      db
+        .select({
+          id: vehicleImages.id,
+          objectKey: vehicleImages.objectKey,
+          contentType: vehicleImages.contentType,
+          sizeBytes: vehicleImages.sizeBytes,
+        })
+        .from(vehicleImages)
+        .where(and(eq(vehicleImages.vehicleId, id), eq(vehicleImages.isPrimary, true)))
+        .limit(1),
+      db
+        .select({
+          id: rentals.id,
+          agreementNumber: rentals.agreementNumber,
+          status: rentals.status,
+          startsAt: rentals.startsAt,
+          expectedReturnAt: rentals.expectedReturnAt,
+          customerName: customers.name,
+          customerMobile: customers.mobile,
+        })
+        .from(rentals)
+        .innerJoin(customers, eq(customers.id, rentals.customerId))
+        .where(and(eq(rentals.vehicleId, id), inArray(rentals.status, ["ACTIVE", "RESERVED"])))
+        .orderBy(
+          sql`case when ${rentals.status} = 'ACTIVE' then 0 else 1 end`,
+          asc(rentals.startsAt),
+        )
+        .limit(1),
+    ]);
+  const currentBooking = activeBookings[0]
+    ? {
+        ...activeBookings[0],
+        startsAt: activeBookings[0].startsAt.toISOString(),
+        expectedReturnAt: activeBookings[0].expectedReturnAt.toISOString(),
+      }
+    : null;
   return {
     ...vehicle,
     pricing,
+    primaryImage: primaryImages[0] ?? null,
+    activeBooking: currentBooking,
     formOptions: { brands: brandOptions, models: modelOptions, branches: branchOptions },
   };
 }

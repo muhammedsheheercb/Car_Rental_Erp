@@ -998,3 +998,23 @@ export const userSignatures = pgTable(
   },
   (t) => [index("user_signatures_user_index").on(t.userId, t.createdAt)],
 );
+export const vehicleImages = pgTable(
+  "vehicle_images",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull().unique(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    isPrimary: boolean("is_primary").default(true).notNull(),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("vehicle_images_vehicle_index").on(t.vehicleId, t.createdAt)],
+);

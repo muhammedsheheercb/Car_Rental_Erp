@@ -233,7 +233,11 @@ export default async function AgreementPage({
         ))}
       </section>
       {(["BEFORE_RENTAL", "AFTER_RETURN"] as const).map((phase) => (
-        <section key={phase} className="rounded-xl border border-[var(--edge)] p-4">
+        <section
+          key={phase}
+          id={phase === "BEFORE_RENTAL" && rental.status === "ACTIVE" ? "damage" : undefined}
+          className="rounded-xl border border-[var(--edge)] p-4"
+        >
           <h2 className="text-lg font-semibold">
             {phase === "BEFORE_RENTAL" ? "Before-rental" : "After-return"} scratch / damage evidence
           </h2>

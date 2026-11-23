@@ -1,0 +1,389 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { getVehicleDetailsAction } from "@/app/[locale]/(protected)/fleet/actions";
+import {
+  getVehicleContextualActions,
+  type VehicleActionPermissionFlags,
+  type VehicleOperationalStatus,
+} from "@/features/fleet/vehicle-actions";
+import { formatOMR } from "@/features/rentals/calculations";
+
+type Details = Awaited<ReturnType<typeof getVehicleDetailsAction>>;
+
+const STATUS_BADGE: Record<VehicleOperationalStatus, { label: string; className: string }> = {
+  ON_RENT: {
+    label: "ON RENT",
+    className: "border border-red-400/50 bg-red-500/25 text-red-100",
+  },
+  AVAILABLE: {
+    label: "AVAILABLE",
+    className: "border border-white/80 bg-white text-black font-semibold",
+  },
+  RESERVED: {
+    label: "RESERVED",
+    className: "border border-amber-400/40 bg-amber-400/20 text-amber-100",
+  },
+  SERVICE_OR_TRANSFER: {
+    label: "SERVICE / TRANSFER",
+    className: "border border-zinc-500/40 bg-zinc-500/20 text-zinc-200",
+  },
+  INACTIVE: {
+    label: "INACTIVE",
+    className: "border border-zinc-600/40 bg-zinc-700/30 text-zinc-300",
+  },
+};
+
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("en-GB", {
+    timeZone: "Asia/Muscat",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+export function VehicleActionModalTrigger({
+  locale,
+  vehicle,
+  permissions,
+}: {
+  locale: string;
+  vehicle: {
+    id: string;
+    number: string;
+    registration: string;
+    brand: string;
+    model: string;
+    branch: string;
+    odometer: number;
+    operationalStatus: VehicleOperationalStatus;
+    imageId: string | null;
+    activeRentalId: string | null;
+    activeAgreementNumber: string | null;
+    activeCustomerName: string | null;
+  };
+  permissions: VehicleActionPermissionFlags;
+}) {
+  const [open, setOpen] = useState(false);
+  const [viewInfo, setViewInfo] = useState(false);
+  const [details, setDetails] = useState<Details | null>(null);
+  const [error, setError] = useState("");
+  const [loading, startLoad] = useTransition();
+
+  const actions = getVehicleContextualActions({
+    locale,
+    vehicleId: vehicle.id,
+    registration: vehicle.registration,
+    status: vehicle.operationalStatus,
+    activeRentalId: vehicle.activeRentalId,
+    activeAgreementNumber: vehicle.activeAgreementNumber,
+    permissions,
+  });
+
+  const badge = STATUS_BADGE[vehicle.operationalStatus];
+
+  const loadInfo = () => {
+    setViewInfo(true);
+    setError("");
+    if (details) return;
+    startLoad(async () => {
+      try {
+        setDetails(await getVehicleDetailsAction(vehicle.id));
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not load vehicle details.");
+      }
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setViewInfo(false);
+          setOpen(true);
+        }}
+        className="group flex w-full min-w-0 items-center gap-3 text-start focus-visible:outline-none"
+        title="Open vehicle actions"
+      >
+        <div className="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--edge)] bg-black/30">
+          {vehicle.imageId ? (
+            /* biome-ignore lint/performance/noImgElement: authenticated private vehicle photo */
+            <img
+              src={`/api/vehicle-images/${vehicle.imageId}`}
+              alt={`${vehicle.brand} ${vehicle.model}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-[10px] font-mono text-[var(--muted)]">
+              NO IMG
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-medium group-hover:text-[var(--accent)] group-hover:underline">
+            {vehicle.brand} {vehicle.model}
+          </p>
+          <p className="truncate font-mono text-xs text-[var(--muted)]">
+            {vehicle.number} · {vehicle.branch}
+          </p>
+        </div>
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Actions for ${vehicle.brand} ${vehicle.model} (${vehicle.registration})`}
+          onMouseDown={() => setOpen(false)}
+          className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
+        >
+          <section
+            role="document"
+            onMouseDown={(event) => event.stopPropagation()}
+            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] text-start sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl"
+          >
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-[var(--edge)] bg-black/30">
+                  {vehicle.imageId ? (
+                    /* biome-ignore lint/performance/noImgElement: authenticated private vehicle photo */
+                    <img
+                      src={`/api/vehicle-images/${vehicle.imageId}`}
+                      alt={`${vehicle.brand} ${vehicle.model}`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-xs font-mono text-[var(--muted)]">
+                      NO PHOTO
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs ${badge.className}`}>
+                      {badge.label}
+                    </span>
+                    <span className="font-mono text-xs text-[var(--muted)]">
+                      {vehicle.registration}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 break-words text-xl font-semibold">
+                    {vehicle.brand} {vehicle.model}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    SI {vehicle.number} · {vehicle.branch} · {vehicle.odometer.toLocaleString()} KM
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close vehicle actions modal"
+                onClick={() => setOpen(false)}
+                className="min-h-11 px-3 text-lg"
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              {vehicle.activeAgreementNumber && (
+                <div
+                  className={`rounded-xl border p-3.5 text-sm ${
+                    vehicle.operationalStatus === "ON_RENT"
+                      ? "border-red-400/40 bg-red-500/10"
+                      : "border-amber-400/40 bg-amber-400/10"
+                  }`}
+                >
+                  <p className="font-medium">
+                    {vehicle.operationalStatus === "ON_RENT"
+                      ? "Active Rental Agreement"
+                      : "Pending Reservation"}
+                    :{" "}
+                    <span className="font-mono text-[var(--accent)]">
+                      {vehicle.activeAgreementNumber}
+                    </span>
+                  </p>
+                  {vehicle.activeCustomerName && (
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">
+                      Customer: <span className="text-white">{vehicle.activeCustomerName}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!viewInfo ? (
+                <>
+                  <p className="text-xs text-[var(--muted)]">
+                    Actions are enabled or disabled automatically based on the vehicle&apos;s
+                    current status ({badge.label}) and your account permissions.
+                  </p>
+                  <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+                    {actions.map((action) => {
+                      if (!action.enabled) {
+                        return (
+                          <button
+                            key={action.key}
+                            type="button"
+                            disabled
+                            title={action.reason}
+                            className="min-h-12 cursor-not-allowed rounded-xl border border-[var(--edge)]/50 bg-black/15 px-3 py-2.5 text-start text-sm text-[var(--muted)] opacity-45"
+                          >
+                            <span className="block font-medium">{action.label}</span>
+                            <span className="mt-0.5 block truncate text-[11px]">Unavailable</span>
+                          </button>
+                        );
+                      }
+                      if (action.key === "retrieve_information") {
+                        return (
+                          <button
+                            key={action.key}
+                            type="button"
+                            onClick={loadInfo}
+                            className="min-h-12 rounded-xl border border-[var(--edge)] bg-[var(--surface)] px-3 py-2.5 text-start text-sm transition-colors hover:border-[var(--accent)] hover:bg-white/5"
+                          >
+                            <span className="block font-medium text-white">{action.label}</span>
+                            <span className="mt-0.5 block text-[11px] text-[var(--accent)]">
+                              View full specs & rates
+                            </span>
+                          </button>
+                        );
+                      }
+                      return (
+                        <Link
+                          key={action.key}
+                          href={action.href as never}
+                          onClick={() => setOpen(false)}
+                          className="min-h-12 content-center rounded-xl border border-[var(--edge)] bg-[var(--surface)] px-3 py-2.5 text-start text-sm transition-colors hover:border-[var(--accent)] hover:bg-white/5"
+                        >
+                          <span className="block font-medium text-white">{action.label}</span>
+                          <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
+                            Open workflow →
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold">Retrieved Vehicle Information</h3>
+                    <button
+                      type="button"
+                      onClick={() => setViewInfo(false)}
+                      className="min-h-10 rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
+                    >
+                      ← Back to actions
+                    </button>
+                  </div>
+
+                  {loading && (
+                    <p className="text-sm text-[var(--muted)]">Loading latest vehicle details…</p>
+                  )}
+                  {error && (
+                    <p role="alert" className="text-sm text-red-300">
+                      {error}
+                    </p>
+                  )}
+
+                  {details && (
+                    <div className="space-y-5">
+                      {details.primaryImage && (
+                        <div className="overflow-hidden rounded-xl border border-[var(--edge)] bg-black/30">
+                          {/* biome-ignore lint/performance/noImgElement: authenticated private vehicle photo */}
+                          <img
+                            src={`/api/vehicle-images/${details.primaryImage.id}`}
+                            alt={`${details.brand} ${details.model}`}
+                            className="max-h-56 w-full object-contain"
+                          />
+                        </div>
+                      )}
+
+                      <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                        {[
+                          ["SI / Vehicle No.", details.number],
+                          ["Brand & Model", `${details.brand} ${details.model}`],
+                          ["Registration", details.registration],
+                          ["Branch", details.branch],
+                          ["Year / Color", `${details.year} · ${details.color}`],
+                          ["Fuel / Gearbox", `${details.fuelType} · ${details.gearbox}`],
+                          ["Seats / Capacity", `${details.seatCount} seats · ${details.capacity}`],
+                          ["Chassis No.", details.chassis],
+                          ["Engine No.", details.engine],
+                          ["Current KM", `${details.odometer.toLocaleString()} km`],
+                          [
+                            "Insurance",
+                            `${details.insuranceCompany ?? "—"} (until ${details.insuranceUntil ?? "—"})`,
+                          ],
+                          ["Mulkiya Expiry", details.mulkiyaUntil ?? "—"],
+                          [
+                            "Next Engine Service",
+                            details.lastEngineServiceKm != null && details.engineInterval
+                              ? `${(details.lastEngineServiceKm + details.engineInterval).toLocaleString()} km`
+                              : "—",
+                          ],
+                          [
+                            "Next Gear Oil",
+                            details.lastGearOilChangeKm != null && details.gearInterval
+                              ? `${(details.lastGearOilChangeKm + details.gearInterval).toLocaleString()} km`
+                              : "—",
+                          ],
+                        ].map(([label, value]) => (
+                          <div
+                            key={String(label)}
+                            className="rounded-lg border border-[var(--edge)] bg-[var(--surface)] p-3"
+                          >
+                            <dt className="text-xs text-[var(--muted)]">{label}</dt>
+                            <dd className="mt-1 break-words font-medium">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      {details.pricing.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                            Rental Pricing Settings
+                          </h4>
+                          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                            {details.pricing.map((tier) => (
+                              <div
+                                key={tier.id}
+                                className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-3 text-xs"
+                              >
+                                <p className="font-semibold text-[var(--accent)]">{tier.period}</p>
+                                <p className="mt-1">Standard: {formatOMR(tier.listRentBaisa)}</p>
+                                <p>Minimum: {formatOMR(tier.minimumRentBaisa)}</p>
+                                <p>Included KM: {tier.includedKm.toLocaleString()}</p>
+                                <p>Excess KM: {formatOMR(tier.excessKmChargeBaisa)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {details.activeBooking && (
+                        <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4 text-sm">
+                          <h4 className="font-semibold">Current Booking Details</h4>
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            {details.activeBooking.agreementNumber} · {details.activeBooking.status}{" "}
+                            · {details.activeBooking.customerName} (
+                            {details.activeBooking.customerMobile})
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            {formatDateTime(details.activeBooking.startsAt)} →{" "}
+                            {formatDateTime(details.activeBooking.expectedReturnAt)} (Oman)
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}

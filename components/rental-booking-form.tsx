@@ -51,6 +51,7 @@ export function RentalBookingForm({
   customers,
   branches,
   defaultBranch,
+  initialVehicleId = "",
   canOverridePrice,
   userName,
   reservations,
@@ -60,11 +61,14 @@ export function RentalBookingForm({
   customers: Customer[];
   branches: Branch[];
   defaultBranch: string;
+  initialVehicleId?: string;
   canOverridePrice: boolean;
   userName: string;
   reservations: { vehicleId: string; startsAt: string; expectedReturnAt: string; status: string }[];
 }) {
-  const [vehicleId, setVehicleId] = useState("");
+  const [vehicleId, setVehicleId] = useState(
+    vehicles.some((v) => v.id === initialVehicleId) ? initialVehicleId : "",
+  );
   const [selectedBranches, setSelectedBranches] = useState<Record<string, string>>({
     branchId: defaultBranch,
     pickupBranchId: defaultBranch,

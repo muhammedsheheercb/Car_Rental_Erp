@@ -241,6 +241,7 @@ export function VehicleActions({
               <VehicleWizard
                 vehicleId={id}
                 initialData={formValues(data)}
+                existingImage={data.primaryImage}
                 {...data.formOptions}
                 onSuccess={(message) => {
                   setMode(null);
@@ -250,26 +251,41 @@ export function VehicleActions({
               />
             )}
             {data && mode === "view" && (
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                {[
-                  ["Vehicle number", data.number],
-                  ["Brand & model", `${data.brand} ${data.model}`],
-                  ["Registration", data.registration],
-                  ["Chassis", data.chassis],
-                  ["Engine", data.engine],
-                  ["Branch", data.branch],
-                  ["Status", data.status],
-                  ["Odometer", `${data.odometer.toLocaleString()} km`],
-                  ["Insurance", `${data.insuranceCompany ?? "—"} · ${data.insuranceUntil ?? "—"}`],
-                  ["Mulkiya", data.mulkiyaUntil ?? "—"],
-                  ["Service interval", data.engineInterval ? `${data.engineInterval} km` : "—"],
-                  ["Gear-oil interval", data.gearInterval ? `${data.gearInterval} km` : "—"],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="border-b border-[var(--edge)] pb-3">
-                    <p className="text-xs text-[var(--muted)]">{label}</p>
-                    <p className="mt-1 break-words">{value}</p>
+              <div className="mt-6 space-y-5">
+                {data.primaryImage && (
+                  <div className="overflow-hidden rounded-xl border border-[var(--edge)] bg-black/30">
+                    {/* biome-ignore lint/performance/noImgElement: authenticated private vehicle photo */}
+                    <img
+                      src={`/api/vehicle-images/${data.primaryImage.id}`}
+                      alt={`${data.brand} ${data.model}`}
+                      className="max-h-56 w-full object-contain"
+                    />
                   </div>
-                ))}
+                )}
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {[
+                    ["Vehicle number", data.number],
+                    ["Brand & model", `${data.brand} ${data.model}`],
+                    ["Registration", data.registration],
+                    ["Chassis", data.chassis],
+                    ["Engine", data.engine],
+                    ["Branch", data.branch],
+                    ["Status", data.status],
+                    ["Odometer", `${data.odometer.toLocaleString()} km`],
+                    [
+                      "Insurance",
+                      `${data.insuranceCompany ?? "—"} · ${data.insuranceUntil ?? "—"}`,
+                    ],
+                    ["Mulkiya", data.mulkiyaUntil ?? "—"],
+                    ["Service interval", data.engineInterval ? `${data.engineInterval} km` : "—"],
+                    ["Gear-oil interval", data.gearInterval ? `${data.gearInterval} km` : "—"],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="border-b border-[var(--edge)] pb-3">
+                      <p className="text-xs text-[var(--muted)]">{label}</p>
+                      <p className="mt-1 break-words">{value}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>

@@ -16,8 +16,14 @@ import {
 import { operationalBlocking } from "@/features/rentals/availability";
 import { formatOMR } from "@/features/rentals/calculations";
 import { can, requirePermission } from "@/lib/auth";
-export default async function RentalsPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
+export default async function RentalsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ vehicleId?: string }>;
+}) {
+  const [{ locale }, query] = await Promise.all([params, searchParams]);
   const [identity, t] = await Promise.all([
     requirePermission("rentals", "read"),
     getTranslations(),
@@ -140,6 +146,7 @@ export default async function RentalsPage({ params }: { params: Promise<{ locale
           customers={customerRows}
           branches={branchRows}
           defaultBranch={defaultBranch}
+          initialVehicleId={query.vehicleId}
           canOverridePrice={
             (identity.role === "ADMIN" || identity.role === "SUPER_ADMIN") &&
             can(identity, "rentals", "override_price")

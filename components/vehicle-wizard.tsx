@@ -1,7 +1,12 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
-import { createVehicleAction, updateVehicleAction } from "@/app/[locale]/(protected)/fleet/actions";
+import {
+  createVehicleAction,
+  updateVehicleAction,
+  uploadVehicleImageAction,
+} from "@/app/[locale]/(protected)/fleet/actions";
 import { CalendarInput } from "./calendar-input";
+import { DocumentPicker } from "./document-picker";
 import { SearchableCombobox } from "./searchable-combobox";
 
 type Option = { id: string; name: string };
@@ -42,6 +47,7 @@ export function VehicleWizard({
   branches,
   vehicleId,
   initialData,
+  existingImage,
   onSuccess,
 }: {
   brands: Option[];
@@ -49,6 +55,12 @@ export function VehicleWizard({
   branches: Branch[];
   vehicleId?: string;
   initialData?: Record<string, string>;
+  existingImage?: {
+    id: string;
+    objectKey: string;
+    contentType: string;
+    sizeBytes: number;
+  } | null;
   onSuccess?: (message: string) => void;
 }) {
   const [step, setStep] = useState(1);
@@ -57,6 +69,11 @@ export function VehicleWizard({
     gearbox: "AUTOMATIC",
     ...initialData,
   });
+  const [vehiclePhoto, setVehiclePhoto] = useState<{
+    file: File;
+    width: number;
+    height: number;
+  } | null>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const fuelOptions = ["PETROL", "DIESEL", "HYBRID", "ELECTRIC"].map((name) => ({
@@ -155,6 +172,21 @@ export function VehicleWizard({
           setError(result.message);
           return;
         }
+        const savedId =
+          vehicleId ?? ("id" in result && typeof result.id === "string" ? result.id : undefined);
+        if (vehiclePhoto && savedId) {
+          const formData = new FormData();
+          formData.set("file", vehiclePhoto.file);
+          formData.set("width", String(vehiclePhoto.width));
+          formData.set("height", String(vehiclePhoto.height));
+          const uploadResult = await uploadVehicleImageAction(savedId, formData);
+          if (!uploadResult.ok) {
+            setError(
+              `Vehicle saved, but photo upload failed: ${uploadResult.message}. Edit the vehicle to retry.`,
+            );
+            return;
+          }
+        }
         if (onSuccess) onSuccess(result.message);
         else window.location.assign("/en/fleet");
       } catch {
@@ -183,36 +215,47 @@ export function VehicleWizard({
       </div>
       <section className="mt-6 min-w-0 overflow-visible rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:mt-7 sm:p-5">
         {step === 1 && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SearchableCombobox
-              label="Brand"
-              value={data.brandId ?? ""}
-              options={brands}
-              onChange={(id) => {
-                set("brandId", id);
-                set("modelId", "");
-              }}
+          <div className="space-y-4">
+            <DocumentPicker
+              label="Vehicle photo (optional)"
+              existing={existingImage ?? undefined}
+              existingUrl={existingImage ? `/api/vehicle-images/${existingImage.id}` : undefined}
+              hint="Shown on the Vehicle Overview table. JPEG, PNG, or WebP compressed automatically before private R2 upload."
+              onChange={(file, width, height) =>
+                setVehiclePhoto(file ? { file, width, height } : null)
+              }
             />
-            <SearchableCombobox
-              label="Model"
-              value={data.modelId ?? ""}
-              options={visible}
-              disabled={!data.brandId}
-              onChange={(id) => set("modelId", id)}
-            />
-            <SearchableCombobox
-              label="Fuel"
-              value={data.fuelType}
-              options={fuelOptions}
-              onChange={(id) => set("fuelType", id)}
-            />
-            <SearchableCombobox
-              label="Gearbox"
-              value={data.gearbox}
-              options={gearboxOptions}
-              onChange={(id) => set("gearbox", id)}
-            />
-            {fields[1].map(input)}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SearchableCombobox
+                label="Brand"
+                value={data.brandId ?? ""}
+                options={brands}
+                onChange={(id) => {
+                  set("brandId", id);
+                  set("modelId", "");
+                }}
+              />
+              <SearchableCombobox
+                label="Model"
+                value={data.modelId ?? ""}
+                options={visible}
+                disabled={!data.brandId}
+                onChange={(id) => set("modelId", id)}
+              />
+              <SearchableCombobox
+                label="Fuel"
+                value={data.fuelType}
+                options={fuelOptions}
+                onChange={(id) => set("fuelType", id)}
+              />
+              <SearchableCombobox
+                label="Gearbox"
+                value={data.gearbox}
+                options={gearboxOptions}
+                onChange={(id) => set("gearbox", id)}
+              />
+              {fields[1].map(input)}
+            </div>
           </div>
         )}
         {step === 2 && <div className="grid gap-4 sm:grid-cols-2">{fields[2].map(input)}</div>}

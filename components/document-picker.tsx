@@ -1,81 +1,78 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { compressImageFile } from "@/lib/image-compress";
 
 type Selected = { file: File; url: string; width: number; height: number };
-const allowed = ["image/jpeg", "image/png", "image/webp"];
+
 export function DocumentPicker({
   label,
   required = false,
   existing,
+  existingUrl: customExistingUrl,
+  hint = "Private R2 image · JPEG, PNG, or WebP · compressed automatically (max 5 MB)",
   onChange,
 }: {
   label: string;
   required?: boolean;
   existing?: { id: string; objectKey: string; contentType: string; sizeBytes: number };
+  existingUrl?: string;
+  hint?: string;
   onChange?: (file: File | null, width: number, height: number) => void;
 }) {
   const [selected, setSelected] = useState<Selected | null>(null);
   const [error, setError] = useState("");
+  const [compressing, setCompressing] = useState(false);
   const [open, setOpen] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
-  const existingUrl = existing ? `/api/customer-documents/${existing.id}` : undefined;
+  const existingUrl =
+    customExistingUrl ?? (existing ? `/api/customer-documents/${existing.id}` : undefined);
   const previewUrl = selected?.url ?? existingUrl;
+
   useEffect(
     () => () => {
       if (selected) URL.revokeObjectURL(selected.url);
     },
     [selected],
   );
-  const select = (file?: File) => {
+
+  const select = async (file?: File) => {
     setError("");
     if (!file) return;
-    if (!allowed.includes(file.type)) return setError("Use a JPEG, PNG, or WebP image.");
-    if (file.size > 10 * 1024 * 1024) return setError("Image must be 10 MB or smaller.");
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      if (!image.naturalWidth || !image.naturalHeight) {
-        URL.revokeObjectURL(url);
-        setError("This image could not be read.");
-        return;
-      }
-      const maxSide = 2200;
-      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.naturalWidth * scale);
-      canvas.height = Math.round(image.naturalHeight * scale);
-      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          const optimized = blob
-            ? new File([blob], `${crypto.randomUUID()}.jpg`, { type: "image/jpeg" })
-            : file;
-          setSelected((old) => {
-            if (old) URL.revokeObjectURL(old.url);
-            return { file: optimized, url, width: canvas.width, height: canvas.height };
-          });
-          onChange?.(optimized, canvas.width, canvas.height);
-        },
-        "image/jpeg",
-        0.82,
-      );
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      setError("This image could not be read.");
-    };
-    image.src = url;
+    setCompressing(true);
+    try {
+      const optimized = await compressImageFile(file, {
+        maxDimension: 2200,
+        quality: 0.82,
+        maxInputBytes: 10 * 1024 * 1024,
+        maxOutputBytes: 5 * 1024 * 1024,
+        preserveTransparency: file.type === "image/png",
+      });
+      const url = URL.createObjectURL(optimized.file);
+      setSelected((old) => {
+        if (old) URL.revokeObjectURL(old.url);
+        return { file: optimized.file, url, width: optimized.width, height: optimized.height };
+      });
+      onChange?.(optimized.file, optimized.width, optimized.height);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This image could not be read.");
+    } finally {
+      setCompressing(false);
+    }
   };
+
   return (
     <div className="rounded-xl border border-[var(--edge)] p-4">
       <p className="font-medium">
         {label}
         {required ? " *" : ""}
       </p>
-      <p className="mt-1 text-xs text-[var(--muted)]">
-        Private R2 image · JPEG, PNG, or WebP · maximum 10 MB
-      </p>
+      <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>
+      {compressing && (
+        <p className="mt-2 text-xs text-[var(--muted)]" role="status">
+          Compressing image…
+        </p>
+      )}
       {selected ? (
         <div className="mt-3 flex min-w-0 gap-3">
           {/* biome-ignore lint/performance/noImgElement: local object URLs require direct previews */}
@@ -130,13 +127,13 @@ export function DocumentPicker({
             className="h-20 w-28 shrink-0 rounded-lg border border-[var(--edge)] object-contain"
           />
           <div className="min-w-0 text-sm">
-            <p className="font-medium">Saved document</p>
+            <p className="font-medium">Saved image</p>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {(existing.sizeBytes / 1024 / 1024).toFixed(2)} MB
             </p>
             {previewFailed && (
               <p role="alert" className="mt-1 text-xs text-red-300">
-                Could not load the document preview.
+                Could not load the image preview.
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-2">
@@ -166,7 +163,10 @@ export function DocumentPicker({
               type="file"
               accept="image/jpeg,image/png,image/webp"
               capture="environment"
-              onChange={(e) => select(e.target.files?.[0])}
+              onChange={(e) => {
+                void select(e.target.files?.[0]);
+                e.currentTarget.value = "";
+              }}
             />
           </label>
           <button
@@ -183,7 +183,10 @@ export function DocumentPicker({
         className="sr-only"
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        onChange={(e) => select(e.target.files?.[0])}
+        onChange={(e) => {
+          void select(e.target.files?.[0]);
+          e.currentTarget.value = "";
+        }}
       />
       {error && (
         <p role="alert" className="mt-2 text-sm text-red-300">
