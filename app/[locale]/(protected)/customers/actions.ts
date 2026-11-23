@@ -1,12 +1,22 @@
 "use server";
 import { randomUUID } from "node:crypto";
-import { and, count, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { db } from "@/db/client";
-import { auditLogs, customerBlacklist, customerDocuments, customers } from "@/db/schema";
+import { auditLogs, customerBlacklist, customerDocuments, customers, users } from "@/db/schema";
 import { requirePermission } from "@/lib/auth";
 import { putPrivateCustomerDocument } from "@/lib/r2";
-import { customerSchema } from "@/lib/validation";
+import { blacklistEntrySchema, customerSchema } from "@/lib/validation";
+
+const uuidSchema = z.string().uuid();
+
+function revalidateCustomerPaths() {
+  for (const locale of ["en", "ar"]) {
+    revalidatePath(`/${locale}/customers`);
+    revalidatePath(`/${locale}/customers/blacklist`);
+  }
+}
 
 export async function saveCustomerAction(input: unknown, id?: string) {
   await requirePermission("customers", id ? "update" : "create");
@@ -110,10 +120,15 @@ export async function blacklistCustomerAction(input: {
   endsAt?: string;
 }) {
   const actor = await requirePermission("customers", "update");
-  if (!input.customerId || !input.reason.trim() || !input.description.trim())
-    return { ok: false, message: "Select a customer and enter a reason and description." };
-  if (input.startsAt && input.endsAt && input.endsAt < input.startsAt)
-    return { ok: false, message: "End date cannot be before the start date." };
+  if (!uuidSchema.safeParse(input.customerId).success)
+    return { ok: false, message: "Select a valid customer." };
+  const parsed = blacklistEntrySchema.safeParse(input);
+  if (!parsed.success)
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Enter a reason and description.",
+    };
+  const value = parsed.data;
   const [active] = await db
     .select({ id: customerBlacklist.id })
     .from(customerBlacklist)
@@ -122,35 +137,101 @@ export async function blacklistCustomerAction(input: {
     )
     .limit(1);
   if (active) return { ok: false, message: "This customer is already on the active blacklist." };
-  await db.insert(customerBlacklist).values({
-    customerId: input.customerId,
-    reason: input.reason.trim(),
-    description: input.description.trim(),
-    startsAt: input.startsAt || null,
-    endsAt: input.endsAt || null,
-    actorId: actor.id,
+  const [created] = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(customerBlacklist)
+      .values({
+        customerId: input.customerId,
+        reason: value.reason,
+        description: value.description,
+        startsAt: value.startsAt ?? null,
+        endsAt: value.endsAt ?? null,
+        actorId: actor.id,
+      })
+      .returning({ id: customerBlacklist.id });
+    if (inserted[0])
+      await tx.insert(auditLogs).values({
+        actorId: actor.id,
+        event: "VEHICLE_UPDATED",
+        entityType: "customer_blacklist",
+        entityId: inserted[0].id,
+        metadata: {
+          action: "BLACKLIST_CREATED",
+          customerId: input.customerId,
+          reason: value.reason,
+        },
+      });
+    return inserted;
   });
-  revalidatePath("/en/customers");
-  revalidatePath("/en/customers/blacklist");
+  revalidateCustomerPaths();
   return {
     ok: true,
     message: "Customer added to blacklist.",
-    id: (
-      await db
-        .select({ id: customerBlacklist.id })
-        .from(customerBlacklist)
-        .where(
-          and(
-            eq(customerBlacklist.customerId, input.customerId),
-            eq(customerBlacklist.isActive, true),
-          ),
-        )
-        .limit(1)
-    )[0]?.id,
+    id: created?.id,
   };
+}
+export async function updateBlacklistEntryAction(input: {
+  id: string;
+  reason: string;
+  description: string;
+  startsAt?: string;
+  endsAt?: string;
+}) {
+  const actor = await requirePermission("customers", "update");
+  if (!uuidSchema.safeParse(input.id).success)
+    return { ok: false, message: "Invalid blacklist record." };
+  const parsed = blacklistEntrySchema.safeParse(input);
+  if (!parsed.success)
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Enter valid blacklist details.",
+    };
+  const value = parsed.data;
+  const [existing] = await db
+    .select()
+    .from(customerBlacklist)
+    .where(eq(customerBlacklist.id, input.id))
+    .limit(1);
+  if (!existing) return { ok: false, message: "Blacklist entry not found." };
+  await db.transaction(async (tx) => {
+    await tx
+      .update(customerBlacklist)
+      .set({
+        reason: value.reason,
+        description: value.description,
+        startsAt: value.startsAt ?? null,
+        endsAt: value.endsAt ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(customerBlacklist.id, input.id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "VEHICLE_UPDATED",
+      entityType: "customer_blacklist",
+      entityId: input.id,
+      metadata: {
+        action: "BLACKLIST_UPDATED",
+        before: {
+          reason: existing.reason,
+          description: existing.description,
+          startsAt: existing.startsAt,
+          endsAt: existing.endsAt,
+        },
+        after: {
+          reason: value.reason,
+          description: value.description,
+          startsAt: value.startsAt ?? null,
+          endsAt: value.endsAt ?? null,
+        },
+      },
+    });
+  });
+  revalidateCustomerPaths();
+  return { ok: true, message: "Blacklist entry updated successfully." };
 }
 export async function unblacklistCustomerAction(id: string) {
   const actor = await requirePermission("customers", "update");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid blacklist record." };
   const [entry] = await db
     .select({ id: customerBlacklist.id })
     .from(customerBlacklist)
@@ -166,11 +247,51 @@ export async function unblacklistCustomerAction(id: string) {
     event: "VEHICLE_UPDATED",
     entityType: "customer_blacklist",
     entityId: id,
-    metadata: { active: false },
+    metadata: { action: "BLACKLIST_REMOVED", active: false },
   });
-  revalidatePath("/en/customers");
-  revalidatePath("/en/customers/blacklist");
+  revalidateCustomerPaths();
   return { ok: true, message: "Customer removed from the active blacklist." };
+}
+export async function getCustomerBlacklistHistoryAction(customerId: string) {
+  await requirePermission("customers", "read");
+  if (!uuidSchema.safeParse(customerId).success) throw new Error("Invalid customer.");
+  const [customer] = await db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      customerNumber: customers.customerNumber,
+      mobile: customers.mobile,
+    })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!customer) throw new Error("Customer not found.");
+  const entries = await db
+    .select({
+      id: customerBlacklist.id,
+      reason: customerBlacklist.reason,
+      description: customerBlacklist.description,
+      startsAt: customerBlacklist.startsAt,
+      endsAt: customerBlacklist.endsAt,
+      isActive: customerBlacklist.isActive,
+      createdAt: customerBlacklist.createdAt,
+      updatedAt: customerBlacklist.updatedAt,
+      deactivatedAt: customerBlacklist.deactivatedAt,
+      recordedBy: users.displayName,
+    })
+    .from(customerBlacklist)
+    .leftJoin(users, eq(users.id, customerBlacklist.actorId))
+    .where(eq(customerBlacklist.customerId, customerId))
+    .orderBy(desc(customerBlacklist.createdAt));
+  return {
+    customer,
+    entries: entries.map((entry) => ({
+      ...entry,
+      createdAt: entry.createdAt.toISOString(),
+      updatedAt: entry.updatedAt.toISOString(),
+      deactivatedAt: entry.deactivatedAt?.toISOString() ?? null,
+    })),
+  };
 }
 export async function getCustomerDetailsAction(id: string) {
   await requirePermission("customers", "read");
@@ -233,7 +354,8 @@ export async function deleteCustomerAction(id: string) {
 }
 export async function searchCustomersAction(q: string) {
   await requirePermission("customers", "read");
-  if (!q.trim()) return [];
+  const term = q.trim();
+  if (!term) return [];
   return db
     .select({
       id: customers.id,
@@ -246,9 +368,12 @@ export async function searchCustomersAction(q: string) {
       and(
         eq(customers.isActive, true),
         or(
-          ilike(customers.name, `%${q}%`),
-          ilike(customers.customerNumber, `%${q}%`),
-          ilike(customers.mobile, `%${q}%`),
+          ilike(customers.name, `%${term}%`),
+          ilike(customers.customerNumber, `%${term}%`),
+          ilike(customers.mobile, `%${term}%`),
+          ilike(customers.civilIdNumber, `%${term}%`),
+          ilike(customers.passportNumber, `%${term}%`),
+          ilike(customers.drivingLicenceNumber, `%${term}%`),
         ),
       ),
     )
