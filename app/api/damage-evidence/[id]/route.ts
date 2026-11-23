@@ -22,6 +22,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!evidence) return new Response("Not found", { status: 404 });
   if (!can(actor, "rentals", "read", evidence.branchId))
     return new Response("Forbidden", { status: 403 });
+  if (!["image/jpeg", "image/png", "image/webp"].includes(evidence.type))
+    return new Response("Unsupported media type", { status: 415 });
   try {
     const object = await getPrivateCustomerDocument(evidence.key);
     if (!object.Body) return new Response("Not found", { status: 404 });
@@ -30,6 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         "Content-Type": evidence.type,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
       },
     });
   } catch {

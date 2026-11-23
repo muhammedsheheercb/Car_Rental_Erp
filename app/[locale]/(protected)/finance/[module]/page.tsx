@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FinanceForm } from "@/components/finance-form";
@@ -9,6 +9,10 @@ import { totals } from "@/features/finance/service";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
 import { can, requirePermission } from "@/lib/auth";
+
+const PAGE_SIZE = 15;
+const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const METHODS = ["CASH", "CARD", "BANK_TRANSFER", "ONLINE"] as const;
 export default async function FinancePage({
   params,
   searchParams,
@@ -37,8 +41,15 @@ export default async function FinancePage({
   };
   const from = parseFilter(query.from),
     to = parseFilter(query.to);
+  const branchFilter = query.branch && UUID_RE.test(query.branch) ? query.branch : undefined;
+  const methodFilter =
+    !fine && METHODS.includes((query.method ?? "") as (typeof METHODS)[number])
+      ? (query.method as (typeof METHODS)[number])
+      : undefined;
   const conditions = and(
     actor.role === "SUPER_ADMIN" ? undefined : inArray(table.branchId, actor.branchIds),
+    branchFilter ? eq(table.branchId, branchFilter) : undefined,
+    methodFilter ? eq(payments.method, methodFilter) : undefined,
     fine
       ? and(
           eq(financeFines.kind, config.kind as "NORMAL" | "LEGAL"),
@@ -60,30 +71,42 @@ export default async function FinancePage({
     from ? gte(dateColumn, from) : undefined,
     to ? lt(dateColumn, new Date(to.getTime() + 86400000)) : undefined,
   );
-  const list = await db
-    .select({
-      id: table.id,
-      amount: table.amountBaisa,
-      date: dateColumn,
-      booking: rentals.agreementNumber,
-      customer: customers.name,
-      vehicle: vehicles.vehicleNumber,
-      registration: vehicles.registrationNumber,
-      branch: branches.name,
-      user: users.displayName,
-      method: fine ? sql<string>`'—'` : payments.method,
-      kind: table.kind,
-    })
-    .from(table)
-    .innerJoin(rentals, eq(table.rentalId, rentals.id))
-    .innerJoin(customers, eq(table.customerId, customers.id))
-    .innerJoin(vehicles, eq(rentals.vehicleId, vehicles.id))
-    .innerJoin(branches, eq(table.branchId, branches.id))
-    .innerJoin(users, eq(fine ? financeFines.createdBy : payments.recordedBy, users.id))
-    .where(conditions)
-    .orderBy(desc(dateColumn))
-    .limit(21)
-    .offset((page - 1) * 20);
+  const [list, branchOptions] = await Promise.all([
+    db
+      .select({
+        id: table.id,
+        amount: table.amountBaisa,
+        date: dateColumn,
+        booking: rentals.agreementNumber,
+        customer: customers.name,
+        vehicle: vehicles.vehicleNumber,
+        registration: vehicles.registrationNumber,
+        branch: branches.name,
+        user: users.displayName,
+        method: fine ? sql<string>`'—'` : payments.method,
+        kind: table.kind,
+      })
+      .from(table)
+      .innerJoin(rentals, eq(table.rentalId, rentals.id))
+      .innerJoin(customers, eq(table.customerId, customers.id))
+      .innerJoin(vehicles, eq(rentals.vehicleId, vehicles.id))
+      .innerJoin(branches, eq(table.branchId, branches.id))
+      .innerJoin(users, eq(fine ? financeFines.createdBy : payments.recordedBy, users.id))
+      .where(conditions)
+      .orderBy(desc(dateColumn))
+      .limit(PAGE_SIZE + 1)
+      .offset((page - 1) * PAGE_SIZE),
+    db
+      .select({ id: branches.id, name: branches.name, code: branches.code })
+      .from(branches)
+      .where(
+        and(
+          eq(branches.isActive, true),
+          actor.role === "SUPER_ADMIN" ? undefined : inArray(branches.id, actor.branchIds),
+        ),
+      )
+      .orderBy(asc(branches.name)),
+  ]);
   const previous =
     config.kind === "LEGAL"
       ? await db
@@ -113,7 +136,14 @@ export default async function FinancePage({
     )
     .map(bookingOption);
   const href = (n: number) =>
-    `/${locale}/finance/${module}?${new URLSearchParams({ ...(query.q ? { q: query.q } : {}), ...(query.from ? { from: query.from } : {}), ...(query.to ? { to: query.to } : {}), page: String(n) })}`;
+    `/${locale}/finance/${module}?${new URLSearchParams({
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.from ? { from: query.from } : {}),
+      ...(query.to ? { to: query.to } : {}),
+      ...(branchFilter ? { branch: branchFilter } : {}),
+      ...(methodFilter ? { method: methodFilter } : {}),
+      page: String(n),
+    })}`;
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{config.title}</h1>
@@ -192,26 +222,82 @@ export default async function FinancePage({
           />
         </details>
       )}
-      <form className="flex flex-wrap items-end gap-3 print:hidden">
-        <label>
+      <form className="grid gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:grid-cols-2 lg:grid-cols-6 print:hidden">
+        <label className="text-xs text-[var(--muted)]">
           Search
           <input
             name="q"
             defaultValue={query.q}
-            placeholder="Booking / customer / registration / receipt"
+            placeholder="Booking / customer / reg / receipt"
+            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
-        <label>
+        <label className="text-xs text-[var(--muted)]">
+          Branch
+          <select
+            name="branch"
+            defaultValue={branchFilter ?? ""}
+            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
+          >
+            <option value="">All branches</option>
+            {branchOptions.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} · {b.code}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!fine && (
+          <label className="text-xs text-[var(--muted)]">
+            Payment Mode
+            <select
+              name="method"
+              defaultValue={methodFilter ?? ""}
+              className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
+            >
+              <option value="">All modes</option>
+              {METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-xs text-[var(--muted)]">
           From
-          <input type="date" name="from" defaultValue={query.from} />
+          <input
+            type="date"
+            name="from"
+            defaultValue={query.from}
+            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
+          />
         </label>
-        <label>
+        <label className="text-xs text-[var(--muted)]">
           To
-          <input type="date" name="to" defaultValue={query.to} />
+          <input
+            type="date"
+            name="to"
+            defaultValue={query.to}
+            className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
+          />
         </label>
-        <button type="submit" className="rounded-lg border p-3">
-          Search
-        </button>
+        <div className="flex items-end gap-2">
+          <button
+            type="submit"
+            className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
+          >
+            Search
+          </button>
+          {(query.q || query.from || query.to || branchFilter || methodFilter) && (
+            <Link
+              href={`/${locale}/finance/${module}` as never}
+              className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
+            >
+              Clear
+            </Link>
+          )}
+        </div>
       </form>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
@@ -236,7 +322,7 @@ export default async function FinancePage({
             </tr>
           </thead>
           <tbody>
-            {list.slice(0, 20).map((p) => (
+            {list.slice(0, PAGE_SIZE).map((p) => (
               <tr key={p.id} className="border-t border-[var(--edge)]">
                 {[
                   p.booking,
@@ -277,10 +363,24 @@ export default async function FinancePage({
         </table>
         {!list.length && <p className="p-4">No records found.</p>}
       </div>
-      <nav className="flex gap-4 print:hidden">
-        {page > 1 && <Link href={href(page - 1)}>Previous</Link>}
-        <span>Page {page}</span>
-        {list.length > 20 && <Link href={href(page + 1)}>Next</Link>}
+      <nav className="flex items-center justify-end gap-3 text-sm print:hidden">
+        {page > 1 && (
+          <Link
+            href={href(page - 1)}
+            className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+          >
+            Previous
+          </Link>
+        )}
+        <span className="text-[var(--muted)]">Page {page}</span>
+        {list.length > PAGE_SIZE && (
+          <Link
+            href={href(page + 1)}
+            className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+          >
+            Next
+          </Link>
+        )}
       </nav>
     </div>
   );

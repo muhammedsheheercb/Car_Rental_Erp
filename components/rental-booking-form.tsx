@@ -14,10 +14,15 @@ import {
 type Vehicle = {
   id: string;
   number: string;
+  registration: string;
   brand: string;
   model: string;
   branchId: string;
+  branchName: string;
   currentOdometerKm: number;
+  nextEngineServiceKm: number | null;
+  nextGearOilKm: number | null;
+  insuranceExpiry: string | null;
 };
 type Price = {
   vehicleId: string;
@@ -46,22 +51,26 @@ type Customer = {
 type Branch = { id: string; name: string; code: string };
 
 export function RentalBookingForm({
+  locale = "en",
   vehicles,
   prices,
   customers,
   branches,
   defaultBranch,
   initialVehicleId = "",
+  initialCustomerId = "",
   canOverridePrice,
   userName,
   reservations,
 }: {
+  locale?: string;
   vehicles: Vehicle[];
   prices: Price[];
   customers: Customer[];
   branches: Branch[];
   defaultBranch: string;
   initialVehicleId?: string;
+  initialCustomerId?: string;
   canOverridePrice: boolean;
   userName: string;
   reservations: { vehicleId: string; startsAt: string; expectedReturnAt: string; status: string }[];
@@ -74,7 +83,9 @@ export function RentalBookingForm({
     pickupBranchId: defaultBranch,
     returnBranchId: defaultBranch,
   });
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(
+    customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : "",
+  );
   const [period, setPeriod] = useState<Price["period"]>("DAILY");
   const [rate, setRate] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -126,11 +137,15 @@ export function RentalBookingForm({
         returnBranchId: vehicle.branchId,
       });
   }, [vehicle]);
+  const addCustomerHref = `/${locale}/customers/new?returnTo=${encodeURIComponent(
+    `/${locale}/rentals${vehicleId ? `?vehicleId=${vehicleId}` : ""}`,
+  )}`;
   const cls = "min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3";
   return (
     <section className="border border-[var(--edge)] bg-[var(--surface)] p-4 sm:p-6">
       <h2 className="text-lg font-semibold">New booking / rental agreement</h2>
       <form action={action} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <input type="hidden" name="locale" value={locale} />
         <label className="grid min-w-0 gap-1 text-sm">
           Customer
           <select
@@ -150,8 +165,8 @@ export function RentalBookingForm({
         </label>
         <div className="grid content-end">
           <Link
-            href="/en/customers/new?returnTo=/en/rentals"
-            className="min-h-11 border border-[var(--edge)] px-3 py-3 text-center text-sm"
+            href={addCustomerHref as never}
+            className="min-h-11 border border-[var(--edge)] px-3 py-3 text-center text-sm hover:border-[var(--accent)]"
           >
             Add customer
           </Link>
@@ -168,11 +183,45 @@ export function RentalBookingForm({
             <option value="">Search/select eligible vehicle</option>
             {availableVehicles.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.number} · {item.brand} {item.model}
+                {item.number} · {item.registration} · {item.brand} {item.model}
               </option>
             ))}
           </select>
         </label>
+        {vehicle && (
+          <div className="grid gap-2 rounded-xl border border-[var(--edge)] bg-black/20 p-3 text-xs sm:grid-cols-2 md:col-span-2 xl:col-span-3 xl:grid-cols-4">
+            <div>
+              <p className="text-[var(--muted)]">Vehicle Name / Brand & Model</p>
+              <p className="mt-0.5 font-medium text-white">
+                {vehicle.number} · {vehicle.brand} {vehicle.model}
+              </p>
+            </div>
+            <div>
+              <p className="text-[var(--muted)]">Registration / Branch</p>
+              <p className="mt-0.5 font-mono text-white">
+                {vehicle.registration} · {vehicle.branchName}
+              </p>
+            </div>
+            <div>
+              <p className="text-[var(--muted)]">Current KM / Next Engine Service</p>
+              <p className="mt-0.5 text-white">
+                {vehicle.currentOdometerKm.toLocaleString()} KM · Next{" "}
+                {vehicle.nextEngineServiceKm != null
+                  ? `${vehicle.nextEngineServiceKm.toLocaleString()} KM`
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[var(--muted)]">Next Gear Oil / Insurance Expiry</p>
+              <p className="mt-0.5 text-white">
+                {vehicle.nextGearOilKm != null
+                  ? `${vehicle.nextGearOilKm.toLocaleString()} KM`
+                  : "—"}{" "}
+                · Ins: {vehicle.insuranceExpiry ?? "—"}
+              </p>
+            </div>
+          </div>
+        )}
         <label className="grid min-w-0 gap-1 text-sm">
           Rental category
           <select

@@ -267,3 +267,38 @@ export const damageSchema = z.object({
   description: z.string().trim().min(1).max(1000),
   remarks: z.string().trim().max(1000).optional(),
 });
+
+export const bookingUpdateSchema = z.object({
+  rentalId: z.string().uuid(),
+  pickupBranchId: z.string().uuid(),
+  returnBranchId: z.string().uuid(),
+  startsAt: z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      if (!value) return undefined;
+      try {
+        return parseOmanDateTime(value);
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Enter a valid pickup date/time in Oman time." });
+        return z.NEVER;
+      }
+    }),
+  pricingPeriod: z.enum(["DAILY", "WEEKLY", "MONTHLY"]).optional(),
+  rentDuration: z.coerce.number().int().min(1).max(365).optional(),
+  pickupOdometerKm: z.coerce.number().int().min(0).max(2_147_483_647).optional(),
+  freeKm: z.coerce.number().int().min(0).max(2_147_483_647),
+  openKm: z.preprocess(
+    (value) => value === "on" || value === true || value === "true",
+    z.boolean(),
+  ),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+export function sanitizeReturnTo(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const trimmedValue = raw.trim();
+  if (!trimmedValue.startsWith("/") || trimmedValue.startsWith("//")) return undefined;
+  if (/[\r\n\\]/.test(trimmedValue)) return undefined;
+  return trimmedValue;
+}

@@ -27,6 +27,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         "Content-Type": document.contentType,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
       },
     });
   } catch {

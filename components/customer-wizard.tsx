@@ -33,6 +33,8 @@ export function CustomerWizard({
   customerId,
   initialData,
   existingDocuments = [],
+  locale = "en",
+  returnTo,
   onSuccess,
 }: {
   customerId?: string;
@@ -44,6 +46,8 @@ export function CustomerWizard({
     contentType: string;
     sizeBytes: number;
   }[];
+  locale?: string;
+  returnTo?: string;
   onSuccess?: (message: string) => void;
 }) {
   const [step, setStep] = useState(1);
@@ -90,7 +94,11 @@ export function CustomerWizard({
         if (!result.ok) return setError(result.message);
       }
       if (onSuccess) onSuccess("Customer saved with documents.");
-      else window.location.assign("/en/customers");
+      else if (returnTo) {
+        const target = new URL(returnTo, window.location.origin);
+        target.searchParams.set("customerId", savedCustomerId);
+        window.location.assign(`${target.pathname}${target.search}`);
+      } else window.location.assign(`/${locale}/customers`);
     });
   return (
     <div className="mx-auto max-w-4xl">
@@ -98,6 +106,12 @@ export function CustomerWizard({
       <h1 className="mt-2 text-3xl font-semibold">
         {customerId ? "Edit customer" : "New customer"}
       </h1>
+      {returnTo && (
+        <p className="mt-3 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+          Creating customer for a booking — after completing documents you will return to the
+          booking form with this customer automatically selected.
+        </p>
+      )}
       <p className="mt-3 text-sm text-[var(--muted)]">
         Minimum rental requirement: a valid driving licence, licence front/back images, signature,
         and one valid identity document (Civil ID, passport, or visa where applicable).

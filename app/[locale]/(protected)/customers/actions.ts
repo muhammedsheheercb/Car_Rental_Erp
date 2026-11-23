@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { auditLogs, customerBlacklist, customerDocuments, customers, users } from "@/db/schema";
 import { requirePermission } from "@/lib/auth";
+import { validateEvidencePhoto } from "@/lib/image-file";
 import { putPrivateCustomerDocument } from "@/lib/r2";
 import { blacklistEntrySchema, customerSchema } from "@/lib/validation";
 
@@ -72,11 +73,21 @@ export async function uploadCustomerDocumentAction(
   height: number,
 ) {
   await requirePermission("customers", "update");
-  const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
-  if (!allowed.has(file.type) || file.size < 1 || file.size > 5 * 1024 * 1024)
-    return { ok: false, message: "Use a JPEG, PNG, or WebP image up to 5 MB." };
+  if (!uuidSchema.safeParse(customerId).success)
+    return { ok: false, message: "Invalid customer identifier." };
+  if (!["LICENCE_FRONT", "LICENCE_BACK", "SIGNATURE"].includes(type))
+    return { ok: false, message: "Invalid document type." };
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1)
     return { ok: false, message: "The document image is invalid." };
+  try {
+    await validateEvidencePhoto(file);
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error ? error.message : "Use a JPEG, PNG, or WebP image up to 5 MB.",
+    };
+  }
   const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const key = `customers/${customerId}/${type.toLowerCase()}/${randomUUID()}.${extension}`;
   try {

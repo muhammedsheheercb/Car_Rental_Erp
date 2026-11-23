@@ -136,6 +136,7 @@ export async function createUserAction(formData: FormData) {
   const scopeCheck = validateUserAssignment(actor, {
     role: input.role,
     branchIds: input.branchIds,
+    permissions: input.permissions,
   });
   if (!scopeCheck.ok) return scopeCheck;
   try {
@@ -232,6 +233,7 @@ export async function updateUserAction(id: string, formData: FormData) {
   const scopeCheck = validateUserAssignment(actor, {
     role: input.role,
     branchIds: input.branchIds,
+    permissions: input.permissions,
   });
   if (!scopeCheck.ok) return scopeCheck;
   try {

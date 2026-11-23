@@ -27,20 +27,23 @@ const ACTIONS = [
 
 export function UserPermissionsGrid({
   defaultSelected = [],
+  allowedPermissions,
   maxHeightClass = "max-h-72",
 }: {
   defaultSelected?: string[];
+  allowedPermissions?: string[];
   maxHeightClass?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedSet = new Set(defaultSelected);
+  const allowedSet = allowedPermissions ? new Set(allowedPermissions) : null;
 
   const toggleAll = (checked: boolean, moduleName?: string) => {
     const root = containerRef.current;
     if (!root) return;
     const selector = moduleName
-      ? `input[type="checkbox"][data-module="${moduleName}"]`
-      : 'input[type="checkbox"][name="permissions"]';
+      ? `input[type="checkbox"][data-module="${moduleName}"]:not(:disabled)`
+      : 'input[type="checkbox"][name="permissions"]:not(:disabled)';
     for (const box of root.querySelectorAll<HTMLInputElement>(selector)) {
       box.checked = checked;
     }
@@ -67,6 +70,11 @@ export function UserPermissionsGrid({
           </button>
         </div>
       </div>
+      {allowedSet && (
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Only permissions assigned to your own account can be granted.
+        </p>
+      )}
       <div
         ref={containerRef}
         className={`mt-2 ${maxHeightClass} space-y-3 overflow-y-auto rounded-lg border border-[var(--edge)] bg-black/15 p-3`}
@@ -97,14 +105,19 @@ export function UserPermissionsGrid({
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
               {ACTIONS.map((action) => {
                 const value = `${moduleName}:${action}`;
+                const disabled = Boolean(allowedSet && !allowedSet.has(value));
                 return (
-                  <label key={value} className="flex min-h-9 items-center gap-1.5 text-xs">
+                  <label
+                    key={value}
+                    className={`flex min-h-9 items-center gap-1.5 text-xs ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+                  >
                     <input
                       type="checkbox"
                       name="permissions"
                       value={value}
                       data-module={moduleName}
-                      defaultChecked={selectedSet.has(value)}
+                      disabled={disabled}
+                      defaultChecked={!disabled && selectedSet.has(value)}
                     />
                     <span>{action.replaceAll("_", " ")}</span>
                   </label>

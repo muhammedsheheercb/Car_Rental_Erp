@@ -40,7 +40,7 @@ export async function settingsAction(_state: { error: string; message: string },
       if (!parsed.success) throw new Error("Select valid preference options.");
       const store = await cookies();
       store.set(PREFS_COOKIE, JSON.stringify(parsed.data), {
-        httpOnly: false,
+        httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
