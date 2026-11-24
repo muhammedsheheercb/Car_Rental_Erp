@@ -4,7 +4,7 @@ import { CustomerActions } from "@/components/customer-actions";
 import { MasterSearch } from "@/components/master-search";
 import { db } from "@/db/client";
 import { customerBlacklist, customers } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { can, requirePermission } from "@/lib/auth";
 
 const PAGE_SIZE = 15;
 
@@ -15,7 +15,8 @@ export default async function CustomersPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
   params: Promise<{ locale: string }>;
 }) {
-  await requirePermission("customers", "read");
+  const actor = await requirePermission("customers", "read");
+  const canViewLedger = can(actor, "finance", "read");
   const [{ q = "", status = "all", page = "1" }, { locale }] = await Promise.all([
     searchParams,
     params,
@@ -92,7 +93,15 @@ export default async function CustomersPage({
           <p className="text-sm text-[var(--accent)]">CUSTOMERS</p>
           <h1 className="mt-2 text-3xl font-semibold">Customers</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canViewLedger && (
+            <Link
+              href={`/${locale}/ledger` as never}
+              className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-sm"
+            >
+              Customer Ledger
+            </Link>
+          )}
           <Link
             href={`/${locale}/customers/blacklist`}
             className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-sm"
@@ -150,7 +159,7 @@ export default async function CustomersPage({
               <th className="w-[35%] px-4 py-3 text-start">Customer</th>
               <th className="px-4 py-3 text-start">Mobile</th>
               <th className="px-4 py-3 text-center">Status</th>
-              <th className="w-[29rem] px-4 py-3 text-center">Actions</th>
+              <th className="w-[33rem] px-4 py-3 text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -175,6 +184,8 @@ export default async function CustomersPage({
                 <td className="px-4 py-3 text-center">
                   <CustomerActions
                     id={customer.id}
+                    locale={locale}
+                    canViewLedger={canViewLedger}
                     name={customer.name}
                     number={customer.customerNumber}
                     active={customer.isActive}

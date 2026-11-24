@@ -110,6 +110,11 @@ export default async function AgreementPage({
             Invoice
           </Link>
         )}
+        {can(actor, "customers", "read") && can(actor, "finance", "read", rental.branchId) && (
+          <Link className="btn" href={`/${locale}/ledger?customerId=${rental.customerId}` as never}>
+            Customer Ledger
+          </Link>
+        )}
       </div>
       <p className="text-sm text-[var(--muted)]">
         {rental.status} · {record.branch} · All dates and times are Oman time.

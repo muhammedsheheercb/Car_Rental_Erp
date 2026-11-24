@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -15,6 +16,8 @@ import { UnblacklistButton } from "./unblacklist-button";
 type Details = Awaited<ReturnType<typeof getCustomerDetailsAction>>;
 export function CustomerActions({
   id,
+  locale = "en",
+  canViewLedger = false,
   name,
   number,
   active,
@@ -23,6 +26,8 @@ export function CustomerActions({
   blacklistReason,
 }: {
   id: string;
+  locale?: string;
+  canViewLedger?: boolean;
   name: string;
   number: string;
   active: boolean;
@@ -110,6 +115,14 @@ export function CustomerActions({
             <circle cx="12" cy="12" r="2.5" strokeWidth="1.8" />
           </svg>
         </button>
+        {canViewLedger && (
+          <Link
+            href={`/${locale}/ledger?customerId=${id}` as never}
+            className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-2 text-sm text-[var(--accent)] hover:bg-white/5"
+          >
+            Ledger
+          </Link>
+        )}
         <button type="button" onClick={edit} className="min-h-10 px-2 text-sm text-[var(--accent)]">
           Edit
         </button>
@@ -221,6 +234,17 @@ export function CustomerActions({
                     <p className="break-words">{value}</p>
                   </div>
                 ))}
+                {canViewLedger && (
+                  <div className="sm:col-span-2">
+                    <Link
+                      href={`/${locale}/ledger?customerId=${id}` as never}
+                      onClick={() => setOpen(false)}
+                      className="inline-flex min-h-11 items-center rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
+                    >
+                      Open Customer Ledger
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </section>

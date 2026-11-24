@@ -19,13 +19,19 @@ export async function AppShell({
     { href: "/expiry", label: "Expiry", module: "fleet" },
     { href: "/settings", label: "Settings", module: "settings" },
     { href: "/customers", label: "Customers", module: "customers" },
+    { href: "/ledger", label: "Ledger", module: "finance", alsoRequires: "customers" },
     { href: "/rentals", label: t("rentals"), module: "rentals" },
     { href: "/finance/advance", label: "Finance", module: "finance" },
     { href: "/transfers", label: "Transfer", module: "rentals" },
     { href: "/invoices", label: "Invoices", module: "finance" },
     { href: "/admin/branches", label: t("branches"), module: "branches" },
     { href: "/admin/users", label: t("users"), module: "users" },
-  ].filter((x) => identity && can(identity, x.module, "read"));
+  ].filter(
+    (x) =>
+      identity &&
+      can(identity, x.module, "read") &&
+      (!("alsoRequires" in x && x.alsoRequires) || can(identity, x.alsoRequires, "read")),
+  );
   return (
     <div
       data-app-shell
