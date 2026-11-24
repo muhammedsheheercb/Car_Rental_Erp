@@ -43,7 +43,7 @@ try {
   const pickup = page.locator("input[name=startsAt]");
   await pickup.fill("2030-08-22T14:30");
   await page.locator("input[name=rentDuration]").fill("2");
-  const expected = page.locator("input[readonly][type=datetime-local]");
+  const expected = page.locator("#expectedReturnAt");
   for (const [period, value] of [
     ["DAILY", "2030-08-24T14:30"],
     ["WEEKLY", "2030-09-05T14:30"],

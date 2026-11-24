@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import {
+  auditLogs,
   customerLedger,
   invoiceHistory,
   invoices,
@@ -236,7 +237,7 @@ it("rejects overcollection at transfer", async () => {
 it("stores draft invoices without ledger or payment mutations", async () => {
   invoiceReads();
   await saveInvoice(invoice, actor);
-  expect(fixture.writes.map((w) => w.table)).toEqual([invoices, invoiceHistory]);
+  expect(fixture.writes.map((w) => w.table)).toEqual([invoices, invoiceHistory, auditLogs]);
   expect(fixture.writes[0].value).toMatchObject({
     grandTotalBaisa: 10000,
     advanceBaisa: 5000,

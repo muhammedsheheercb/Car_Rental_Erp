@@ -4,12 +4,14 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { createReservationAction } from "@/app/[locale]/(protected)/rentals/actions";
 
 import {
+  calculateDurationFromReturn,
   calculateExpectedReturn,
   calculateIncludedKm,
   formatOmanDateTime,
   parseOmanDateTime,
   periodsOverlap,
 } from "@/features/rentals/booking-calculations";
+import { OmanDateTimePicker } from "./oman-datetime-picker";
 
 type Vehicle = {
   id: string;
@@ -140,6 +142,24 @@ export function RentalBookingForm({
   const addCustomerHref = `/${locale}/customers/new?returnTo=${encodeURIComponent(
     `/${locale}/rentals${vehicleId ? `?vehicleId=${vehicleId}` : ""}`,
   )}`;
+  const handleExpectedReturnChange = (value: string) => {
+    try {
+      const pickedReturn = parseOmanDateTime(value);
+      if (startsAt) {
+        const parsedStart = parseOmanDateTime(startsAt);
+        if (pickedReturn > parsedStart) {
+          setDuration(String(calculateDurationFromReturn(parsedStart, pickedReturn, period)));
+        }
+      } else {
+        const stepDays = period === "WEEKLY" ? 7 : period === "MONTHLY" ? 30 : 1;
+        const defaultStart = new Date(pickedReturn.getTime() - stepDays * 86_400_000);
+        setStartsAt(formatOmanDateTime(defaultStart));
+        setDuration("1");
+      }
+    } catch {
+      /* Wait for complete datetime-local value */
+    }
+  };
   const cls = "min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3";
   return (
     <section className="border border-[var(--edge)] bg-[var(--surface)] p-4 sm:p-6">
@@ -259,21 +279,21 @@ export function RentalBookingForm({
             </select>
           </label>
         ))}
-        <label className="grid min-w-0 gap-1 text-sm">
-          Reservation / pickup date and time (Oman)
-          <input
-            required
-            name="startsAt"
-            type="datetime-local"
-            value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
-            className={cls}
-          />
-        </label>
-        <label className="grid min-w-0 gap-1 text-sm">
-          Expected return date and time (Oman)
-          <input readOnly value={expectedReturn} type="datetime-local" className={cls} />
-        </label>
+        <OmanDateTimePicker
+          id="bookingStartsAt"
+          name="startsAt"
+          label="Reservation / pickup date and time (Oman)"
+          required
+          value={startsAt}
+          onChange={setStartsAt}
+        />
+        <OmanDateTimePicker
+          id="expectedReturnAt"
+          label="Expected return date and time (Oman)"
+          min={startsAt || undefined}
+          value={expectedReturn}
+          onChange={handleExpectedReturnChange}
+        />
         <label className="grid min-w-0 gap-1 text-sm">
           Rent duration (
           {period === "DAILY" ? "days" : period === "WEEKLY" ? "weeks" : "calendar months"})

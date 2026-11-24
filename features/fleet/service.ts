@@ -200,7 +200,11 @@ export async function createVehicle(input: unknown, actor: Identity) {
       entityType: "vehicle",
       entityId: vehicle.id,
       branchId: vehicle.branchId,
-      metadata: belowMinimum ? { reason: value.overrideReason } : {},
+      metadata: {
+        vehicleNumber: vehicle.vehicleNumber,
+        registrationNumber: vehicle.registrationNumber,
+        ...(belowMinimum ? { reason: value.overrideReason } : {}),
+      },
     });
     return vehicle;
   });
@@ -310,7 +314,11 @@ export async function updateVehicle(id: string, input: unknown, actor: Identity)
       entityType: "vehicle",
       entityId: id,
       branchId: value.branchId,
-      metadata: belowMinimum ? { reason: value.overrideReason } : {},
+      metadata: {
+        vehicleNumber: value.vehicleNumber,
+        registrationNumber: value.registrationNumber,
+        ...(belowMinimum ? { reason: value.overrideReason } : {}),
+      },
     });
   });
 }
@@ -346,6 +354,10 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
         entityType: "vehicle",
         entityId: id,
         branchId: vehicle.branchId,
+        metadata: {
+          vehicleNumber: vehicle.vehicleNumber,
+          registrationNumber: vehicle.registrationNumber,
+        },
       });
     });
     return { deactivated: true };
@@ -373,6 +385,18 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
     await tx.delete(vehicleInsurance).where(eq(vehicleInsurance.vehicleId, id));
     await tx.delete(vehicleOdometerHistory).where(eq(vehicleOdometerHistory.vehicleId, id));
     await tx.delete(vehicles).where(eq(vehicles.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "VEHICLE_DEACTIVATED",
+      entityType: "vehicle",
+      entityId: id,
+      branchId: vehicle.branchId,
+      metadata: {
+        deleted: true,
+        vehicleNumber: vehicle.vehicleNumber,
+        registrationNumber: vehicle.registrationNumber,
+      },
+    });
   });
   return { deactivated: false };
 }
@@ -466,7 +490,11 @@ export async function setVehicleActive(id: string, active: boolean, actor: Ident
       entityType: "vehicle",
       entityId: id,
       branchId: vehicle.branchId,
-      metadata: { active },
+      metadata: {
+        active,
+        vehicleNumber: vehicle.vehicleNumber,
+        registrationNumber: vehicle.registrationNumber,
+      },
     });
   });
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { canAccessDailyActivity } from "@/features/daily-activity/calculations";
 import { can, getIdentity } from "@/lib/auth";
 import { LogoutButton } from "./logout-button";
 import { OperationalFilters } from "./operational-filters";
@@ -14,6 +15,7 @@ export async function AppShell({
   const t = await getTranslations();
   const items = [
     { href: "/dashboard", label: t("dashboard"), module: "dashboard" },
+    { href: "/daily-activity", label: "Activity", module: "daily-activity" },
     { href: "/fleet", label: "Fleet", module: "fleet" },
     { href: "/service", label: "Service", module: "fleet" },
     { href: "/expiry", label: "Expiry", module: "fleet" },
@@ -29,7 +31,9 @@ export async function AppShell({
   ].filter(
     (x) =>
       identity &&
-      can(identity, x.module, "read") &&
+      (x.module === "daily-activity"
+        ? canAccessDailyActivity(identity)
+        : can(identity, x.module, "read")) &&
       (!("alsoRequires" in x && x.alsoRequires) || can(identity, x.alsoRequires, "read")),
   );
   return (
@@ -44,22 +48,22 @@ export async function AppShell({
         >
           MUSCAT <span className="text-[var(--accent)]">CARS</span>
         </Link>
-        <nav className="hidden min-w-0 items-center gap-3 overflow-x-auto whitespace-nowrap lg:flex xl:gap-4">
+        <nav className="hidden min-w-0 items-center gap-2.5 overflow-x-auto whitespace-nowrap lg:flex xl:gap-3">
           {items.map((item) => (
             <Link
               key={item.href}
               href={`/${locale}${item.href}` as never}
-              className="text-sm text-[var(--muted)] hover:text-white"
+              className="text-xs text-[var(--muted)] hover:text-white xl:text-[13px]"
             >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="flex min-w-0 items-center gap-1 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
           <OperationalFilters />
           <Link
             href={`/${locale === "en" ? "ar" : "en"}/dashboard`}
-            className="min-h-11 content-center px-1 text-xs sm:text-sm"
+            className="min-h-11 shrink-0 content-center whitespace-nowrap px-1 text-xs sm:text-sm"
           >
             {t("language")}
           </Link>

@@ -42,7 +42,8 @@ input[type="time"] {
   min-height: 2.75rem;
   padding-inline-end: 3.25rem;
 }
-input.calendar-input[type="date"]::-webkit-calendar-picker-indicator {
+input.calendar-input[type="date"]::-webkit-calendar-picker-indicator,
+input.calendar-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   /* biome-ignore lint/complexity/noImportantStyles: suppress only the duplicate native icon */
   opacity: 0 !important;
   /* biome-ignore lint/complexity/noImportantStyles: suppress only the duplicate native icon */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateDurationFromReturn,
   calculateExcessKm,
   calculateExpectedReturn,
   calculateIncludedKm,
@@ -93,6 +94,21 @@ describe("booking calculations", () => {
     expect(periodsOverlap(date(22), date(24), date(21), date(25))).toBe(true);
     expect(periodsOverlap(date(22), date(24), date(24), date(26))).toBe(false);
     expect(periodsOverlap(date(22), date(24), date(20), date(22))).toBe(false);
+  });
+  it("derives duration from a calendar-selected return date for daily, weekly, and monthly periods", () => {
+    const start = parseOmanDateTime("2026-12-10T10:00");
+    expect(calculateDurationFromReturn(start, parseOmanDateTime("2026-12-13T10:00"), "DAILY")).toBe(
+      3,
+    );
+    expect(
+      calculateDurationFromReturn(start, parseOmanDateTime("2026-12-24T10:00"), "WEEKLY"),
+    ).toBe(2);
+    expect(
+      calculateDurationFromReturn(start, parseOmanDateTime("2027-02-10T10:00"), "MONTHLY"),
+    ).toBe(2);
+    expect(calculateDurationFromReturn(start, parseOmanDateTime("2026-12-09T10:00"), "DAILY")).toBe(
+      1,
+    );
   });
 });
 const id = "00000000-0000-4000-8000-000000000001";

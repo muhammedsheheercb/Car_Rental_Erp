@@ -32,10 +32,18 @@ export async function audit(
   entityType: string,
   entityId?: string,
   actorId?: string,
+  branchId?: string,
+  metadata?: Record<string, unknown>,
 ) {
-  await db
-    .insert(auditLogs)
-    .values({ event, entityType, entityId, actorId, ipHash: await requestIpHash() });
+  await db.insert(auditLogs).values({
+    event,
+    entityType,
+    entityId,
+    actorId,
+    branchId,
+    metadata: metadata ?? {},
+    ipHash: await requestIpHash(),
+  });
 }
 
 export async function login(username: string, password: string) {

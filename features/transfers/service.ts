@@ -3,6 +3,7 @@ import { and, asc, eq, gt, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
+  auditLogs,
   customerLedger,
   customers,
   invoices,
@@ -274,6 +275,21 @@ export async function swapVehicle(raw: unknown, actor: Identity) {
         updatedAt: new Date(),
       })
       .where(eq(rentals.id, r.id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "VEHICLE_SWAPPED",
+      entityType: "rental_swap",
+      entityId: history.id,
+      branchId: r.branchId,
+      metadata: {
+        rentalId: r.id,
+        agreementNumber: r.agreementNumber,
+        previousVehicle: previous.registrationNumber,
+        newVehicle: next.registrationNumber,
+        chargesBaisa: added,
+        remarks: input.remarks,
+      },
+    });
     return history;
   });
 }

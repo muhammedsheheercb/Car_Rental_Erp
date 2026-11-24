@@ -62,7 +62,11 @@ export async function createBranchAction(formData: FormData) {
   }
   if (!branch)
     return { ok: false, message: "We could not generate a unique branch code. Please retry." };
-  await audit("BRANCH_CREATED", "branch", branch.id, actor.id);
+  await audit("BRANCH_CREATED", "branch", branch.id, actor.id, branch.id, {
+    name: branch.name,
+    code: branch.code,
+    location: branch.location,
+  });
   revalidatePath("/en/admin/branches");
   return { ok: true, message: "Branch created successfully." };
 }
@@ -78,7 +82,7 @@ export async function deactivateBranchAction(id: string) {
     .update(branches)
     .set({ isActive: false, deactivatedAt: new Date(), updatedAt: new Date() })
     .where(eq(branches.id, id));
-  await audit("BRANCH_DEACTIVATED", "branch", id, actor.id);
+  await audit("BRANCH_DEACTIVATED", "branch", id, actor.id, id);
   revalidatePath("/en/admin/branches");
   return { ok: true, message: "Branch deactivated successfully." };
 }
@@ -92,7 +96,10 @@ export async function updateBranchAction(id: string, formData: FormData) {
       .update(branches)
       .set({ name: parsed.data.name, location: parsed.data.location, updatedAt: new Date() })
       .where(eq(branches.id, id));
-    await audit("BRANCH_UPDATED", "branch", id, actor.id);
+    await audit("BRANCH_UPDATED", "branch", id, actor.id, id, {
+      name: parsed.data.name,
+      location: parsed.data.location,
+    });
     revalidatePath("/en/admin/branches");
     return { ok: true, message: "Branch updated successfully." };
   } catch {

@@ -39,6 +39,28 @@ export function calculateExpectedReturn(
   local.setUTCDate(Math.min(day, lastDay));
   return new Date(local.getTime() - OMAN_OFFSET_MS);
 }
+export function calculateDurationFromReturn(
+  startsAt: Date,
+  returnAt: Date,
+  period: RentalPeriod,
+): number {
+  if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(returnAt.getTime())) return 1;
+  const diffMs = returnAt.getTime() - startsAt.getTime();
+  if (diffMs <= 0) return 1;
+  if (period === "DAILY") return Math.min(365, Math.max(1, Math.ceil(diffMs / 86_400_000)));
+  if (period === "WEEKLY") return Math.min(365, Math.max(1, Math.ceil(diffMs / (7 * 86_400_000))));
+  const startOman = new Date(startsAt.getTime() + OMAN_OFFSET_MS);
+  const endOman = new Date(returnAt.getTime() + OMAN_OFFSET_MS);
+  let months = Math.max(
+    1,
+    (endOman.getUTCFullYear() - startOman.getUTCFullYear()) * 12 +
+      (endOman.getUTCMonth() - startOman.getUTCMonth()),
+  );
+  if (months < 365 && calculateExpectedReturn(startsAt, "MONTHLY", months) < returnAt) {
+    months += 1;
+  }
+  return Math.min(365, Math.max(1, months));
+}
 export function calculateIncludedKm(maximumKm: number, freeKm: number): number {
   integer(maximumKm, "KM maximum");
   integer(freeKm, "Free KM");

@@ -13,7 +13,7 @@ export function LogoutButton() {
       trigger={
         <button
           type="button"
-          className="min-h-11 rounded-lg px-1 text-xs text-[var(--muted)] sm:px-3 sm:text-sm"
+          className="min-h-11 shrink-0 whitespace-nowrap rounded-lg px-1 text-xs text-[var(--muted)] sm:px-2 sm:text-sm"
         >
           Log out
         </button>

@@ -136,6 +136,20 @@ export async function extendContract(raw: unknown, actor: Identity) {
         updatedAt: new Date(),
       })
       .where(eq(rentals.id, rental.id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "RENTAL_EXTENDED",
+      entityType: "rental",
+      entityId: rental.id,
+      branchId: rental.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        duration: input.duration,
+        period: rental.pricingPeriod,
+        additionalRentBaisa: additionalRent,
+        remarks: input.remarks,
+      },
+    });
   });
 }
 export async function cancelAgreement(raw: unknown, actor: Identity) {
@@ -183,6 +197,19 @@ export async function cancelAgreement(raw: unknown, actor: Identity) {
         })
         .where(eq(vehicles.id, vehicle.id));
     // Charges, receipts and ledger history are retained. Refunds/adjustments require their own transactions.
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "RENTAL_CANCELLED",
+      entityType: "rental",
+      entityId: rental.id,
+      branchId: rental.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        previousStatus: rental.status,
+        overridden: policy.overridden,
+        remarks: input.remarks,
+      },
+    });
   });
 }
 export async function recordDamage(raw: unknown, file: File, actor: Identity) {
@@ -207,6 +234,19 @@ export async function recordDamage(raw: unknown, file: File, actor: Identity) {
       objectKey: key,
       contentType: file.type,
       recordedBy: actor.id,
+    });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "DAMAGE_RECORDED",
+      entityType: "damage",
+      entityId: rental.id,
+      branchId: rental.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        phase: input.phase,
+        location: input.location,
+        description: input.description,
+      },
     });
   });
 }
@@ -290,6 +330,19 @@ export async function returnContract(
         updatedAt: new Date(),
       })
       .where(eq(vehicles.id, vehicle.id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "RENTAL_RETURNED",
+      entityType: "rental",
+      entityId: rental.id,
+      branchId: rental.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        endingKm,
+        addedChargesBaisa: added,
+        totalBaisa: boundedMoney(rental.totalBaisa + added),
+      },
+    });
   });
 }
 
@@ -316,12 +369,13 @@ export async function updateBooking(raw: unknown, actor: Identity) {
         .where(eq(rentals.id, rental.id));
       await tx.insert(auditLogs).values({
         actorId: actor.id,
-        event: "VEHICLE_UPDATED",
+        event: "BOOKING_UPDATED",
         entityType: "rental",
         entityId: rental.id,
         branchId: rental.branchId,
         metadata: {
           action: "BOOKING_UPDATED",
+          agreementNumber: rental.agreementNumber,
           status: "ACTIVE",
           returnBranchId: input.returnBranchId,
           freeKm: input.freeKm,
@@ -450,12 +504,13 @@ export async function updateBooking(raw: unknown, actor: Identity) {
 
     await tx.insert(auditLogs).values({
       actorId: actor.id,
-      event: "VEHICLE_UPDATED",
+      event: "BOOKING_UPDATED",
       entityType: "rental",
       entityId: rental.id,
       branchId: rental.branchId,
       metadata: {
         action: "BOOKING_UPDATED",
+        agreementNumber: rental.agreementNumber,
         status: "RESERVED",
         previousTotalBaisa: rental.totalBaisa,
         newTotalBaisa: calculation.totalBaisa,
@@ -543,7 +598,7 @@ export async function deleteBooking(rentalId: string, actor: Identity) {
     await tx.delete(rentals).where(eq(rentals.id, rentalId));
     await tx.insert(auditLogs).values({
       actorId: actor.id,
-      event: "VEHICLE_UPDATED",
+      event: "BOOKING_DELETED",
       entityType: "rental",
       entityId: rentalId,
       branchId: rental.branchId,
