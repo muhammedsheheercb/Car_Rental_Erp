@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { InvoiceForm, VoidInvoiceForm } from "@/components/invoice-form";
 import { db } from "@/db/client";
 import { invoiceHistory, invoices } from "@/db/schema";
@@ -10,13 +11,20 @@ import { omrInput } from "@/features/invoices/calculations";
 import { invoiceBooking } from "@/features/invoices/queries";
 import { calculateExcessKm, formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import { can, requirePermission } from "@/lib/auth";
+import { translateFieldLabel, translateStatus } from "@/lib/i18n-helpers";
 export default async function InvoicePage({
   params,
 }: {
   params: Promise<{ id: string; locale: string }>;
 }) {
-  const actor = await requirePermission("finance", "read");
-  const { id, locale } = await params;
+  const [actor, { id, locale }, tInvoices, tCommon, tStatus, tFields] = await Promise.all([
+    requirePermission("finance", "read"),
+    params,
+    getTranslations("invoices"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("fieldLabels"),
+  ]);
   if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) notFound();
   const [i] = await db
     .select()
@@ -80,15 +88,18 @@ export default async function InvoicePage({
   return (
     <article className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="break-all text-2xl font-semibold">Invoice {i.invoiceNumber}</h1>
+        <h1 className="break-all text-2xl font-semibold">
+          {tInvoices("invoiceTitle", { number: i.invoiceNumber })}
+        </h1>
         {can(actor, "finance", "print", i.branchId) && (
           <Link className="btn" href={`/${locale}/documents/invoice/${id}` as never}>
-            Print Invoice A4
+            {tInvoices("printInvoiceA4")}
           </Link>
         )}
       </div>
       <p>
-        {i.status} · Issued {formatOmanDateTime(i.createdAt)} Oman
+        {translateStatus(tStatus, i.status)} ·{" "}
+        {tInvoices("issuedOman", { date: formatOmanDateTime(i.createdAt) })}
       </p>
       <dl className="grid gap-3 sm:grid-cols-2">
         {Object.entries({
@@ -99,7 +110,7 @@ export default async function InvoicePage({
           Mobile: c?.mobile,
           Address: c?.address,
           "Rate (OMR)": r ? omrInput(r.dailyRateBaisa) : null,
-          "Rental Type": r?.pricingPeriod,
+          "Rental Type": r?.pricingPeriod ? translateStatus(tStatus, r.pricingPeriod) : null,
           "Starting KM": r?.pickupOdometerKm,
           "Ending KM": r?.returnOdometerKm,
           Days: r
@@ -126,24 +137,24 @@ export default async function InvoicePage({
             : null,
         }).map(([k, v]) => (
           <div key={k}>
-            <dt className="text-sm text-[var(--muted)]">{k}</dt>
+            <dt className="text-sm text-[var(--muted)]">{translateFieldLabel(tFields, k)}</dt>
             <dd>{v ?? "—"}</dd>
           </div>
         ))}
       </dl>
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <table className="w-full text-start">
           <thead>
             <tr>
-              <th className="p-2">Component</th>
-              <th className="p-2">Description</th>
-              <th className="p-2">OMR</th>
+              <th className="p-2 text-start">{tInvoices("componentCol")}</th>
+              <th className="p-2 text-start">{tCommon("description")}</th>
+              <th className="p-2 text-start">{tCommon("omr")}</th>
             </tr>
           </thead>
           <tbody>
             {snapshot.charges?.map((ch) => (
               <tr key={ch.id}>
-                <td className="p-2">{ch.component}</td>
+                <td className="p-2">{translateStatus(tStatus, ch.component)}</td>
                 <td className="p-2">{ch.description}</td>
                 <td className="p-2">{omrInput(ch.amountBaisa)}</td>
               </tr>
@@ -170,18 +181,22 @@ export default async function InvoicePage({
           "Paybacks at issue": snapshot.paymentTotals?.paybacks ?? 0,
         }).map(([k, v]) => (
           <div key={k}>
-            {k}: <strong>OMR {omrInput(v)}</strong>
+            {translateFieldLabel(tFields, k)}:{" "}
+            <strong>
+              {tCommon("omr")} {omrInput(v)}
+            </strong>
           </div>
         ))}
       </dl>
       {!!snapshot.transfers?.length && (
         <section>
-          <h2 className="text-xl font-semibold">Vehicle Transfer History</h2>
+          <h2 className="text-xl font-semibold">{tInvoices("vehicleTransferHistory")}</h2>
           {snapshot.transfers.map((t) => (
             <p key={t.id} className="mt-2">
-              {formatOmanDateTime(new Date(t.transferredAt))} Oman ·{" "}
-              {t.snapshot.previousVehicle?.registrationNumber} ({t.startingKm}–{t.endingKm} KM) →{" "}
-              {t.snapshot.newVehicle?.registrationNumber} (starting {t.newStartingKm} KM)
+              {formatOmanDateTime(new Date(t.transferredAt))} {tCommon("omanTime")} ·{" "}
+              {t.snapshot.previousVehicle?.registrationNumber} ({t.startingKm}–{t.endingKm}{" "}
+              {tCommon("km")}) → {t.snapshot.newVehicle?.registrationNumber} (
+              {tInvoices("transferStarting", { km: t.newStartingKm })})
             </p>
           ))}
         </section>
@@ -206,10 +221,11 @@ export default async function InvoicePage({
           <VoidInvoiceForm invoiceId={i.id} />
         )}
       <section className="print:hidden">
-        <h2 className="text-xl font-semibold">Invoice History</h2>
+        <h2 className="text-xl font-semibold">{tInvoices("invoiceHistory")}</h2>
         {history.map((h) => (
           <p key={h.id} className="mt-3">
-            {formatOmanDateTime(h.createdAt)} Oman · {h.action} · {h.reason}
+            {formatOmanDateTime(h.createdAt)} {tCommon("omanTime")} ·{" "}
+            {translateStatus(tStatus, h.action)} · {h.reason}
           </p>
         ))}
       </section>

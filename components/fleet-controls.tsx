@@ -1,17 +1,7 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-
-const STATUS_FILTERS = [
-  ["all", "All vehicles"],
-  ["available", "Available"],
-  ["on_rent", "On Rent"],
-  ["reserved", "Reserved"],
-  ["blocked", "Service / Transfer"],
-  ["inactive", "Inactive"],
-  ["mulkiya_expired", "Mulkiya expired"],
-  ["insurance_expired", "Insurance expired"],
-] as const;
 
 type Option = { id: string; name: string };
 type ModelOption = Option & { brandId: string };
@@ -28,6 +18,10 @@ export function FleetControls({
   brands?: Option[];
   models?: ModelOption[];
 }) {
+  const tFleet = useTranslations("fleet");
+  const tCommon = useTranslations("common");
+  const tFilters = useTranslations("filters");
+  const tStatus = useTranslations("status");
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -40,6 +34,17 @@ export function FleetControls({
   const branch = params.get("branch") ?? "";
   const brand = params.get("brand") ?? "";
   const model = params.get("model") ?? "";
+
+  const statusFilters = [
+    ["all", tFleet("filterAll")],
+    ["available", tStatus("AVAILABLE")],
+    ["on_rent", tStatus("ON_RENT")],
+    ["reserved", tStatus("RESERVED")],
+    ["blocked", tStatus("SERVICE_OR_TRANSFER")],
+    ["inactive", tStatus("INACTIVE")],
+    ["mulkiya_expired", tFleet("filterMulkiyaExpired")],
+    ["insurance_expired", tFleet("filterInsuranceExpired")],
+  ] as const;
 
   const visibleModels = useMemo(() => {
     if (!brand) return models;
@@ -80,7 +85,7 @@ export function FleetControls({
     <div className="mt-6 space-y-3" aria-busy={pending}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-xs text-[var(--muted)]">
-          Search
+          {tCommon("search")}
           <input
             value={query}
             onChange={(event) => {
@@ -89,13 +94,13 @@ export function FleetControls({
               if (timer.current) clearTimeout(timer.current);
               timer.current = setTimeout(() => updateParams({ q: value }), 300);
             }}
-            placeholder="SI no., registration, brand, model"
+            placeholder={tFleet("searchPlaceholder")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
 
         <label className="text-xs text-[var(--muted)]">
-          Registration number
+          {tFilters("registrationNumber")}
           <input
             value={registration}
             onChange={(event) => {
@@ -104,19 +109,19 @@ export function FleetControls({
               if (timer.current) clearTimeout(timer.current);
               timer.current = setTimeout(() => updateParams({ registration: value }), 300);
             }}
-            placeholder="Filter by plate / reg no."
+            placeholder={tFleet("regPlaceholder")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
 
         <label className="text-xs text-[var(--muted)]">
-          Branch
+          {tFilters("branch")}
           <select
             value={branch}
             onChange={(event) => updateParams({ branch: event.target.value })}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All branches</option>
+            <option value="">{tCommon("allBranches")}</option>
             {branches.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.code}
@@ -126,13 +131,13 @@ export function FleetControls({
         </label>
 
         <label className="text-xs text-[var(--muted)]">
-          Brand
+          {tFilters("brand")}
           <select
             value={brand}
             onChange={(event) => updateParams({ brand: event.target.value, model: "" })}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All brands</option>
+            <option value="">{tCommon("allBrands")}</option>
             {brands.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name}
@@ -142,13 +147,13 @@ export function FleetControls({
         </label>
 
         <label className="text-xs text-[var(--muted)]">
-          Model
+          {tFilters("model")}
           <select
             value={model}
             onChange={(event) => updateParams({ model: event.target.value })}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All models</option>
+            <option value="">{tCommon("allModels")}</option>
             {visibleModels.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name}
@@ -159,7 +164,7 @@ export function FleetControls({
       </div>
 
       <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 [overscroll-behavior-inline:contain]">
-        {STATUS_FILTERS.map(([value, label]) => (
+        {statusFilters.map(([value, label]) => (
           <button
             key={value}
             type="button"
@@ -188,27 +193,27 @@ export function FleetControls({
             }}
             className="min-h-10 shrink-0 rounded-full px-3 text-sm text-[var(--accent)]"
           >
-            Clear all
+            {tCommon("clearAll")}
           </button>
         )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--muted)]">
         <p role="status">
-          {pending ? "Updating vehicle overview…" : `${total} vehicle${total === 1 ? "" : "s"}`}
+          {pending ? tFleet("updatingOverview") : tFleet("vehiclesCount", { count: total })}
         </p>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            Rented (Red)
+            {tFleet("legendRented")}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-white" />
-            Available (White)
+            {tFleet("legendAvailable")}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-            Reserved
+            {tFleet("legendReserved")}
           </span>
         </div>
       </div>

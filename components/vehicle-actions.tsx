@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   deleteVehicleAction,
@@ -9,6 +10,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/components/toast";
 import { VehicleWizard } from "@/components/vehicle-wizard";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 
 type Details = Awaited<ReturnType<typeof getVehicleDetailsAction>>;
 const date = (value: unknown) => (value ? String(value).slice(0, 10) : "");
@@ -68,6 +70,11 @@ export function VehicleActions({
   registration: string;
   active: boolean;
 }) {
+  const t = useTranslations();
+  const tFleet = useTranslations("fleet");
+  const tWizard = useTranslations("fleet.wizard");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [mode, setMode] = useState<"view" | "edit" | null>(null);
   const [data, setData] = useState<Details | null>(null);
   const [error, setError] = useState("");
@@ -85,9 +92,9 @@ export function VehicleActions({
       try {
         setData(await getVehicleDetailsAction(id));
       } catch (cause) {
-        setError(
-          cause instanceof Error ? cause.message : "We could not load this vehicle. Please retry.",
-        );
+        const raw =
+          cause instanceof Error ? cause.message : "We could not load this vehicle. Please retry.";
+        setError(translateValidation(t, raw));
       }
     });
   const remove = async () => {
@@ -127,8 +134,8 @@ export function VehicleActions({
       <div className="flex items-center justify-center gap-1">
         <button
           type="button"
-          aria-label={`View ${name}`}
-          title="View vehicle"
+          aria-label={`${tCommon("view")} ${name}`}
+          title={tCommon("view")}
           onClick={() => open("view")}
           className="min-h-10 min-w-10 rounded-lg text-[var(--accent)]"
         >
@@ -143,12 +150,12 @@ export function VehicleActions({
         </button>
         <button
           type="button"
-          aria-label={`Edit ${name}`}
-          title="Edit vehicle"
+          aria-label={`${tCommon("edit")} ${name}`}
+          title={tCommon("edit")}
           onClick={() => open("edit")}
           className="min-h-10 rounded-lg px-2 text-sm font-medium text-[var(--accent)]"
         >
-          Edit
+          {tCommon("edit")}
         </button>
         <ConfirmDialog
           trigger={
@@ -159,36 +166,44 @@ export function VehicleActions({
             >
               {changingStatus
                 ? isActive
-                  ? "Deactivating…"
-                  : "Activating…"
+                  ? tCommon("deactivating")
+                  : tCommon("activating")
                 : isActive
-                  ? "Deactivate"
-                  : "Activate"}
+                  ? tCommon("deactivate")
+                  : tCommon("activate")}
             </button>
           }
-          title={`${isActive ? "Deactivate" : "Activate"} ${name}?`}
-          description={`Registration: ${registration}. ${isActive ? "Deactivation is blocked while a vehicle is reserved, rented, overdue, transferred, or in service." : "This will make the vehicle available for use."}`}
-          confirmLabel={isActive ? "Deactivate" : "Activate"}
-          processingLabel={isActive ? "Deactivating…" : "Activating…"}
+          title={
+            isActive
+              ? tFleet("deactivateVehicleTitle", { name })
+              : tFleet("activateVehicleTitle", { name })
+          }
+          description={
+            isActive
+              ? tFleet("deactivateVehicleDesc", { reg: registration })
+              : tFleet("activateVehicleDesc", { reg: registration })
+          }
+          confirmLabel={isActive ? tCommon("deactivate") : tCommon("activate")}
+          processingLabel={isActive ? tCommon("deactivating") : tCommon("activating")}
           onConfirm={changeStatus}
         />
         <ConfirmDialog
           trigger={
             <button
               type="button"
-              aria-label={`Delete ${name}`}
-              title="Delete vehicle"
+              aria-label={`${tCommon("delete")} ${name}`}
+              title={tCommon("delete")}
               disabled={deleting}
               className="min-h-10 rounded-lg px-2 text-sm font-medium text-red-300 disabled:opacity-60"
             >
-              Delete
+              {tCommon("delete")}
             </button>
           }
-          title={`Delete ${name}?`}
-          description={`Registration: ${registration}. This permanently removes a vehicle with no operational history.`}
-          confirmLabel={deleting ? "Deleting…" : "Delete"}
+          title={tFleet("deleteVehicleTitle", { name })}
+          description={tFleet("deleteVehicleDesc", { reg: registration })}
+          confirmLabel={deleting ? tCommon("deleting") : tCommon("delete")}
           pending={deleting}
-          processingLabel="Deleting…"
+          processingLabel={tCommon("deleting")}
           onConfirm={remove}
         />
       </div>
@@ -196,33 +211,33 @@ export function VehicleActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`${mode === "edit" ? "Edit" : "Vehicle details"} for ${name}`}
+          aria-label={name}
           onMouseDown={() => !loading && setMode(null)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/70 sm:place-items-center sm:p-4"
         >
           <section
             role="document"
             onMouseDown={(event) => event.stopPropagation()}
-            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:max-h-[90vh] sm:max-w-4xl sm:rounded-2xl sm:p-6"
+            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-start sm:max-h-[90vh] sm:max-w-4xl sm:rounded-2xl sm:p-6"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm text-[var(--accent)]">
-                  VEHICLE {mode === "edit" ? "EDIT" : "DETAILS"}
+                  {mode === "edit" ? tFleet("vehicleEditEyebrow") : tFleet("vehicleDetailsEyebrow")}
                 </p>
                 <h2 className="break-words text-xl font-semibold">{name}</h2>
                 <p className="text-sm text-[var(--muted)]">{registration}</p>
               </div>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={tCommon("close")}
                 onClick={() => setMode(null)}
                 className="min-h-11 px-3"
               >
                 ×
               </button>
             </div>
-            {loading && <p className="mt-8 text-[var(--muted)]">Loading vehicle…</p>}
+            {loading && <p className="mt-8 text-[var(--muted)]">{tFleet("loadingVehicle")}</p>}
             {error && (
               <div className="mt-6">
                 <p role="alert" className="text-red-300">
@@ -233,7 +248,7 @@ export function VehicleActions({
                   onClick={() => open(mode)}
                   className="mt-3 min-h-11 rounded-lg border border-[var(--edge)] px-4"
                 >
-                  Retry
+                  {tCommon("retry")}
                 </button>
               </div>
             )}
@@ -264,21 +279,30 @@ export function VehicleActions({
                 )}
                 <div className="grid gap-5 sm:grid-cols-2">
                   {[
-                    ["Vehicle number", data.number],
-                    ["Brand & model", `${data.brand} ${data.model}`],
-                    ["Registration", data.registration],
-                    ["Chassis", data.chassis],
-                    ["Engine", data.engine],
-                    ["Branch", data.branch],
-                    ["Status", data.status],
-                    ["Odometer", `${data.odometer.toLocaleString()} km`],
+                    [tWizard("vehicleNumber"), data.number],
+                    [`${tWizard("brand")} / ${tWizard("model")}`, `${data.brand} ${data.model}`],
+                    [tCommon("registration"), data.registration],
+                    [tWizard("chassisNumber"), data.chassis],
+                    [tWizard("engineNumber"), data.engine],
+                    [tCommon("branch"), data.branch],
+                    [tCommon("status"), translateStatus(tStatus, data.status)],
                     [
-                      "Insurance",
+                      tWizard("currentOdometerKm"),
+                      `${data.odometer.toLocaleString()} ${tCommon("km")}`,
+                    ],
+                    [
+                      tFleet("insurance"),
                       `${data.insuranceCompany ?? "—"} · ${data.insuranceUntil ?? "—"}`,
                     ],
-                    ["Mulkiya", data.mulkiyaUntil ?? "—"],
-                    ["Service interval", data.engineInterval ? `${data.engineInterval} km` : "—"],
-                    ["Gear-oil interval", data.gearInterval ? `${data.gearInterval} km` : "—"],
+                    [tFleet("mulkiya"), data.mulkiyaUntil ?? "—"],
+                    [
+                      tWizard("engineServiceIntervalKm"),
+                      data.engineInterval ? `${data.engineInterval} ${tCommon("km")}` : "—",
+                    ],
+                    [
+                      tWizard("gearOilIntervalKm"),
+                      data.gearInterval ? `${data.gearInterval} ${tCommon("km")}` : "—",
+                    ],
                   ].map(([label, value]) => (
                     <div key={String(label)} className="border-b border-[var(--edge)] pb-3">
                       <p className="text-xs text-[var(--muted)]">{label}</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { OmanDateTimePicker } from "@/components/oman-datetime-picker";
 import {
@@ -12,6 +13,7 @@ import {
   type ActivityScopeMode,
 } from "@/features/daily-activity/calculations";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
+import { translateSafe } from "@/lib/i18n-helpers";
 
 type BranchOption = { id: string; name: string; code: string };
 type UserOption = { id: string; displayName: string; username: string };
@@ -38,6 +40,8 @@ export function DailyActivityControls({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const tActivity = useTranslations("activity");
+  const tCommon = useTranslations("common");
   const [pending, startTransition] = useTransition();
 
   const [q, setQ] = useState(initialFilters.q);
@@ -149,29 +153,29 @@ export function DailyActivityControls({
     >
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <label className="grid min-w-0 gap-1 text-sm">
-          <span>Keyword search</span>
+          <span>{tActivity("keywordSearch")}</span>
           <input
             type="search"
             name="q"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Agreement, vehicle, customer, receipt, user…"
-            aria-label="Search daily activity"
+            placeholder={tActivity("searchPlaceholder")}
+            aria-label={tActivity("keywordSearch")}
             className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
 
         <label className="grid min-w-0 gap-1 text-sm">
-          <span>Branch</span>
+          <span>{tCommon("branch")}</span>
           <select
             name="branchId"
-            aria-label="Filter by branch"
+            aria-label={tCommon("branch")}
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
             className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
             <option value="">
-              {scopeMode === "ALL" ? "All branches" : "All permitted branches"}
+              {scopeMode === "ALL" ? tCommon("allBranches") : tCommon("allPermittedBranches")}
             </option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
@@ -182,30 +186,34 @@ export function DailyActivityControls({
         </label>
 
         <div className="grid min-w-0 gap-1 text-sm">
-          <label htmlFor="activityUser">User</label>
+          <label htmlFor="activityUser">{tCommon("user")}</label>
           {scopeMode === "SELF" ? (
             <select
               id="activityUser"
               name="userId"
-              aria-label="Filter by user"
+              aria-label={tCommon("user")}
               value={users[0]?.id ?? ""}
               disabled
               className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--muted)] opacity-80"
             >
               <option value={users[0]?.id ?? ""}>
-                {users[0] ? `${users[0].displayName} (Own activity)` : "Own activity"}
+                {users[0]
+                  ? tActivity("ownActivityOption", { name: users[0].displayName })
+                  : tActivity("scopeSelfTitle")}
               </option>
             </select>
           ) : (
             <select
               id="activityUser"
               name="userId"
-              aria-label="Filter by user"
+              aria-label={tCommon("user")}
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
             >
-              <option value="">{scopeMode === "ALL" ? "All users" : "All permitted users"}</option>
+              <option value="">
+                {scopeMode === "ALL" ? tCommon("allUsers") : tCommon("allPermittedUsers")}
+              </option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.displayName} (@{user.username})
@@ -216,29 +224,29 @@ export function DailyActivityControls({
         </div>
 
         <label className="grid min-w-0 gap-1 text-sm">
-          <span>Activity type</span>
+          <span>{tActivity("activityType")}</span>
           <select
             name="activityType"
-            aria-label="Filter by activity type"
+            aria-label={tActivity("activityType")}
             value={activityType}
             onChange={(e) => setActivityType(e.target.value)}
             className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="ALL">All activity types</option>
+            <option value="ALL">{tActivity("allActivityTypes")}</option>
             {availableCategories.length > 0 && (
-              <optgroup label="By category">
+              <optgroup label={tActivity("byCategory")}>
                 {availableCategories.map((cat) => (
                   <option key={cat} value={cat}>
-                    {ACTIVITY_CATEGORY_LABELS[cat]}
+                    {translateSafe(tActivity, `categories.${cat}`, ACTIVITY_CATEGORY_LABELS[cat])}
                   </option>
                 ))}
               </optgroup>
             )}
             {allowedEvents.length > 0 && (
-              <optgroup label="By specific action">
+              <optgroup label={tActivity("byAction")}>
                 {allowedEvents.map((ev) => (
                   <option key={ev} value={ev}>
-                    {ACTIVITY_EVENT_META[ev].label}
+                    {translateSafe(tActivity, `events.${ev}`, ACTIVITY_EVENT_META[ev].label)}
                   </option>
                 ))}
               </optgroup>
@@ -251,7 +259,7 @@ export function DailyActivityControls({
         <OmanDateTimePicker
           id="activityFrom"
           name="from"
-          label="From Date & Time (Oman)"
+          label={tCommon("fromDateTime")}
           value={from}
           onChange={setFrom}
         />
@@ -259,7 +267,7 @@ export function DailyActivityControls({
         <OmanDateTimePicker
           id="activityTo"
           name="to"
-          label="To Date & Time (Oman)"
+          label={tCommon("toDateTime")}
           value={to}
           onChange={setTo}
           min={from || undefined}
@@ -271,7 +279,7 @@ export function DailyActivityControls({
             disabled={pending}
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-black disabled:opacity-60 sm:flex-none"
           >
-            {pending ? "Filtering…" : "Apply Filters"}
+            {pending ? tCommon("filtering") : tCommon("applyFilters")}
           </button>
           {hasFilters && (
             <button
@@ -280,34 +288,34 @@ export function DailyActivityControls({
               disabled={pending}
               className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm text-[var(--muted)] hover:text-white"
             >
-              Clear
+              {tCommon("clear")}
             </button>
           )}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-[var(--edge)] pt-3 text-xs">
-        <span className="text-[var(--muted)]">Quick range (Oman):</span>
+        <span className="text-[var(--muted)]">{tCommon("quickRange")}</span>
         <button
           type="button"
           onClick={() => applyDatePreset("today")}
           className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
         >
-          Today
+          {tCommon("today")}
         </button>
         <button
           type="button"
           onClick={() => applyDatePreset("7d")}
           className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
         >
-          Last 7 Days
+          {tCommon("last7Days")}
         </button>
         <button
           type="button"
           onClick={() => applyDatePreset("month")}
           className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
         >
-          This Month
+          {tCommon("thisMonth")}
         </button>
         {(from || to) && (
           <button
@@ -315,7 +323,7 @@ export function DailyActivityControls({
             onClick={() => applyDatePreset("all")}
             className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
           >
-            All Time
+            {tCommon("allTime")}
           </button>
         )}
       </div>

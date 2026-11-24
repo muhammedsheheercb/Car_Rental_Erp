@@ -1,17 +1,21 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 const fields = [
-  ["registration", "Registration number"],
-  ["branch", "Branch"],
-  ["user", "User"],
-  ["brand", "Brand"],
-  ["model", "Model"],
+  ["registration", "registrationNumber"],
+  ["branch", "branch"],
+  ["user", "user"],
+  ["brand", "brand"],
+  ["model", "model"],
 ] as const;
 
 export function OperationalFilters() {
+  const tNav = useTranslations("nav");
+  const tFilters = useTranslations("filters");
+  const tCommon = useTranslations("common");
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -44,16 +48,14 @@ export function OperationalFilters() {
       className="relative"
     >
       <summary className="min-h-11 cursor-pointer list-none content-center px-2 text-sm text-[var(--muted)]">
-        Filters
+        {tNav("filters")}
       </summary>
       <div className="absolute end-0 top-12 z-40 w-[min(22rem,calc(100vw-1.5rem))] border border-[var(--edge)] bg-[var(--raised)] p-3 shadow-2xl">
-        <p className="mb-2 text-xs text-[var(--muted)]">
-          Operational filters apply to modules where relevant.
-        </p>
+        <p className="mb-2 text-xs text-[var(--muted)]">{tFilters("operationalHint")}</p>
         <div className="grid gap-2">
-          {fields.map(([name, label]) => (
+          {fields.map(([name, labelKey]) => (
             <label key={name} className="grid gap-1 text-xs">
-              {label}
+              {tFilters(labelKey)}
               <input
                 value={values[name] ?? ""}
                 onChange={(event) => {
@@ -77,9 +79,9 @@ export function OperationalFilters() {
             }}
             className="min-h-10 px-2 text-sm text-[var(--accent)]"
           >
-            Clear filters
+            {tCommon("clearFilters")}
           </button>
-          {pending && <span className="text-xs text-[var(--muted)]">Updating…</span>}
+          {pending && <span className="text-xs text-[var(--muted)]">{tCommon("updating")}</span>}
         </div>
       </div>
     </details>

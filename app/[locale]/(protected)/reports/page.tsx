@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { ReportsControls } from "@/components/reports-controls";
 import type { ReportBadgeTone, ReportSummaryCard } from "@/features/reports/definitions";
 import { loadReport } from "@/features/reports/service";
 import { can, requireIdentity } from "@/lib/auth";
+import {
+  translateReportColumn,
+  translateReportSummary,
+  translateSafe,
+  translateStatus,
+} from "@/lib/i18n-helpers";
 
 function badgeClass(tone: ReportBadgeTone): string {
   switch (tone) {
@@ -59,7 +66,15 @@ export default async function ReportsPage({
     page?: string;
   }>;
 }) {
-  const [actor, { locale }, query] = await Promise.all([requireIdentity(), params, searchParams]);
+  const [actor, { locale }, query, tReports, tCommon, tStatus, tActivity] = await Promise.all([
+    requireIdentity(),
+    params,
+    searchParams,
+    getTranslations("reports"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("activity"),
+  ]);
   if (!can(actor, "reports", "read")) redirect(`/${locale}/forbidden`);
 
   const requestedPage = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
@@ -81,6 +96,67 @@ export default async function ReportsPage({
 
   const canPrint = can(actor, "reports", "print");
   const canExport = can(actor, "reports", "export");
+  const slug = data.definition.slug;
+  const reportTitle = translateSafe(tReports, `catalog.${slug}.title`, data.definition.title);
+  const reportDescription = translateSafe(
+    tReports,
+    `catalog.${slug}.description`,
+    data.definition.description,
+  );
+
+  const translateSummaryValue = (card: ReportSummaryCard) => {
+    if (card.label !== "Visibility Scope") return card.value;
+    if (card.value === "Super Admin") return tStatus("SUPER_ADMIN");
+    if (card.value === "All Branches") return tCommon("allBranches");
+    if (card.value === "Permitted Branches" || card.value === "Permitted Scope") {
+      return tActivity("scopeBranchTitle");
+    }
+    if (card.value === "Own Activity") return tActivity("scopeSelfTitle");
+    return card.value;
+  };
+
+  const translateSummaryDetail = (detail: string) => {
+    const voidMatch = detail.match(/^(\d+) void excluded from OMR totals$/);
+    if (voidMatch) return tReports("summaryDetails.voidExcludedDetail", { count: voidMatch[1] });
+    const retCancelMatch = detail.match(/^(\d+) returned · (\d+) cancelled$/);
+    if (retCancelMatch) {
+      return tReports("summaryDetails.returnedCancelledDetail", {
+        returned: retCancelMatch[1],
+        cancelled: retCancelMatch[2],
+      });
+    }
+    const bookingsMatch = detail.match(/^(\d+) non-cancelled bookings$/);
+    if (bookingsMatch) {
+      return tReports("summaryDetails.nonCancelledBookingsDetail", { count: bookingsMatch[1] });
+    }
+    const paybackMatch = detail.match(/^Paybacks\/reversals: (.+)$/);
+    if (paybackMatch) {
+      return tReports("summaryDetails.paybacksReversalsDetail", { amount: paybackMatch[1] });
+    }
+    const modeMatch = detail.match(/^Mode: (.+)$/);
+    if (modeMatch) {
+      return tReports("summaryDetails.modeDetail", {
+        mode: translateStatus(tStatus, modeMatch[1]),
+      });
+    }
+    return translateSafe(tReports, `summaryDetails.${detail.replaceAll(".", "")}`, detail);
+  };
+
+  const translateCellValue = (colKey: string, text: string, isBadge: boolean) => {
+    if (!text || text === "—") return text;
+    if (
+      isBadge ||
+      colKey === "status" ||
+      colKey === "mode" ||
+      colKey === "paidBy" ||
+      colKey === "type" ||
+      colKey === "direction" ||
+      colKey === "serviceType"
+    ) {
+      return translateStatus(tStatus, text);
+    }
+    return text;
+  };
 
   const buildQueryParams = (overrides: { page?: number; includeLocale?: boolean } = {}) => {
     const p = new URLSearchParams();
@@ -107,9 +183,11 @@ export default async function ReportsPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">REPORTS / #{data.definition.number} OF 12</p>
-          <h1 className="mt-2 text-3xl font-semibold">{data.definition.title}</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">{data.definition.description}</p>
+          <p className="text-sm text-[var(--accent)]">
+            {tReports("eyebrow", { number: data.definition.number })}
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold">{reportTitle}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">{reportDescription}</p>
         </div>
 
         <div className="flex flex-wrap gap-2 print:hidden">
@@ -119,7 +197,7 @@ export default async function ReportsPage({
               download
               className="min-h-11 content-center rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-4 text-sm font-medium text-[var(--ink)] hover:border-[var(--accent)]"
             >
-              Export CSV
+              {tCommon("exportCsv")}
             </a>
           )}
           {canPrint && (
@@ -127,7 +205,7 @@ export default async function ReportsPage({
               href={printHref as never}
               className="min-h-11 content-center rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
             >
-              Print A4 Report
+              {tReports("printReport")}
             </Link>
           )}
         </div>
@@ -141,7 +219,7 @@ export default async function ReportsPage({
 
       {/* Summary Totals */}
       <section
-        aria-label="Report summary totals"
+        aria-label={tReports("summaryTotals")}
         className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         {data.summary.map((card) => (
@@ -149,13 +227,19 @@ export default async function ReportsPage({
             key={card.label}
             className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4"
           >
-            <p className="text-xs text-[var(--muted)]">{card.label}</p>
+            <p className="text-xs text-[var(--muted)]">
+              {translateReportSummary(tReports, card.label)}
+            </p>
             <p
               className={`mt-1 font-mono text-xl font-semibold tabular-nums ${summaryValueClass(card.tone)}`}
             >
-              {card.value}
+              {translateSummaryValue(card)}
             </p>
-            {card.detail && <p className="mt-1 text-xs text-[var(--muted)]">{card.detail}</p>}
+            {card.detail && (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {translateSummaryDetail(card.detail)}
+              </p>
+            )}
           </div>
         ))}
       </section>
@@ -164,16 +248,21 @@ export default async function ReportsPage({
       <section className="space-y-4 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">{data.definition.title}</h2>
+            <h2 className="text-lg font-semibold">{reportTitle}</h2>
             <p className="text-xs text-[var(--muted)]">
               {data.totalRows
-                ? `Showing ${rangeStart}–${rangeEnd} of ${data.totalRows} matching record${data.totalRows === 1 ? "" : "s"}`
-                : "0 matching records"}{" "}
-              · All timestamps in Oman time (Asia/Muscat)
+                ? tReports("matchingCount", {
+                    start: rangeStart,
+                    end: rangeEnd,
+                    total: data.totalRows,
+                  })
+                : tReports("zeroMatching")}{" "}
+              · {tReports("allTimestampsOman")}
             </p>
           </div>
           <span className="text-xs text-[var(--muted)]">
-            Page {data.page} of {data.totalPages} ({data.pageSize} per page)
+            {tCommon("pageOf", { page: data.page, total: data.totalPages })} (
+            {tCommon("perPage", { count: data.pageSize })})
           </span>
         </div>
 
@@ -183,7 +272,7 @@ export default async function ReportsPage({
               <tr>
                 {data.columns.map((col) => (
                   <th key={col.key} className={`px-3 py-3 ${alignClass(col.align)}`}>
-                    {col.label}
+                    {translateReportColumn(tReports, col.label)}
                   </th>
                 ))}
               </tr>
@@ -196,6 +285,11 @@ export default async function ReportsPage({
                 >
                   {data.columns.map((col) => {
                     const cell = row.cells[col.key] ?? { text: "—" };
+                    const displayText = translateCellValue(
+                      col.key,
+                      cell.text,
+                      Boolean(cell.badgeTone),
+                    );
                     return (
                       <td
                         key={col.key}
@@ -207,17 +301,17 @@ export default async function ReportsPage({
                           <span
                             className={`inline-flex rounded-full border px-2.5 py-0.5 font-sans text-xs font-medium ${badgeClass(cell.badgeTone)}`}
                           >
-                            {cell.text}
+                            {displayText}
                           </span>
                         ) : cell.href ? (
                           <Link
                             href={cell.href as never}
                             className="text-[var(--accent)] hover:underline"
                           >
-                            {cell.text}
+                            {displayText}
                           </Link>
                         ) : (
-                          <span>{cell.text}</span>
+                          <span>{displayText}</span>
                         )}
                         {cell.subtext && (
                           <p className="mt-0.5 font-sans text-[11px] text-[var(--muted)]">
@@ -233,18 +327,22 @@ export default async function ReportsPage({
           </table>
           {!data.rows.length && (
             <p className="p-8 text-sm text-[var(--muted)]">
-              No records match the selected filters for {data.definition.title}.
+              {tReports("noMatching", { title: reportTitle })}
             </p>
           )}
         </div>
 
         {data.totalPages > 1 && (
           <nav
-            aria-label="Report pages"
+            aria-label={reportTitle}
             className="flex flex-wrap items-center justify-between gap-3 text-sm"
           >
             <span className="text-xs text-[var(--muted)]">
-              Showing {rangeStart}–{rangeEnd} of {data.totalRows}
+              {tCommon("showingRange", {
+                start: rangeStart,
+                end: rangeEnd,
+                total: data.totalRows,
+              })}
             </span>
             <div className="flex items-center gap-2">
               {data.page > 1 && (
@@ -252,18 +350,18 @@ export default async function ReportsPage({
                   href={pageHref(data.page - 1) as never}
                   className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 hover:border-[var(--accent)]"
                 >
-                  Previous
+                  {tCommon("previous")}
                 </Link>
               )}
               <span className="px-2 text-[var(--muted)]">
-                Page {data.page} of {data.totalPages}
+                {tCommon("pageOf", { page: data.page, total: data.totalPages })}
               </span>
               {data.page < data.totalPages && (
                 <Link
                   href={pageHref(data.page + 1) as never}
                   className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 hover:border-[var(--accent)]"
                 >
-                  Next
+                  {tCommon("next")}
                 </Link>
               )}
             </div>

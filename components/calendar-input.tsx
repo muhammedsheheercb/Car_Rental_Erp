@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useRef } from "react";
 
 export function CalendarInput({
@@ -26,6 +27,7 @@ export function CalendarInput({
   className?: string;
   wrapperClassName?: string;
 }) {
+  const tCommon = useTranslations("common");
   const input = useRef<HTMLInputElement>(null);
   const openPicker = () => {
     if (disabled || readOnly) return;
@@ -59,7 +61,7 @@ export function CalendarInput({
       />
       <button
         type="button"
-        aria-label="Open calendar"
+        aria-label={tCommon("openCalendarFor", { label: tCommon("date") })}
         disabled={disabled || readOnly}
         onClick={openPicker}
         className="absolute inset-y-0 end-0 grid w-11 place-items-center text-white opacity-100 hover:text-white focus-visible:text-white active:text-white disabled:opacity-45"

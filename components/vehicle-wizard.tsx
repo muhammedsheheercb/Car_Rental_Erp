@@ -1,10 +1,12 @@
 "use client";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import {
   createVehicleAction,
   updateVehicleAction,
   uploadVehicleImageAction,
 } from "@/app/[locale]/(protected)/fleet/actions";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { CalendarInput } from "./calendar-input";
 import { DocumentPicker } from "./document-picker";
 import { SearchableCombobox } from "./searchable-combobox";
@@ -14,30 +16,30 @@ type Model = Option & { brandId: string };
 type Branch = Option & { code: string };
 const fields: Record<number, [string, string, string?][]> = {
   1: [
-    ["vehicleNumber", "Unique vehicle number"],
-    ["year", "Year", "number"],
-    ["cylinderCount", "Cylinder count", "number"],
-    ["color", "Color"],
-    ["registrationNumber", "Registration number"],
-    ["capacity", "Capacity"],
-    ["seatCount", "Seat count", "number"],
-    ["engineNumber", "Engine number"],
-    ["chassisNumber", "Chassis number"],
-    ["purchaseDate", "Purchase date", "date"],
-    ["currentOdometerKm", "Current odometer (km)", "number"],
+    ["vehicleNumber", "vehicleNumber"],
+    ["year", "year", "number"],
+    ["cylinderCount", "cylinderCount", "number"],
+    ["color", "color"],
+    ["registrationNumber", "registrationNumber"],
+    ["capacity", "capacity"],
+    ["seatCount", "seatCount", "number"],
+    ["engineNumber", "engineNumber"],
+    ["chassisNumber", "chassisNumber"],
+    ["purchaseDate", "purchaseDate", "date"],
+    ["currentOdometerKm", "currentOdometerKm", "number"],
   ],
   2: [
-    ["insuranceCompany", "Insurance company"],
-    ["insuranceNumber", "Insurance number"],
-    ["insuranceValidUntil", "Valid until", "date"],
+    ["insuranceCompany", "insuranceCompany"],
+    ["insuranceNumber", "insuranceNumber"],
+    ["insuranceValidUntil", "insuranceValidUntil", "date"],
   ],
   3: [
-    ["lastEngineServiceKm", "Last engine service (km)", "number"],
-    ["lastGearOilChangeKm", "Last gear-oil change (km)", "number"],
-    ["engineServiceIntervalKm", "Engine service interval (km)", "number"],
-    ["gearOilIntervalKm", "Gear-oil interval (km)", "number"],
-    ["mulkiyaExpiryDate", "Mulkiya expiry", "date"],
-    ["mulkiyaIssuingDetail", "Mulkiya issuing detail"],
+    ["lastEngineServiceKm", "lastEngineServiceKm", "number"],
+    ["lastGearOilChangeKm", "lastGearOilChangeKm", "number"],
+    ["engineServiceIntervalKm", "engineServiceIntervalKm", "number"],
+    ["gearOilIntervalKm", "gearOilIntervalKm", "number"],
+    ["mulkiyaExpiryDate", "mulkiyaExpiryDate", "date"],
+    ["mulkiyaIssuingDetail", "mulkiyaIssuingDetail"],
   ],
 };
 const cls = "mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3";
@@ -63,6 +65,11 @@ export function VehicleWizard({
   } | null;
   onSuccess?: (message: string) => void;
 }) {
+  const locale = useLocale();
+  const t = useTranslations();
+  const tWizard = useTranslations("fleet.wizard");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Record<string, string>>({
     fuelType: "PETROL",
@@ -76,19 +83,22 @@ export function VehicleWizard({
   } | null>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
-  const fuelOptions = ["PETROL", "DIESEL", "HYBRID", "ELECTRIC"].map((name) => ({
-    id: name,
-    name,
+  const fuelOptions = ["PETROL", "DIESEL", "HYBRID", "ELECTRIC"].map((id) => ({
+    id,
+    name: translateStatus(tStatus, id),
   }));
-  const gearboxOptions = ["AUTOMATIC", "MANUAL"].map((name) => ({ id: name, name }));
+  const gearboxOptions = ["AUTOMATIC", "MANUAL"].map((id) => ({
+    id,
+    name: translateStatus(tStatus, id),
+  }));
   const set = (name: string, value: string) => setData((old) => ({ ...old, [name]: value }));
   const visible = useMemo(
     () => models.filter((model) => model.brandId === data.brandId),
     [models, data.brandId],
   );
-  const input = ([name, label, type = "text"]: [string, string, string?]) => (
+  const input = ([name, labelKey, type = "text"]: [string, string, string?]) => (
     <label key={name} htmlFor={name} className="block text-sm">
-      {label}
+      {tWizard(labelKey)}
       {type === "date" ? (
         <CalendarInput
           id={name}
@@ -128,12 +138,12 @@ export function VehicleWizard({
       )}
     </label>
   );
-  const pricing = (period: string) => (
+  const pricing = (period: "DAILY" | "WEEKLY" | "MONTHLY") => (
     <div className="border-s-2 border-[var(--accent)] ps-4">
-      <h3>{period}</h3>
+      <h3>{translateStatus(tStatus, period)}</h3>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {["listRentBaisa", "minimumRentBaisa", "includedKm", "excessKmChargeBaisa"].map((key) =>
-          input([`${period.toLowerCase()}_${key}`, key.replace(/([A-Z])/g, " $1"), "number"]),
+        {(["listRentBaisa", "minimumRentBaisa", "includedKm", "excessKmChargeBaisa"] as const).map(
+          (key) => input([`${period.toLowerCase()}_${key}`, key, "number"]),
         )}
       </div>
     </div>
@@ -169,7 +179,7 @@ export function VehicleWizard({
           ? await updateVehicleAction(vehicleId, payload)
           : await createVehicleAction(payload);
         if (!result.ok || (!vehicleId && (!("id" in result) || !result.id))) {
-          setError(result.message);
+          setError(translateValidation(t, result.message));
           return;
         }
         const savedId =
@@ -181,35 +191,35 @@ export function VehicleWizard({
           formData.set("height", String(vehiclePhoto.height));
           const uploadResult = await uploadVehicleImageAction(savedId, formData);
           if (!uploadResult.ok) {
-            setError(
-              `Vehicle saved, but photo upload failed: ${uploadResult.message}. Edit the vehicle to retry.`,
-            );
+            setError(translateValidation(t, uploadResult.message));
             return;
           }
         }
         if (onSuccess) onSuccess(result.message);
-        else window.location.assign("/en/fleet");
+        else window.location.assign(`/${locale}/fleet`);
       } catch {
-        setError(
-          `Could not ${vehicleId ? "update" : "create"} vehicle. Check required values, uniqueness, and your price permission.`,
-        );
+        setError(translateValidation(t, "Invalid values."));
       }
     });
   return (
     <div className="mx-auto min-w-0 max-w-4xl">
-      <p className="text-sm text-[var(--accent)]">FLEET / {vehicleId ? "EDIT" : "CREATE"}</p>
-      <h1 className="mt-2 text-3xl font-semibold">{vehicleId ? "Edit vehicle" : "New vehicle"}</h1>
+      <p className="text-sm text-[var(--accent)]">
+        {vehicleId ? tWizard("eyebrowEdit") : tWizard("eyebrowCreate")}
+      </p>
+      <h1 className="mt-2 text-3xl font-semibold">
+        {vehicleId ? tWizard("editTitle") : tWizard("newTitle")}
+      </h1>
       <div className="mt-6 flex max-w-full gap-2 overflow-x-auto pb-1 text-xs [scrollbar-width:thin] sm:mt-7 sm:grid sm:grid-cols-4 sm:overflow-visible">
-        {["Details", "Insurance", "Service", "Rental"].map((name, i) => (
+        {(["step1", "step2", "step3", "step4"] as const).map((stepKey, i) => (
           <div
-            key={name}
+            key={stepKey}
             className={`min-w-[7rem] sm:min-w-0 ${
               step === i + 1
                 ? "border-b-2 border-[var(--accent)] pb-2"
                 : "border-b border-[var(--edge)] pb-2 text-[var(--muted)]"
             }`}
           >
-            {i + 1}. {name}
+            {tWizard(stepKey)}
           </div>
         ))}
       </div>
@@ -217,17 +227,17 @@ export function VehicleWizard({
         {step === 1 && (
           <div className="space-y-4">
             <DocumentPicker
-              label="Vehicle photo (optional)"
+              label={tWizard("vehiclePhoto")}
               existing={existingImage ?? undefined}
               existingUrl={existingImage ? `/api/vehicle-images/${existingImage.id}` : undefined}
-              hint="Shown on the Vehicle Overview table. JPEG, PNG, or WebP compressed automatically before private R2 upload."
+              hint={tWizard("vehiclePhotoHint")}
               onChange={(file, width, height) =>
                 setVehiclePhoto(file ? { file, width, height } : null)
               }
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <SearchableCombobox
-                label="Brand"
+                label={tWizard("brand")}
                 value={data.brandId ?? ""}
                 options={brands}
                 onChange={(id) => {
@@ -236,20 +246,20 @@ export function VehicleWizard({
                 }}
               />
               <SearchableCombobox
-                label="Model"
+                label={tWizard("model")}
                 value={data.modelId ?? ""}
                 options={visible}
                 disabled={!data.brandId}
                 onChange={(id) => set("modelId", id)}
               />
               <SearchableCombobox
-                label="Fuel"
+                label={tWizard("fuel")}
                 value={data.fuelType}
                 options={fuelOptions}
                 onChange={(id) => set("fuelType", id)}
               />
               <SearchableCombobox
-                label="Gearbox"
+                label={tWizard("gearbox")}
                 value={data.gearbox}
                 options={gearboxOptions}
                 onChange={(id) => set("gearbox", id)}
@@ -263,7 +273,7 @@ export function VehicleWizard({
           <div className="grid gap-4 sm:grid-cols-2">
             {fields[3].map(input)}
             <SearchableCombobox
-              label="Assigned branch"
+              label={tWizard("assignedBranch")}
               value={data.branchId ?? ""}
               options={branches.map((branch) => ({
                 id: branch.id,
@@ -275,18 +285,14 @@ export function VehicleWizard({
         )}
         {step === 4 && (
           <div className="space-y-6">
-            {pricing("Daily")}
-            {pricing("Weekly")}
-            {pricing("Monthly")}
-            {input(["lateFeeBaisa", "Hourly late fee (baisa)", "number"])}
-            {input(["lateGraceMinutes", "Free late grace (minutes, default 60)", "number"])}
-            {input(["lateWindowHours", "Chargeable hourly window (hours, default 4)", "number"])}
-            {input([
-              "overdueFineBaisa",
-              "Fine per completed overdue day (baisa, default 5000)",
-              "number",
-            ])}
-            {input(["overrideReason", "Price override reason (only below minimum)"])}
+            {pricing("DAILY")}
+            {pricing("WEEKLY")}
+            {pricing("MONTHLY")}
+            {input(["lateFeeBaisa", "lateFeeBaisa", "number"])}
+            {input(["lateGraceMinutes", "lateGraceMinutes", "number"])}
+            {input(["lateWindowHours", "lateWindowHours", "number"])}
+            {input(["overdueFineBaisa", "overdueFineBaisa", "number"])}
+            {input(["overrideReason", "overrideReason"])}
           </div>
         )}
         <div className="mt-8 flex flex-col-reverse gap-3 min-[360px]:flex-row min-[360px]:justify-between">
@@ -296,7 +302,7 @@ export function VehicleWizard({
             onClick={() => setStep(step - 1)}
             className="min-h-11 w-full rounded-lg border border-[var(--edge)] px-4 min-[360px]:w-auto"
           >
-            Back
+            {tCommon("back")}
           </button>
           {step < 4 ? (
             <button
@@ -304,7 +310,7 @@ export function VehicleWizard({
               onClick={() => setStep(step + 1)}
               className="min-h-11 w-full rounded-lg bg-[var(--accent)] px-4 font-semibold text-black min-[360px]:w-auto"
             >
-              Continue
+              {tCommon("continue")}
             </button>
           ) : (
             <button
@@ -315,11 +321,11 @@ export function VehicleWizard({
             >
               {pending
                 ? vehicleId
-                  ? "Updating…"
-                  : "Saving…"
+                  ? tCommon("updating")
+                  : tCommon("saving")
                 : vehicleId
-                  ? "Update vehicle"
-                  : "Create vehicle"}
+                  ? tWizard("updateVehicle")
+                  : tWizard("createVehicle")}
             </button>
           )}
         </div>

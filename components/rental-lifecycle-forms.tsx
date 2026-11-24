@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useState } from "react";
 import { rentalLifecycleAction } from "@/app/[locale]/(protected)/rentals/lifecycle-actions";
 import type { RentalPeriod } from "@/features/rentals/booking-calculations";
@@ -6,6 +7,7 @@ import {
   calculateExpectedReturn,
   formatOmanDateTime,
 } from "@/features/rentals/booking-calculations";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { compressImageFile } from "@/lib/image-compress";
 
 const cls = "min-h-11 min-w-0 w-full rounded border border-[var(--edge)] bg-[var(--raised)] px-3";
@@ -24,6 +26,8 @@ function ActionForm({
   children: React.ReactNode;
   blocked?: boolean;
 }) {
+  const t = useTranslations();
+  const tCommon = useTranslations("common");
   const [state, action, pending] = useActionState(rentalLifecycleAction, {
     error: "",
     message: "",
@@ -43,16 +47,16 @@ function ActionForm({
         className="min-h-11 rounded bg-[var(--accent)] px-4 text-black"
         type="submit"
       >
-        {pending ? "Saving…" : title}
+        {pending ? tCommon("saving") : title}
       </button>
       {state.error && (
         <p role="alert" className="text-sm text-red-300">
-          {state.error}
+          {translateValidation(t, state.error)}
         </p>
       )}
       {state.message && (
         <p role="status" className="text-sm text-[var(--accent)]">
-          {state.message}
+          {translateValidation(t, state.message)}
         </p>
       )}
     </form>
@@ -83,6 +87,10 @@ export function RentalLifecycleForms({
   initialNow: string;
   cancellationDetails?: Record<string, string>;
 }) {
+  const t = useTranslations();
+  const tRentals = useTranslations("rentals");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [duration, setDuration] = useState("1");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState("");
@@ -115,7 +123,8 @@ export function RentalLifecycleForms({
       setPhoto(optimized.file);
     } catch (cause) {
       setPhoto(null);
-      setPhotoError(cause instanceof Error ? cause.message : "Use a photo up to 5 MB.");
+      const rawErr = cause instanceof Error ? cause.message : "Use a photo up to 5 MB.";
+      setPhotoError(translateValidation(t, rawErr));
     } finally {
       setPhotoCompressing(false);
     }
@@ -132,9 +141,9 @@ export function RentalLifecycleForms({
   return (
     <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
       {status === "RESERVED" && (
-        <ActionForm id={id} operation="checkout" title="Check out vehicle">
+        <ActionForm id={id} operation="checkout" title={tRentals("checkoutVehicle")}>
           <label>
-            Starting KM
+            {tRentals("startingKm")}
             <input
               name="startingKm"
               required
@@ -148,13 +157,18 @@ export function RentalLifecycleForms({
         </ActionForm>
       )}
       {status === "ACTIVE" && canApprove && (
-        <ActionForm id={id} anchorId="extend" operation="extend" title="Approve contract extension">
+        <ActionForm
+          id={id}
+          anchorId="extend"
+          operation="extend"
+          title={tRentals("approveExtension")}
+        >
           <p className="text-sm text-[var(--muted)]">
-            Previous expected return:{" "}
-            {formatOmanDateTime(new Date(expectedReturnAt)).replace("T", " ")} (Oman)
+            {formatOmanDateTime(new Date(expectedReturnAt)).replace("T", " ")} (
+            {tCommon("omanTime")})
           </p>
           <label>
-            Extension duration ({period.toLowerCase()} periods)
+            {tRentals("extensionDuration", { period: translateStatus(tStatus, period) })}
             <input
               name="duration"
               required
@@ -167,26 +181,26 @@ export function RentalLifecycleForms({
             />
           </label>
           <label>
-            New expected return (Oman)
+            {tRentals("newExpectedReturn")}
             <input type="datetime-local" readOnly value={deadline} className={cls} />
           </label>
           <p>
-            Additional rent:{" "}
+            {tRentals("additionalRent")}:{" "}
             {Number.isFinite(Number(duration))
               ? ((Number(duration) * rate) / 1000).toFixed(3)
               : "—"}{" "}
-            OMR
+            {tCommon("omr")}
           </p>
           <label>
-            Remarks
+            {tCommon("remarks")}
             <textarea name="remarks" required maxLength={1000} className={cls} />
           </label>
         </ActionForm>
       )}
       {status === "ACTIVE" && (
-        <ActionForm id={id} operation="return" title="Return vehicle">
+        <ActionForm id={id} operation="return" title={tRentals("returnVehicle")}>
           <label>
-            Actual return date/time (Oman)
+            {tRentals("actualReturnDateTime")}
             <input
               name="returnedAt"
               required
@@ -196,7 +210,7 @@ export function RentalLifecycleForms({
             />
           </label>
           <label>
-            Ending KM
+            {tRentals("endingKm")}
             <input
               name="endingKm"
               required
@@ -206,10 +220,6 @@ export function RentalLifecycleForms({
               className={cls}
             />
           </label>
-          <p className="text-sm text-[var(--muted)]">
-            The server calculates and records additional rent, late fees, overdue fines and excess
-            KM separately using the approved deadline.
-          </p>
         </ActionForm>
       )}
       {["RESERVED", "ACTIVE"].includes(status) && (
@@ -217,7 +227,7 @@ export function RentalLifecycleForms({
           id={id}
           anchorId="cancel"
           operation="cancel"
-          title="Cancel agreement"
+          title={tRentals("cancelAgreement")}
           blocked={!canCancel}
         >
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -229,16 +239,14 @@ export function RentalLifecycleForms({
             ))}
           </div>
           <p className="text-sm text-[var(--muted)]">
-            {canCancel
-              ? "Cancellation is currently allowed. Financial history is retained."
-              : "The 15-minute window has expired. An authorized admin must cancel."}
+            {canCancel ? tRentals("cancelAllowedNote") : tRentals("cancelExpiredNote")}
           </p>
           <label>
-            Starting KM
+            {tRentals("startingKm")}
             <input readOnly name="startingKm" value={startingKm} className={cls} />
           </label>
           <label>
-            Ending KM
+            {tRentals("endingKm")}
             <input
               name="endingKm"
               required
@@ -250,12 +258,12 @@ export function RentalLifecycleForms({
             />
           </label>
           <label>
-            Remarks
+            {tCommon("remarks")}
             <textarea name="remarks" required maxLength={1000} className={cls} />
           </label>
           <label className="flex items-center gap-2">
             <input name="confirmed" type="checkbox" required />
-            Cancel Agreement
+            {tRentals("confirmCancelCheckbox")}
           </label>
         </ActionForm>
       )}
@@ -264,7 +272,7 @@ export function RentalLifecycleForms({
           id={id}
           anchorId="damage"
           operation="damage"
-          title="Save scratch / damage evidence"
+          title={tRentals("saveDamageEvidence")}
           blocked={photoCompressing || !photo || !!photoError}
         >
           <input
@@ -273,23 +281,25 @@ export function RentalLifecycleForms({
             value={status === "RESERVED" ? "BEFORE_RENTAL" : "AFTER_RETURN"}
           />
           <p className="font-medium">
-            {status === "RESERVED" ? "Before rental" : "After return"} evidence
+            {status === "RESERVED"
+              ? tRentals("beforeRentalEvidence")
+              : tRentals("afterReturnEvidence")}
           </p>
           <label>
-            Damage location
+            {tRentals("damageLocation")}
             <input required name="location" maxLength={120} className={cls} />
           </label>
           <label>
-            Description
+            {tCommon("description")}
             <textarea required name="description" maxLength={1000} className={cls} />
           </label>
           <label>
-            Remarks
+            {tCommon("remarks")}
             <textarea name="remarks" maxLength={1000} className={cls} />
           </label>
           <div className="flex flex-wrap gap-2">
             <label className="min-h-11 cursor-pointer rounded border border-[var(--edge)] px-3 py-3 text-sm">
-              Take Photo
+              {tCommon("takePhoto")}
               <input
                 type="file"
                 className="sr-only"
@@ -301,7 +311,7 @@ export function RentalLifecycleForms({
               />
             </label>
             <label className="min-h-11 cursor-pointer rounded border border-[var(--edge)] px-3 py-3 text-sm">
-              Upload Photo
+              {tRentals("uploadPhoto")}
               <input
                 type="file"
                 className="sr-only"
@@ -327,7 +337,7 @@ export function RentalLifecycleForms({
           />
           {photoCompressing && (
             <p className="text-xs text-[var(--muted)]" role="status">
-              Compressing photo…
+              {tCommon("compressingImage")}
             </p>
           )}
           {photo && (
@@ -336,15 +346,13 @@ export function RentalLifecycleForms({
                 /* biome-ignore lint/performance/noImgElement: local object URL preview for selected damage photo */
                 <img
                   src={photoPreview}
-                  alt="Selected scratch evidence preview"
+                  alt={tRentals("saveDamageEvidence")}
                   className="h-16 w-24 rounded-lg border border-[var(--edge)] object-cover"
                 />
               )}
               <div className="min-w-0 text-sm">
-                <p className="break-all">Selected: {photo.name}</p>
-                <p className="text-xs text-[var(--muted)]">
-                  {(photo.size / 1024).toFixed(1)} KB (compressed)
-                </p>
+                <p className="break-all">{photo.name}</p>
+                <p className="text-xs text-[var(--muted)]">{(photo.size / 1024).toFixed(1)} KB</p>
               </div>
             </div>
           )}

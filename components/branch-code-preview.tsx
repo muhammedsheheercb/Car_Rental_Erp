@@ -1,6 +1,8 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 export function BranchCodePreview() {
+  const tAdmin = useTranslations("admin");
   const [name, setName] = useState("");
   const code =
     name
@@ -12,7 +14,7 @@ export function BranchCodePreview() {
   return (
     <>
       <label className="mt-4 block text-sm">
-        Name
+        {tAdmin("branchName")}
         <input
           required
           name="name"
@@ -22,7 +24,7 @@ export function BranchCodePreview() {
         />
       </label>
       <label className="mt-4 block text-sm">
-        Branch code
+        {tAdmin("branchCode")}
         <input
           value={code}
           readOnly

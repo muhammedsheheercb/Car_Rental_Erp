@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { updateBrandAction } from "@/app/[locale]/(protected)/fleet/actions";
 import { useToast } from "./toast";
@@ -13,6 +14,8 @@ export function BrandEditButton({
   name: string;
   models: string;
 }) {
+  const tMaster = useTranslations("fleet.master");
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const { show } = useToast();
@@ -23,7 +26,7 @@ export function BrandEditButton({
         onClick={() => setOpen(true)}
         className="min-h-11 px-3 text-[var(--accent)]"
       >
-        Edit
+        {tCommon("edit")}
       </button>
       {open && (
         <div className="fixed inset-0 z-40 grid place-items-end bg-black/70 sm:place-items-center sm:p-4">
@@ -41,11 +44,11 @@ export function BrandEditButton({
                 if (result.ok) setOpen(false);
               })
             }
-            className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:p-6"
+            className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-start sm:rounded-2xl sm:p-6"
           >
-            <h2 className="text-lg font-semibold">Edit brand</h2>
+            <h2 className="text-lg font-semibold">{tMaster("editBrand")}</h2>
             <label className="mt-4 block text-sm">
-              Brand name
+              {tMaster("brandName")}
               <input
                 required
                 name="name"
@@ -54,7 +57,7 @@ export function BrandEditButton({
               />
             </label>
             <label className="mt-4 block text-sm">
-              Models (one per line)
+              {tMaster("modelsOnePerLine")}
               <textarea
                 required
                 name="models"
@@ -69,14 +72,14 @@ export function BrandEditButton({
                 onClick={() => setOpen(false)}
                 className="min-h-11 px-4"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 font-semibold text-black"
               >
-                {pending ? "Updating…" : "Update"}
+                {pending ? tCommon("updating") : tCommon("update")}
               </button>
             </div>
           </form>

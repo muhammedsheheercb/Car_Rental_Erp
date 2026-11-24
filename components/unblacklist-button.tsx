@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { unblacklistCustomerAction } from "@/app/[locale]/(protected)/customers/actions";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -17,6 +18,7 @@ export function UnblacklistButton({
   reason?: string | null;
   onSuccess?: () => void;
 }) {
+  const tCust = useTranslations("customers");
   const [pending, setPending] = useState(false);
   const { show } = useToast();
   const router = useRouter();
@@ -41,13 +43,16 @@ export function UnblacklistButton({
           disabled={pending}
           className="min-h-10 rounded-lg border border-[var(--edge)] px-2 text-sm text-[var(--accent)]"
         >
-          {pending ? "Removing…" : "Remove from Blacklist"}
+          {pending ? tCust("removing") : tCust("removeFromBlacklist")}
         </button>
       }
-      title={`Remove ${name} from blacklist?`}
-      description={`Customer ID: ${customerNumber ?? "—"}. Current reason: ${reason ?? "—"}. This preserves history and makes the customer eligible for booking again.`}
-      confirmLabel="Confirm Removal"
-      processingLabel="Removing…"
+      title={tCust("removeBlacklistTitle", { name })}
+      description={tCust("removeBlacklistDesc", {
+        number: customerNumber ?? "—",
+        reason: reason ?? "—",
+      })}
+      confirmLabel={tCust("confirmRemoval")}
+      processingLabel={tCust("removing")}
       onConfirm={remove}
     />
   );

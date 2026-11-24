@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+
 export const operationViews = {
   "today-reserve": "Today Reserve",
   "today-arrival": "Today Arrival",
@@ -6,16 +8,18 @@ export const operationViews = {
   available: "Available Vehicles",
   "late-car": "Late Car",
 } as const;
-export function OperationsLinks({ locale }: { locale: string }) {
+
+export async function OperationsLinks({ locale }: { locale: string }) {
+  const t = await getTranslations("operations");
   return (
-    <nav aria-label="Vehicle operations" className="flex flex-wrap gap-2">
-      {Object.entries(operationViews).map(([view, label]) => (
+    <nav aria-label={t("navLabel")} className="flex flex-wrap gap-2">
+      {Object.keys(operationViews).map((view) => (
         <Link
           key={view}
           href={`/${locale}/operations/${view}` as never}
           className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-sm hover:text-[var(--accent)]"
         >
-          {label}
+          {t(view as keyof typeof operationViews)}
         </Link>
       ))}
     </nav>

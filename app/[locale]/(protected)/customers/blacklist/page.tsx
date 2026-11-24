@@ -1,5 +1,6 @@
 import { and, count, desc, eq, ilike, or } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { BlacklistControls } from "@/components/blacklist-controls";
 import { BlacklistPicker } from "@/components/blacklist-picker";
 import { BlacklistRowActions } from "@/components/blacklist-row-actions";
@@ -18,7 +19,14 @@ export default async function BlacklistPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   const actor = await requirePermission("customers", "read");
-  const [{ locale }, query] = await Promise.all([params, searchParams]);
+  const [{ locale }, query, tBl, tCust, tCommon, tStatus] = await Promise.all([
+    params,
+    searchParams,
+    getTranslations("customers.blacklistPage"),
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const q = query.q?.trim() ?? "";
   const status = ["all", "active", "removed"].includes(query.status ?? "")
     ? (query.status as "all" | "active" | "removed")
@@ -99,19 +107,16 @@ export default async function BlacklistPage({
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">CUSTOMERS</p>
-          <h1 className="mt-2 text-3xl font-semibold">Blacklist register</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Active restrictions block bookings. Removed entries are retained permanently for full
-            audit history.
-          </p>
+          <p className="text-sm text-[var(--accent)]">{tCust("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tBl("title")}</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">{tBl("subtitle")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/${locale}/customers` as never}
             className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm"
           >
-            All customers
+            {tBl("allCustomers")}
           </Link>
           {canUpdate && <BlacklistPicker />}
         </div>
@@ -136,22 +141,22 @@ export default async function BlacklistPage({
           <thead className="bg-[var(--raised)] text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide">
-                Customer
+                {tCommon("customer")}
               </th>
               <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide">
-                Reason & description
+                {tBl("reasonDescCol")}
               </th>
               <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide">
-                Effective period
+                {tBl("effectivePeriodCol")}
               </th>
               <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide">
-                Recorded (Oman)
+                {tBl("recordedCol")}
               </th>
               <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide">
-                Status
+                {tCommon("status")}
               </th>
               <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide">
-                Actions
+                {tCommon("actions")}
               </th>
             </tr>
           </thead>
@@ -175,16 +180,17 @@ export default async function BlacklistPage({
                 <td className="px-4 py-3 text-xs">
                   {row.startsAt || row.endsAt
                     ? `${row.startsAt ?? "—"} – ${row.endsAt ?? "—"}`
-                    : "Indefinite"}
+                    : tBl("indefinite")}
                 </td>
                 <td className="px-4 py-3 text-xs text-[var(--muted)]">
                   <p className="text-[var(--ink)]">
                     {formatOmanDateTime(row.createdAt).replace("T", " ")}
                   </p>
-                  <p>{row.recordedBy ?? "System"}</p>
+                  <p>{row.recordedBy ?? tCommon("system")}</p>
                   {row.deactivatedAt && (
                     <p className="mt-1">
-                      Removed: {formatOmanDateTime(row.deactivatedAt).replace("T", " ")}
+                      {tBl("removedLabel")}:{" "}
+                      {formatOmanDateTime(row.deactivatedAt).replace("T", " ")}
                     </p>
                   )}
                 </td>
@@ -192,7 +198,7 @@ export default async function BlacklistPage({
                   <span
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.isActive ? "bg-red-400/20 text-red-200" : "bg-white/10 text-[var(--muted)]"}`}
                   >
-                    {row.isActive ? "Active" : "Removed"}
+                    {row.isActive ? tStatus("ACTIVE") : tStatus("REMOVED")}
                   </span>
                 </td>
                 <td className="px-3 py-3 text-center">
@@ -215,33 +221,28 @@ export default async function BlacklistPage({
             ))}
           </tbody>
         </table>
-        {!rows.length && (
-          <p className="p-8 text-sm text-[var(--muted)]">No matching blacklist records found.</p>
-        )}
+        {!rows.length && <p className="p-8 text-sm text-[var(--muted)]">{tBl("noRecords")}</p>}
       </div>
 
       {total > PAGE_SIZE && (
-        <nav
-          aria-label="Blacklist pages"
-          className="mt-4 flex items-center justify-end gap-3 text-sm"
-        >
+        <nav aria-label={tBl("title")} className="mt-4 flex items-center justify-end gap-3 text-sm">
           {page > 1 && (
             <Link
               href={pageHref(page - 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="text-[var(--muted)]">
-            Page {page} of {totalPages}
+            {tCommon("pageOf", { page, total: totalPages })}
           </span>
           {page < totalPages && (
             <Link
               href={pageHref(page + 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

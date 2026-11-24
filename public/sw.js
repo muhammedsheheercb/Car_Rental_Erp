@@ -1,16 +1,32 @@
+const CACHE_NAME = "muscat-cars-static-v2";
+
 self.addEventListener("install", () => {
   // Updates wait for an explicit user decision; a new installation activates normally.
 });
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("muscat-cars-") && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  ),
+);
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
-  // Never cache navigations, RSC payloads, API responses or requests carrying a session.
-  // They can contain personal data, permissions or an expiring authenticated state.
+  // Never cache local dev traffic, navigations, RSC payloads, API responses or session requests.
   if (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
     request.method !== "GET" ||
     request.headers.get("cookie") ||
     url.origin !== self.location.origin ||
@@ -24,13 +40,16 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/_next/static/");
   if (!staticAsset) return;
   event.respondWith(
-    caches.open("muscat-cars-static-v1").then(async (cache) => {
-      const cached = await cache.match(request);
-      const network = fetch(request).then((response) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      try {
+        const response = await fetch(request);
         if (response.ok && response.type === "basic") cache.put(request, response.clone());
         return response;
-      });
-      return cached ?? network;
+      } catch {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        throw new Error("Offline and asset not cached");
+      }
     }),
   );
 });

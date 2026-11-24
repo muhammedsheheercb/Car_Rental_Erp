@@ -1,17 +1,18 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { CalendarInput } from "@/components/calendar-input";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import {
-  formatPaymentModeLabel,
   PAYMENT_MODES,
   type PaymentModeFilter,
   REPORT_LIST,
   type ReportDefinition,
   type ReportSlug,
 } from "@/features/reports/definitions";
+import { translateSafe, translateStatus } from "@/lib/i18n-helpers";
 
 type BranchOption = { id: string; name: string; code: string };
 
@@ -34,7 +35,34 @@ export function ReportsControls({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const tReports = useTranslations("reports");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tActivity = useTranslations("activity");
   const [pending, startTransition] = useTransition();
+
+  const slug = definition.slug;
+  const searchPlaceholder = translateSafe(
+    tReports,
+    `catalog.${slug}.searchPlaceholder`,
+    definition.searchPlaceholder,
+  );
+  const statusLabel = translateSafe(
+    tReports,
+    `catalog.${slug}.statusLabel`,
+    definition.statusLabel,
+  );
+  const dateRangeLabel = translateSafe(
+    tReports,
+    `catalog.${slug}.dateRangeLabel`,
+    definition.dateRangeLabel,
+  );
+  const translateStatusOption = (value: string, label: string) => {
+    if (slug === "daily-activity") {
+      return translateSafe(tActivity, `categories.${value}`, label);
+    }
+    return translateStatus(tStatus, label);
+  };
 
   const [q, setQ] = useState(initialFilters.q);
   const [branchId, setBranchId] = useState(initialFilters.branchId);
@@ -167,20 +195,20 @@ export function ReportsControls({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Select Report (12 Available)
+              {tReports("selectReportHeading")}
             </h2>
           </div>
           <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
-            <span className="shrink-0">Jump to:</span>
+            <span className="shrink-0">{tReports("jumpTo")}</span>
             <select
-              aria-label="Report selector"
+              aria-label={tReports("selectReportHeading")}
               value={definition.slug}
               onChange={(e) => selectReport(e.target.value as ReportSlug)}
               className="min-h-10 rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
             >
               {REPORT_LIST.map((r) => (
                 <option key={r.slug} value={r.slug}>
-                  {r.number}. {r.title}
+                  {r.number}. {translateSafe(tReports, `catalog.${r.slug}.title`, r.title)}
                 </option>
               ))}
             </select>
@@ -202,7 +230,7 @@ export function ReportsControls({
                     : "border-[var(--edge)] bg-[var(--raised)] text-[var(--muted)] hover:border-white/30 hover:text-white"
                 }`}
               >
-                {item.shortTitle}
+                {translateSafe(tReports, `catalog.${item.slug}.shortTitle`, item.shortTitle)}
               </button>
             );
           })}
@@ -216,29 +244,29 @@ export function ReportsControls({
       >
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <label className="grid min-w-0 gap-1 text-sm">
-            <span>Search</span>
+            <span>{tCommon("search")}</span>
             <input
               type="search"
               name="q"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={definition.searchPlaceholder}
-              aria-label="Search report rows"
+              placeholder={searchPlaceholder}
+              aria-label={tCommon("search")}
               className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
             />
           </label>
 
           {definition.supportsBranch && (
             <label className="grid min-w-0 gap-1 text-sm">
-              <span>Branch</span>
+              <span>{tCommon("branch")}</span>
               <select
                 name="branchId"
-                aria-label="Filter by branch"
+                aria-label={tCommon("branch")}
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
                 className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
               >
-                <option value="">All permitted branches</option>
+                <option value="">{tCommon("allPermittedBranches")}</option>
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name} · {branch.code}
@@ -250,18 +278,18 @@ export function ReportsControls({
 
           {definition.supportsStatus && (
             <label className="grid min-w-0 gap-1 text-sm">
-              <span>{definition.statusLabel}</span>
+              <span>{statusLabel}</span>
               <select
                 name="status"
-                aria-label={`Filter by ${definition.statusLabel}`}
+                aria-label={statusLabel}
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
               >
-                <option value="ALL">All</option>
+                <option value="ALL">{tCommon("all")}</option>
                 {definition.statusOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {translateStatusOption(opt.value, opt.label)}
                   </option>
                 ))}
               </select>
@@ -270,18 +298,18 @@ export function ReportsControls({
 
           {definition.supportsPaymentMode && (
             <label className="grid min-w-0 gap-1 text-sm">
-              <span>Payment Mode</span>
+              <span>{tCommon("paymentMode")}</span>
               <select
                 name="paymentMode"
-                aria-label="Filter by payment mode"
+                aria-label={tCommon("paymentMode")}
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value as PaymentModeFilter)}
                 className="min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
               >
-                <option value="ALL">All payment modes</option>
+                <option value="ALL">{tCommon("allPaymentModes")}</option>
                 {PAYMENT_MODES.map((mode) => (
                   <option key={mode} value={mode}>
-                    {formatPaymentModeLabel(mode)}
+                    {translateStatus(tStatus, mode)}
                   </option>
                 ))}
               </select>
@@ -291,7 +319,9 @@ export function ReportsControls({
 
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
           <div className="grid min-w-0 gap-1 text-sm">
-            <label htmlFor="reportFrom">From Date ({definition.dateRangeLabel}, Oman)</label>
+            <label htmlFor="reportFrom">
+              {tReports("fromDateWithLabel", { label: dateRangeLabel })}
+            </label>
             <CalendarInput
               id="reportFrom"
               name="from"
@@ -304,7 +334,9 @@ export function ReportsControls({
           </div>
 
           <div className="grid min-w-0 gap-1 text-sm">
-            <label htmlFor="reportTo">To Date ({definition.dateRangeLabel}, Oman)</label>
+            <label htmlFor="reportTo">
+              {tReports("toDateWithLabel", { label: dateRangeLabel })}
+            </label>
             <CalendarInput
               id="reportTo"
               name="to"
@@ -323,7 +355,7 @@ export function ReportsControls({
               disabled={pending}
               className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-black disabled:opacity-60 sm:flex-none"
             >
-              {pending ? "Loading…" : "Apply Filters"}
+              {pending ? tCommon("loading") : tCommon("applyFilters")}
             </button>
             {hasFilters && (
               <button
@@ -332,34 +364,34 @@ export function ReportsControls({
                 disabled={pending}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm text-[var(--muted)] hover:text-white"
               >
-                Clear
+                {tCommon("clear")}
               </button>
             )}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--edge)] pt-3 text-xs">
-          <span className="text-[var(--muted)]">Quick range (Oman):</span>
+          <span className="text-[var(--muted)]">{tCommon("quickRange")}</span>
           <button
             type="button"
             onClick={() => applyPreset("today")}
             className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
           >
-            Today
+            {tCommon("today")}
           </button>
           <button
             type="button"
             onClick={() => applyPreset("7d")}
             className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
           >
-            Last 7 Days
+            {tCommon("last7Days")}
           </button>
           <button
             type="button"
             onClick={() => applyPreset("month")}
             className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
           >
-            This Month
+            {tCommon("thisMonth")}
           </button>
           {(from || to) && (
             <button
@@ -367,7 +399,7 @@ export function ReportsControls({
               onClick={() => applyPreset("all")}
               className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-[var(--muted)] hover:border-[var(--accent)] hover:text-white"
             >
-              All Dates
+              {tCommon("allDates")}
             </button>
           )}
         </div>

@@ -1,6 +1,8 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { settingsAction } from "@/app/[locale]/(protected)/settings/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { compressImageFile } from "@/lib/image-compress";
 
 export function AlertSettingsForm({
@@ -10,6 +12,9 @@ export function AlertSettingsForm({
   nearServiceKm: number;
   expirySoonDays: number;
 }) {
+  const t = useTranslations();
+  const tSettings = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
   return (
     <form
@@ -18,13 +23,11 @@ export function AlertSettingsForm({
     >
       <input type="hidden" name="operation" value="alerts" />
       <div>
-        <h2 className="text-lg font-semibold">Fleet Alert Thresholds</h2>
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          Shared operational thresholds for Near To Service and Mulkiya/Insurance expiry alerts.
-        </p>
+        <h2 className="text-lg font-semibold">{tSettings("alertThresholdsTitle")}</h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">{tSettings("alertThresholdsSubtitle")}</p>
       </div>
       <label className="block text-sm">
-        Near To Service — KM remaining
+        {tSettings("nearServiceKmLabel")}
         <input
           name="nearServiceKm"
           inputMode="numeric"
@@ -35,7 +38,7 @@ export function AlertSettingsForm({
         />
       </label>
       <label className="block text-sm">
-        Expiring Soon — days remaining
+        {tSettings("expirySoonDaysLabel")}
         <input
           name="expirySoonDays"
           inputMode="numeric"
@@ -47,12 +50,12 @@ export function AlertSettingsForm({
       </label>
       {state.error && (
         <p role="alert" className="text-sm text-red-300">
-          {state.error}
+          {translateValidation(t, state.error)}
         </p>
       )}
       {state.message && (
         <p role="status" className="text-sm text-[var(--accent)]">
-          {state.message}
+          {translateValidation(t, state.message)}
         </p>
       )}
       <button
@@ -60,7 +63,7 @@ export function AlertSettingsForm({
         className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-50"
         disabled={pending}
       >
-        {pending ? "Saving…" : "Save Thresholds"}
+        {pending ? tCommon("saving") : tSettings("saveThresholds")}
       </button>
     </form>
   );
@@ -75,6 +78,9 @@ export function SignatureForm({
   initialUser: string;
   existing: { id: string; userId: string }[];
 }) {
+  const t = useTranslations();
+  const tSettings = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
   const [userId, setUserId] = useState(initialUser);
   const [file, setFile] = useState<File | null>(null);
@@ -115,7 +121,7 @@ export function SignatureForm({
       !["image/png", "image/jpeg", "image/webp"].includes(value.type) ||
       value.size > 10 * 1024 * 1024
     ) {
-      setError("Use a PNG, JPEG or WebP image up to 5 MB.");
+      setError(translateValidation(t, "Use a PNG, JPEG or WebP image up to 5 MB."));
       return;
     }
     setCompressing(true);
@@ -129,9 +135,9 @@ export function SignatureForm({
       });
       attachFile(compressed.file, compressed.width, compressed.height);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Use a PNG, JPEG or WebP image up to 5 MB.",
-      );
+      const raw =
+        cause instanceof Error ? cause.message : "Use a PNG, JPEG or WebP image up to 5 MB.";
+      setError(translateValidation(t, raw));
     } finally {
       setCompressing(false);
     }
@@ -198,7 +204,7 @@ export function SignatureForm({
     setError("");
     canvas.toBlob((blob) => {
       if (!blob) {
-        setError("Could not capture drawn signature. Please try again.");
+        setError(translateValidation(t, "Could not capture drawn signature. Please try again."));
         return;
       }
       const drawn = new File([blob], "drawn-signature.png", {
@@ -216,15 +222,12 @@ export function SignatureForm({
     >
       <input type="hidden" name="operation" value="signature" />
       <div>
-        <h2 className="text-lg font-semibold">User Signature</h2>
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          Draw on the pad, capture with your camera, or upload an image. Files are compressed
-          automatically before private storage.
-        </p>
+        <h2 className="text-lg font-semibold">{tSettings("userSignature")}</h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">{tSettings("userSignatureHint")}</p>
       </div>
 
       <label className="block text-sm">
-        Select User
+        {tSettings("selectUser")}
         <select
           name="userId"
           className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
@@ -248,7 +251,7 @@ export function SignatureForm({
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium">Draw signature</span>
+          <span className="text-sm font-medium">{tSettings("drawSignature")}</span>
           <div className="flex gap-2">
             <button
               type="button"
@@ -256,7 +259,7 @@ export function SignatureForm({
               disabled={!hasStrokes}
               className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-xs disabled:opacity-50"
             >
-              Clear pad
+              {tSettings("clearPad")}
             </button>
             <button
               type="button"
@@ -264,7 +267,7 @@ export function SignatureForm({
               disabled={!hasStrokes}
               className="min-h-9 rounded-lg border border-[var(--accent)] px-3 text-xs font-medium text-[var(--accent)] disabled:opacity-50"
             >
-              Use drawing
+              {tSettings("useDrawing")}
             </button>
           </div>
         </div>
@@ -272,7 +275,7 @@ export function SignatureForm({
           ref={canvasRef}
           width={640}
           height={180}
-          aria-label="Signature drawing pad"
+          aria-label={tSettings("drawSignature")}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -283,7 +286,7 @@ export function SignatureForm({
 
       <div className="flex flex-wrap gap-3">
         <label className="min-h-11 cursor-pointer content-center rounded-lg border border-[var(--edge)] px-4 text-sm font-medium hover:bg-white/5">
-          Take Photo
+          {tCommon("takePhoto")}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
@@ -296,7 +299,7 @@ export function SignatureForm({
           />
         </label>
         <label className="min-h-11 cursor-pointer content-center rounded-lg border border-[var(--edge)] px-4 text-sm font-medium hover:bg-white/5">
-          Upload Signature
+          {tSettings("uploadSignature")}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
@@ -314,13 +317,13 @@ export function SignatureForm({
           required
           className="sr-only"
           tabIndex={-1}
-          aria-label="Selected signature file"
+          aria-label={tSettings("userSignature")}
         />
       </div>
 
       {compressing && (
         <p className="text-xs text-[var(--muted)]" role="status">
-          Optimising signature image…
+          {tSettings("optimisingSignature")}
         </p>
       )}
 
@@ -328,33 +331,33 @@ export function SignatureForm({
         <div className="space-y-2">
           <p className="text-xs text-[var(--muted)]">
             {preview
-              ? `Ready to save: ${file?.name} (${((file?.size ?? 0) / 1024).toFixed(1)} KB${dimensions ? ` · ${dimensions.width}×${dimensions.height}` : ""})`
-              : "Currently saved signature"}
+              ? `${tSettings("readyToSaveSignature", {
+                  name: file?.name ?? "",
+                  kb: ((file?.size ?? 0) / 1024).toFixed(1),
+                })}${dimensions ? ` · ${dimensions.width}×${dimensions.height}` : ""}`
+              : tSettings("currentlySavedSignature")}
           </p>
           <div className="rounded-xl bg-white p-3">
             {/* biome-ignore lint/performance/noImgElement: uploaded/private authenticated signature image. */}
             <img
               src={preview || `/api/user-signatures/${current?.id}`}
-              alt="Signature preview"
+              alt={tSettings("userSignature")}
               className="h-28 w-full object-contain"
             />
           </div>
         </div>
       )}
 
-      <p className="text-xs text-[var(--muted)]">
-        PNG, JPEG or WebP up to 5 MB. Saved signatures are stored privately in Cloudflare R2 and
-        automatically appear on authorized printed bills and agreements.
-      </p>
+      <p className="text-xs text-[var(--muted)]">{tSettings("signatureStorageNote")}</p>
 
       {(error || state.error) && (
         <p role="alert" className="text-sm text-red-300">
-          {error || state.error}
+          {error || translateValidation(t, state.error)}
         </p>
       )}
       {state.message && (
         <p role="status" className="text-sm text-[var(--accent)]">
-          {state.message}
+          {translateValidation(t, state.message)}
         </p>
       )}
       <button
@@ -362,7 +365,7 @@ export function SignatureForm({
         className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-50"
         disabled={pending || compressing || !file || !!error}
       >
-        {pending ? "Saving…" : "Save Signature"}
+        {pending ? tCommon("saving") : tSettings("saveSignature")}
       </button>
     </form>
   );

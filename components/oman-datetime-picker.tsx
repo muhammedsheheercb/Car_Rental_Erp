@@ -1,23 +1,10 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
+const WEEKDAY_KEYS = ["su", "mo", "tu", "we", "th", "fr", "sa"] as const;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -51,6 +38,8 @@ export function OmanDateTimePicker({
   min?: string;
   required?: boolean;
 }) {
+  const tCommon = useTranslations("common");
+  const tCal = useTranslations("calendar");
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -175,7 +164,7 @@ export function OmanDateTimePicker({
         />
         <button
           type="button"
-          aria-label={`Open calendar for ${label}`}
+          aria-label={tCommon("openCalendarFor", { label })}
           aria-expanded={open}
           onClick={() => setOpen((prev) => !prev)}
           className="absolute inset-y-0 end-0 grid w-11 place-items-center text-white hover:text-[var(--accent)] focus-visible:text-[var(--accent)]"
@@ -195,24 +184,24 @@ export function OmanDateTimePicker({
       {open && (
         <div
           role="dialog"
-          aria-label={`${label} calendar`}
+          aria-label={tCommon("openCalendarFor", { label })}
           className="absolute end-0 top-full z-50 mt-1.5 w-[min(19.5rem,calc(100vw-2rem))] rounded-xl border border-[var(--edge)] bg-[var(--raised)] p-3 shadow-2xl"
         >
           <div className="flex items-center justify-between gap-2 pb-2">
             <button
               type="button"
-              aria-label="Previous month"
+              aria-label={tCommon("prevMonth")}
               onClick={() => stepMonth(-1)}
               className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--edge)] text-sm hover:border-[var(--accent)]"
             >
               ‹
             </button>
             <span className="text-sm font-semibold">
-              {MONTHS[viewMonth]} {viewYear}
+              {tCal(`months.${String(viewMonth)}`)} {viewYear}
             </span>
             <button
               type="button"
-              aria-label="Next month"
+              aria-label={tCommon("nextMonth")}
               onClick={() => stepMonth(1)}
               className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--edge)] text-sm hover:border-[var(--accent)]"
             >
@@ -221,9 +210,9 @@ export function OmanDateTimePicker({
           </div>
 
           <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-[var(--muted)]">
-            {WEEKDAYS.map((day) => (
-              <span key={day} className="py-1">
-                {day}
+            {WEEKDAY_KEYS.map((dayKey) => (
+              <span key={dayKey} className="py-1">
+                {tCal(`weekdays.${dayKey}`)}
               </span>
             ))}
           </div>
@@ -256,9 +245,9 @@ export function OmanDateTimePicker({
           </div>
 
           <div className="mt-3 flex items-center gap-2 border-t border-[var(--edge)] pt-3">
-            <span className="text-xs text-[var(--muted)]">Time (Oman)</span>
+            <span className="text-xs text-[var(--muted)]">{tCommon("timeOman")}</span>
             <select
-              aria-label="Hour"
+              aria-label={tCommon("hour")}
               value={hour}
               onChange={(e) => handleTimeChange(e.target.value, minute)}
               className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
@@ -271,7 +260,7 @@ export function OmanDateTimePicker({
             </select>
             <span className="text-xs text-[var(--muted)]">:</span>
             <select
-              aria-label="Minute"
+              aria-label={tCommon("minute")}
               value={minute}
               onChange={(e) => handleTimeChange(hour, e.target.value)}
               className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
@@ -290,14 +279,14 @@ export function OmanDateTimePicker({
               onClick={pickNowOman}
               className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-xs text-[var(--muted)] hover:text-white"
             >
-              Now (Oman)
+              {tCommon("nowOman")}
             </button>
             <button
               type="button"
               onClick={() => setOpen(false)}
               className="min-h-9 rounded-lg bg-[var(--accent)] px-4 text-xs font-semibold text-black"
             >
-              Done
+              {tCommon("done")}
             </button>
           </div>
         </div>

@@ -1,12 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import {
   deleteCustomerAction,
   getCustomerDetailsAction,
   setCustomerActiveAction,
 } from "@/app/[locale]/(protected)/customers/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { BlacklistDialog } from "./blacklist-dialog";
 import { ConfirmDialog } from "./confirm-dialog";
 import { CustomerWizard } from "./customer-wizard";
@@ -35,6 +37,11 @@ export function CustomerActions({
   mobile: string;
   blacklistReason: string | null;
 }) {
+  const t = useTranslations();
+  const tCust = useTranslations("customers");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tNav = useTranslations("nav");
   const [details, setDetails] = useState<Details | null>(null);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -54,7 +61,8 @@ export function CustomerActions({
     try {
       setDetails(await getCustomerDetailsAction(id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load customer details.");
+      const raw = e instanceof Error ? e.message : "Could not load customer details.";
+      setError(translateValidation(t, raw));
     } finally {
       setLoading(false);
     }
@@ -66,7 +74,8 @@ export function CustomerActions({
     try {
       setDetails(await getCustomerDetailsAction(id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load customer details.");
+      const raw = e instanceof Error ? e.message : "Could not load customer details.";
+      setError(translateValidation(t, raw));
     } finally {
       setLoading(false);
     }
@@ -101,8 +110,8 @@ export function CustomerActions({
       <div className="flex min-w-max flex-nowrap items-center justify-center gap-1 whitespace-nowrap">
         <button
           type="button"
-          aria-label={`View ${name}`}
-          title="View customer details"
+          aria-label={`${tCommon("view")} ${name}`}
+          title={tCommon("view")}
           onClick={view}
           className="min-h-10 min-w-10 rounded-lg text-white"
         >
@@ -120,11 +129,11 @@ export function CustomerActions({
             href={`/${locale}/ledger?customerId=${id}` as never}
             className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-2 text-sm text-[var(--accent)] hover:bg-white/5"
           >
-            Ledger
+            {tNav("ledger")}
           </Link>
         )}
         <button type="button" onClick={edit} className="min-h-10 px-2 text-sm text-[var(--accent)]">
-          Edit
+          {tCommon("edit")}
         </button>
         <ConfirmDialog
           trigger={
@@ -135,29 +144,29 @@ export function CustomerActions({
             >
               {loading
                 ? isActive
-                  ? "Deactivating…"
-                  : "Activating…"
+                  ? tCommon("deactivating")
+                  : tCommon("activating")
                 : isActive
-                  ? "Deactivate"
-                  : "Activate"}
+                  ? tCommon("deactivate")
+                  : tCommon("activate")}
             </button>
           }
-          title={`${isActive ? "Deactivate" : "Activate"} ${name}?`}
-          description={`Customer ID: ${number}`}
-          confirmLabel={isActive ? "Deactivate" : "Activate"}
-          processingLabel={isActive ? "Deactivating…" : "Activating…"}
+          title={isActive ? tCust("deactivateTitle", { name }) : tCust("activateTitle", { name })}
+          description={`${tCust("customerId")}: ${number}`}
+          confirmLabel={isActive ? tCommon("deactivate") : tCommon("activate")}
+          processingLabel={isActive ? tCommon("deactivating") : tCommon("activating")}
           onConfirm={status}
         />
         <ConfirmDialog
           trigger={
             <button type="button" disabled={loading} className="min-h-10 px-2 text-sm text-red-300">
-              Delete
+              {tCommon("delete")}
             </button>
           }
-          title={`Delete ${name}?`}
-          description={`Customer ID: ${number}. This is permanent and only allowed with no history.`}
-          confirmLabel="Delete"
-          processingLabel="Deleting…"
+          title={tCust("deleteTitle", { name })}
+          description={tCust("deleteDesc", { number })}
+          confirmLabel={tCommon("delete")}
+          processingLabel={tCommon("deleting")}
           onConfirm={remove}
         />
         {activeBlacklistId ? (
@@ -174,7 +183,7 @@ export function CustomerActions({
             customerName={name}
             customerNumber={number}
             mobile={mobile}
-            trigger="Add to Blacklist"
+            trigger={tCust("addToBlacklist")}
             onSuccess={setActiveBlacklistId}
           />
         )}
@@ -189,17 +198,20 @@ export function CustomerActions({
           <section
             role="document"
             onMouseDown={(e) => e.stopPropagation()}
-            className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 sm:max-w-2xl sm:rounded-2xl"
+            className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 text-start sm:max-w-2xl sm:rounded-2xl"
           >
             <div className="flex justify-between">
               <h2 className="text-xl font-semibold">{name}</h2>
-              <button type="button" onClick={() => setOpen(false)} className="min-h-11 px-3">
+              <button
+                type="button"
+                aria-label={tCommon("close")}
+                onClick={() => setOpen(false)}
+                className="min-h-11 px-3"
+              >
                 ×
               </button>
             </div>
-            {loading && (
-              <p className="mt-6 text-[var(--muted)]">Loading latest customer details…</p>
-            )}
+            {loading && <p className="mt-6 text-[var(--muted)]">{tCust("loadingDetails")}</p>}
             {error && (
               <div className="mt-6">
                 <p className="text-red-300">{error}</p>
@@ -208,26 +220,29 @@ export function CustomerActions({
                   onClick={view}
                   className="mt-3 min-h-11 border border-[var(--edge)] px-3"
                 >
-                  Retry
+                  {tCommon("retry")}
                 </button>
               </div>
             )}
             {details && (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {[
-                  ["Customer ID", details.customerNumber],
-                  ["Mobile", details.mobile],
-                  ["Email", details.email ?? "—"],
-                  ["Address", details.address],
-                  ["Civil ID", details.civilIdNumber ?? "—"],
-                  ["Passport", details.passportNumber ?? "—"],
-                  ["Visa", details.visaNumber ?? "—"],
-                  ["Driving licence", details.drivingLicenceNumber],
-                  ["Sponsor / family details", details.sponsorDetails ?? "—"],
-                  ["Account", details.isActive ? "Active" : "Inactive"],
-                  ["Balance", `${details.balance}`],
-                  ["Active rentals", String(details.activeRentals.length)],
-                  ["Blacklist", details.blacklist.some((x) => x.isActive) ? "Active" : "None"],
+                  [tCust("customerId"), details.customerNumber],
+                  [tCust("mobileCol"), details.mobile],
+                  [tCust("email"), details.email ?? "—"],
+                  [tCust("address"), details.address],
+                  [tCust("civilId"), details.civilIdNumber ?? "—"],
+                  [tCust("passport"), details.passportNumber ?? "—"],
+                  [tCust("visa"), details.visaNumber ?? "—"],
+                  [tCust("drivingLicence"), details.drivingLicenceNumber],
+                  [tCust("sponsor"), details.sponsorDetails ?? "—"],
+                  [tCust("account"), details.isActive ? tStatus("ACTIVE") : tStatus("INACTIVE")],
+                  [tCust("balance"), `${details.balance}`],
+                  [tCust("activeRentals"), String(details.activeRentals.length)],
+                  [
+                    tCust("blacklist"),
+                    details.blacklist.some((x) => x.isActive) ? tStatus("ACTIVE") : tCommon("none"),
+                  ],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="border-b border-[var(--edge)] pb-2">
                     <p className="text-xs text-[var(--muted)]">{label}</p>
@@ -241,7 +256,7 @@ export function CustomerActions({
                       onClick={() => setOpen(false)}
                       className="inline-flex min-h-11 items-center rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
                     >
-                      Open Customer Ledger
+                      {tCust("openLedger")}
                     </Link>
                   </div>
                 )}
@@ -260,17 +275,17 @@ export function CustomerActions({
           <section
             role="document"
             onMouseDown={(e) => e.stopPropagation()}
-            className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 sm:max-w-4xl sm:rounded-2xl"
+            className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-[var(--raised)] p-5 text-start sm:max-w-4xl sm:rounded-2xl"
           >
             <button
               type="button"
-              aria-label="Close edit"
+              aria-label={tCommon("close")}
               onClick={() => setEditing(false)}
               className="float-end min-h-11 px-3"
             >
               ×
             </button>
-            {loading && <p className="mt-6 text-[var(--muted)]">Loading customer…</p>}
+            {loading && <p className="mt-6 text-[var(--muted)]">{tCust("loadingCustomer")}</p>}
             {error && (
               <div className="mt-6">
                 <p className="text-red-300">{error}</p>
@@ -279,13 +294,14 @@ export function CustomerActions({
                   onClick={edit}
                   className="mt-3 min-h-11 border border-[var(--edge)] px-3"
                 >
-                  Retry
+                  {tCommon("retry")}
                 </button>
               </div>
             )}
             {details && (
               <CustomerWizard
                 customerId={id}
+                locale={locale}
                 existingDocuments={details.documents}
                 initialData={{
                   name: details.name,

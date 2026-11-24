@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { canAccessDailyActivity } from "@/features/daily-activity/calculations";
 import { can, getIdentity } from "@/lib/auth";
+import { LanguageSwitcher } from "./language-switcher";
 import { LogoutButton } from "./logout-button";
 import { OperationalFilters } from "./operational-filters";
 export async function AppShell({
@@ -12,21 +13,21 @@ export async function AppShell({
   locale: string;
 }) {
   const identity = await getIdentity();
-  const t = await getTranslations();
+  const t = await getTranslations("nav");
   const items = [
-    { href: "/dashboard", label: t("dashboard"), module: "dashboard" },
-    { href: "/daily-activity", label: "Activity", module: "daily-activity" },
-    { href: "/fleet", label: "Fleet", module: "fleet" },
-    { href: "/service", label: "Service", module: "fleet" },
-    { href: "/expiry", label: "Expiry", module: "fleet" },
-    { href: "/settings", label: "Settings", module: "settings" },
-    { href: "/customers", label: "Customers", module: "customers" },
-    { href: "/ledger", label: "Ledger", module: "finance", alsoRequires: "customers" },
+    { href: "/dashboard", label: t("overview"), module: "dashboard" },
+    { href: "/daily-activity", label: t("activity"), module: "daily-activity" },
+    { href: "/fleet", label: t("fleet"), module: "fleet" },
+    { href: "/service", label: t("service"), module: "fleet" },
+    { href: "/expiry", label: t("expiry"), module: "fleet" },
+    { href: "/settings", label: t("settings"), module: "settings" },
+    { href: "/customers", label: t("customers"), module: "customers" },
+    { href: "/ledger", label: t("ledger"), module: "finance", alsoRequires: "customers" },
     { href: "/rentals", label: t("rentals"), module: "rentals" },
-    { href: "/finance/advance", label: "Finance", module: "finance" },
-    { href: "/transfers", label: "Transfer", module: "rentals" },
-    { href: "/invoices", label: "Invoices", module: "finance" },
-    { href: "/reports", label: "Reports", module: "reports" },
+    { href: "/finance/advance", label: t("finance"), module: "finance" },
+    { href: "/transfers", label: t("transfer"), module: "rentals" },
+    { href: "/invoices", label: t("invoices"), module: "finance" },
+    { href: "/reports", label: t("reports"), module: "reports" },
     { href: "/admin/branches", label: t("branches"), module: "branches" },
     { href: "/admin/users", label: t("users"), module: "users" },
   ].filter(
@@ -62,12 +63,7 @@ export async function AppShell({
         </nav>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
           <OperationalFilters />
-          <Link
-            href={`/${locale === "en" ? "ar" : "en"}/dashboard`}
-            className="min-h-11 shrink-0 content-center whitespace-nowrap px-1 text-xs sm:text-sm"
-          >
-            {t("language")}
-          </Link>
+          <LanguageSwitcher className="min-h-11 shrink-0 content-center whitespace-nowrap px-1 text-xs sm:text-sm" />
           <LogoutButton />
         </div>
       </header>

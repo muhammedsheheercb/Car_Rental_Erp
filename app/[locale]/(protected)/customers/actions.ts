@@ -48,7 +48,7 @@ export async function saveCustomerAction(input: unknown, id?: string) {
           metadata: { name: value.name, mobile: value.mobile },
         });
       });
-      revalidatePath("/en/customers");
+      revalidateCustomerPaths();
       return { ok: true, id, message: "Customer updated successfully." };
     }
     const customerNumber = `CU-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
@@ -67,7 +67,7 @@ export async function saveCustomerAction(input: unknown, id?: string) {
         });
       return inserted;
     });
-    revalidatePath("/en/customers");
+    revalidateCustomerPaths();
     return {
       ok: true,
       id: created.id,
@@ -132,7 +132,7 @@ export async function uploadCustomerDocumentAction(
           updatedAt: new Date(),
         },
       });
-    revalidatePath("/en/customers");
+    revalidateCustomerPaths();
     return { ok: true, message: "Document uploaded." };
   } catch (error) {
     return {
@@ -353,7 +353,7 @@ export async function setCustomerActiveAction(id: string, active: boolean) {
       metadata: { active, name: customer.name, customerNumber: customer.customerNumber },
     });
   });
-  revalidatePath("/en/customers");
+  revalidateCustomerPaths();
   return {
     ok: true,
     message: active ? "Customer activated successfully." : "Customer deactivated successfully.",
@@ -392,7 +392,7 @@ export async function deleteCustomerAction(id: string) {
       metadata: { name: customerRow?.name, customerNumber: customerRow?.customerNumber },
     });
   });
-  revalidatePath("/en/customers");
+  revalidateCustomerPaths();
   return { ok: true, message: "Customer deleted successfully." };
 }
 export async function searchCustomersAction(q: string) {

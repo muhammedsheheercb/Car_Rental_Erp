@@ -1,3 +1,5 @@
+import { getTranslations } from "next-intl/server";
+import { translateFieldLabel, translateStatus } from "@/lib/i18n-helpers";
 import { PrintButton } from "./print-button";
 export type PrintableDocument = {
   title: string;
@@ -17,14 +19,21 @@ export type PrintableDocument = {
   signatures: { label: string; name: string; src: string | null }[];
   transfers?: { id: string; at: string; from: string; to: string; km: string }[];
 };
-export function PrintDocument({ document: d }: { document: PrintableDocument }) {
+export async function PrintDocument({ document: d }: { document: PrintableDocument }) {
+  const [tDoc, tCommon, tStatus, tFields] = await Promise.all([
+    getTranslations("documents"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("fieldLabels"),
+  ]);
+  const docTitle = translateFieldLabel(tFields, d.title);
   return (
     <div className="document-view">
       <div className="document-controls print:hidden">
         <PrintButton />
-        <p>A4 · Oman time · {d.returned ? "3" : "2"} signature positions</p>
+        <p>{tDoc("metaSummary", { count: d.returned ? 3 : 2 })}</p>
       </div>
-      <article className="print-document" aria-label={`${d.title} print preview`}>
+      <article className="print-document" aria-label={docTitle}>
         <div className="document-heading">
           <div>
             <div className="document-brand">
@@ -34,39 +43,41 @@ export function PrintDocument({ document: d }: { document: PrintableDocument }) 
             <p>{d.location}</p>
           </div>
           <div className="document-heading-right">
-            <h1>{d.title}</h1>
+            <h1>{docTitle}</h1>
             <p className="document-number">{d.number}</p>
             <p>
-              {d.status} · {d.issuedAt}
+              {translateStatus(tStatus, d.status)} · {d.issuedAt}
             </p>
           </div>
         </div>
         <div className="document-body">
           <section>
-            <h2>Agreement / Customer / Vehicle Details</h2>
+            <h2>{tDoc("detailsHeading")}</h2>
             <dl className="document-fields">
               {d.fields.map(([k, v]) => (
                 <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
+                  <dt>{translateFieldLabel(tFields, k)}</dt>
+                  <dd>
+                    {k === "Payment Mode" || k === "Rental Type" ? translateStatus(tStatus, v) : v}
+                  </dd>
                 </div>
               ))}
             </dl>
           </section>
           {!!d.charges.length && (
             <section>
-              <h2>Financial Details — OMR</h2>
+              <h2>{tDoc("financialHeading")}</h2>
               <table className="document-table">
                 <thead>
                   <tr>
-                    <th>Description</th>
-                    <th className="document-money">Amount</th>
+                    <th>{tDoc("descriptionCol")}</th>
+                    <th className="document-money">{tDoc("amountCol")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.charges.map((c) => (
                     <tr key={c.id}>
-                      <td>{c.label}</td>
+                      <td>{translateFieldLabel(tFields, c.label)}</td>
                       <td className="document-money">{c.amount}</td>
                     </tr>
                   ))}
@@ -77,21 +88,21 @@ export function PrintDocument({ document: d }: { document: PrintableDocument }) 
           <dl className="document-totals">
             {d.totals.map(([k, v]) => (
               <div key={k}>
-                <dt>{k}</dt>
+                <dt>{translateFieldLabel(tFields, k)}</dt>
                 <dd>{v}</dd>
               </div>
             ))}
           </dl>
           {!!d.transfers?.length && (
             <section>
-              <h2>Vehicle Transfer History</h2>
+              <h2>{tDoc("transferHeading")}</h2>
               <table className="document-table">
                 <thead>
                   <tr>
-                    <th>Date / Time</th>
-                    <th>Previous Registration</th>
-                    <th>Replacement Registration</th>
-                    <th>KM</th>
+                    <th>{tDoc("dateTimeCol")}</th>
+                    <th>{tDoc("prevRegCol")}</th>
+                    <th>{tDoc("newRegCol")}</th>
+                    <th>{tCommon("km")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -109,14 +120,14 @@ export function PrintDocument({ document: d }: { document: PrintableDocument }) 
           )}
           {d.remarks && (
             <section>
-              <h2>Remarks</h2>
+              <h2>{tDoc("remarksHeading")}</h2>
               <p className="document-remarks">{d.remarks}</p>
             </section>
           )}
         </div>
         <section
           className={`document-signatures ${d.returned ? "document-signatures-three" : ""}`}
-          aria-label="Signature positions"
+          aria-label={tDoc("nameSignature")}
         >
           {d.signatures.map((s) => (
             <div className="document-signature" key={s.label}>
@@ -124,19 +135,21 @@ export function PrintDocument({ document: d }: { document: PrintableDocument }) 
                 {s.src && (
                   <>
                     {/* biome-ignore lint/performance/noImgElement: private signature is embedded after document permission checks. */}
-                    <img src={s.src} alt={`${s.name} signature`} />
+                    <img src={s.src} alt={s.name || tDoc("nameSignature")} />
                   </>
                 )}
               </div>
-              <p className="document-signature-label">{s.label}</p>
-              <p>{s.name || "Name / Signature"}</p>
+              <p className="document-signature-label">{translateFieldLabel(tFields, s.label)}</p>
+              <p>{s.name || tDoc("nameSignature")}</p>
             </div>
           ))}
         </section>
         <footer className="document-footer">
-          <span>Prepared by: {d.preparedBy}</span>
           <span>
-            Printed by: {d.printedBy} · {d.printedAt} Oman
+            {tDoc("preparedBy")}: {d.preparedBy}
+          </span>
+          <span>
+            {tDoc("printedBy")}: {d.printedBy} · {d.printedAt} {tCommon("omanTime")}
           </span>
         </footer>
       </article>

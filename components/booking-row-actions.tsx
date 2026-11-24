@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   activateBookingAction,
@@ -14,6 +15,7 @@ import {
   parseOmanDateTime,
   type RentalPeriod,
 } from "@/features/rentals/booking-calculations";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { ConfirmDialog } from "./confirm-dialog";
 import { useToast } from "./toast";
 
@@ -49,6 +51,10 @@ export function BookingRowActions({
   canDelete: boolean;
   canPrint: boolean;
 }) {
+  const t = useTranslations();
+  const tRentals = useTranslations("rentals");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [editing, setEditing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startKm, setStartKm] = useState(String(booking.pickupOdometerKm));
@@ -109,7 +115,7 @@ export function BookingRowActions({
     startTransition(async () => {
       const result = await updateBookingAction(formData);
       if (!result.ok) {
-        setError(result.message);
+        setError(translateValidation(t, result.message));
         show(result.message, "error", `booking-edit-${booking.id}`);
         return;
       }
@@ -123,13 +129,13 @@ export function BookingRowActions({
     event.preventDefault();
     setError("");
     if (!/^\d+$/.test(startKm.trim())) {
-      setError("Enter a valid starting odometer reading.");
+      setError(translateValidation(t, "Enter a valid starting odometer reading."));
       return;
     }
     startTransition(async () => {
       const result = await activateBookingAction(booking.id, Number(startKm.trim()));
       if (!result.ok) {
-        setError(result.message);
+        setError(translateValidation(t, result.message));
         show(result.message, "error", `booking-start-${booking.id}`);
         return;
       }
@@ -160,14 +166,14 @@ export function BookingRowActions({
           href={`/${locale}/rentals/${booking.id}` as never}
           className="min-h-9 content-center rounded-lg border border-[var(--edge)] px-2.5 text-white hover:border-[var(--accent)]"
         >
-          View
+          {tCommon("view")}
         </Link>
         {canPrint && (
           <Link
             href={`/${locale}/documents/agreement/${booking.id}` as never}
             className="min-h-9 content-center rounded-lg border border-[var(--edge)] px-2.5 text-[var(--muted)] hover:text-white"
           >
-            Print
+            {tCommon("print")}
           </Link>
         )}
         {canUpdate && booking.status === "RESERVED" && (
@@ -180,7 +186,7 @@ export function BookingRowActions({
             }}
             className="min-h-9 rounded-lg bg-[var(--accent)] px-2.5 font-semibold text-black"
           >
-            Start
+            {tRentals("start")}
           </button>
         )}
         {editable && (
@@ -189,15 +195,18 @@ export function BookingRowActions({
             onClick={openEdit}
             className="min-h-9 rounded-lg px-2 font-medium text-[var(--accent)]"
           >
-            Edit
+            {tCommon("edit")}
           </button>
         )}
         {canDelete && booking.status === "RESERVED" && (
           <ConfirmDialog
-            title={`Delete booking ${booking.agreement}?`}
-            description={`Customer: ${booking.customerName} (${booking.vehicleLabel}). Only pending reservations without payments, invoices, fines, or operational records can be permanently deleted.`}
-            confirmLabel="Delete booking"
-            processingLabel="Deleting…"
+            title={tRentals("deleteBookingTitle", { agreement: booking.agreement })}
+            description={tRentals("deleteBookingDesc", {
+              customer: booking.customerName,
+              vehicle: booking.vehicleLabel,
+            })}
+            confirmLabel={tRentals("deleteBooking")}
+            processingLabel={tCommon("deleting")}
             pending={deleting}
             onConfirm={handleDelete}
             trigger={
@@ -206,7 +215,7 @@ export function BookingRowActions({
                 disabled={deleting}
                 className="min-h-9 rounded-lg px-2 font-medium text-red-300 disabled:opacity-50"
               >
-                Delete
+                {tCommon("delete")}
               </button>
             }
           />
@@ -217,7 +226,7 @@ export function BookingRowActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Start rental ${booking.agreement}`}
+          aria-label={booking.agreement}
           onMouseDown={() => !pending && setStarting(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -227,14 +236,14 @@ export function BookingRowActions({
             className="w-full rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 text-start sm:max-w-md sm:rounded-2xl sm:p-6"
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-              PICK-UP / START RENTAL
+              {tRentals("pickupEyebrow")}
             </p>
             <h2 className="mt-1 text-xl font-semibold">{booking.agreement}</h2>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {booking.customerName} · {booking.vehicleLabel}
             </p>
             <label className="mt-4 block text-sm">
-              Starting odometer (KM)
+              {tRentals("startingOdometer")}
               <input
                 value={startKm}
                 onChange={(e) => setStartKm(e.target.value)}
@@ -257,14 +266,14 @@ export function BookingRowActions({
                 onClick={() => setStarting(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {pending ? "Starting…" : "Confirm pick-up"}
+                {pending ? tRentals("starting") : tRentals("confirmPickup")}
               </button>
             </div>
           </form>
@@ -275,7 +284,7 @@ export function BookingRowActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Edit booking ${booking.agreement}`}
+          aria-label={booking.agreement}
           onMouseDown={() => !pending && setEditing(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -287,7 +296,9 @@ export function BookingRowActions({
             <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                  EDIT BOOKING ({booking.status})
+                  {tRentals("editBookingEyebrow", {
+                    status: translateStatus(tStatus, booking.status),
+                  })}
                 </p>
                 <h2 className="mt-1 text-xl font-semibold">{booking.agreement}</h2>
                 <p className="mt-1 text-xs text-[var(--muted)]">
@@ -296,7 +307,7 @@ export function BookingRowActions({
               </div>
               <button
                 type="button"
-                aria-label="Close edit booking modal"
+                aria-label={tCommon("close")}
                 disabled={pending}
                 onClick={() => setEditing(false)}
                 className="min-h-11 px-3 text-lg"
@@ -309,7 +320,7 @@ export function BookingRowActions({
               {booking.status === "RESERVED" ? (
                 <>
                   <label className="block text-sm">
-                    Pickup date & time (Oman)
+                    {tRentals("pickupDateTime")}
                     <input
                       type="datetime-local"
                       value={startsAt}
@@ -319,7 +330,7 @@ export function BookingRowActions({
                     />
                   </label>
                   <label className="block text-sm">
-                    Expected return (Oman)
+                    {tRentals("expectedReturnDateTime")}
                     <input
                       type="datetime-local"
                       readOnly
@@ -328,19 +339,26 @@ export function BookingRowActions({
                     />
                   </label>
                   <label className="block text-sm">
-                    Rental category
+                    {tRentals("rentalCategory")}
                     <select
                       value={period}
                       onChange={(e) => setPeriod(e.target.value as RentalPeriod)}
                       className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
                     >
-                      <option value="DAILY">Daily</option>
-                      <option value="WEEKLY">Weekly</option>
-                      <option value="MONTHLY">Monthly</option>
+                      <option value="DAILY">{tStatus("DAILY")}</option>
+                      <option value="WEEKLY">{tStatus("WEEKLY")}</option>
+                      <option value="MONTHLY">{tStatus("MONTHLY")}</option>
                     </select>
                   </label>
                   <label className="block text-sm">
-                    Duration
+                    {tRentals("rentDuration", {
+                      unit:
+                        period === "DAILY"
+                          ? tCommon("days")
+                          : period === "WEEKLY"
+                            ? tCommon("weeks")
+                            : tCommon("calendarMonths"),
+                    })}
                     <input
                       type="text"
                       inputMode="numeric"
@@ -352,7 +370,7 @@ export function BookingRowActions({
                     />
                   </label>
                   <label className="block text-sm">
-                    Pickup branch
+                    {tRentals("pickupBranch")}
                     <select
                       value={pickupBranchId}
                       onChange={(e) => setPickupBranchId(e.target.value)}
@@ -366,7 +384,7 @@ export function BookingRowActions({
                     </select>
                   </label>
                   <label className="block text-sm">
-                    Starting KM
+                    {tRentals("startingKm")}
                     <input
                       type="text"
                       inputMode="numeric"
@@ -380,14 +398,12 @@ export function BookingRowActions({
                 </>
               ) : (
                 <p className="rounded-lg border border-[var(--edge)] bg-black/20 p-3 text-xs text-[var(--muted)] sm:col-span-2">
-                  Active rentals preserve their contracted pickup time and duration. Use{" "}
-                  <strong>Approve contract extension</strong> on the agreement page to extend return
-                  dates.
+                  {tRentals("activeEditNote")}
                 </p>
               )}
 
               <label className="block text-sm">
-                Return branch
+                {tRentals("returnBranch")}
                 <select
                   value={returnBranchId}
                   onChange={(e) => setReturnBranchId(e.target.value)}
@@ -402,7 +418,7 @@ export function BookingRowActions({
               </label>
 
               <label className="block text-sm">
-                Additional Free KM
+                {tRentals("additionalFreeKm")}
                 <input
                   type="text"
                   inputMode="numeric"
@@ -420,11 +436,11 @@ export function BookingRowActions({
                   checked={openKm}
                   onChange={(e) => setOpenKm(e.target.checked)}
                 />
-                Open KM (disable excess kilometre charges)
+                {tRentals("openKmDisable")}
               </label>
 
               <label className="block text-sm sm:col-span-2">
-                Remarks / notes
+                {tCommon("remarksNotes")}
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -448,14 +464,14 @@ export function BookingRowActions({
                 onClick={() => setEditing(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {pending ? "Saving…" : "Save booking changes"}
+                {pending ? tCommon("saving") : tRentals("saveBookingChanges")}
               </button>
             </footer>
           </form>

@@ -1,7 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { blacklistCustomerAction } from "@/app/[locale]/(protected)/customers/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { CalendarInput } from "./calendar-input";
 import { useToast } from "./toast";
 
@@ -10,7 +12,7 @@ export function BlacklistDialog({
   customerName,
   customerNumber,
   mobile,
-  trigger = "Add to Blacklist",
+  trigger,
   onSuccess,
 }: {
   customerId: string;
@@ -20,6 +22,10 @@ export function BlacklistDialog({
   trigger?: string;
   onSuccess?: (blacklistId: string) => void;
 }) {
+  const t = useTranslations();
+  const tCust = useTranslations("customers");
+  const tBl = useTranslations("customers.blacklistPage");
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [description, setDescription] = useState("");
@@ -34,10 +40,10 @@ export function BlacklistDialog({
   };
   const save = () => {
     const next: Record<string, string> = {};
-    if (!reason.trim()) next.reason = "Reason is required.";
-    if (!description.trim()) next.description = "Description is required.";
+    if (!reason.trim()) next.reason = translateValidation(t, "Reason is required.");
+    if (!description.trim()) next.description = translateValidation(t, "Description is required.");
     if (startsAt && endsAt && endsAt < startsAt)
-      next.endsAt = "End date cannot be before start date.";
+      next.endsAt = translateValidation(t, "End date cannot be before start date.");
     setErrors(next);
     if (Object.keys(next).length) return;
     start(async () => {
@@ -50,7 +56,7 @@ export function BlacklistDialog({
           endsAt,
         });
         if (!result.ok || !result.id) {
-          setErrors({ form: result.message });
+          setErrors({ form: translateValidation(t, result.message) });
           show(result.message, "error", `blacklist-${customerId}`);
           return;
         }
@@ -59,7 +65,12 @@ export function BlacklistDialog({
         router.refresh();
         setOpen(false);
       } catch {
-        setErrors({ form: "We could not add this customer to the blacklist. Please retry." });
+        setErrors({
+          form: translateValidation(
+            t,
+            "We could not add this customer to the blacklist. Please retry.",
+          ),
+        });
       }
     });
   };
@@ -70,13 +81,13 @@ export function BlacklistDialog({
         onClick={() => setOpen(true)}
         className="min-h-10 px-2 text-sm text-amber-200"
       >
-        {trigger}
+        {trigger ?? tCust("addToBlacklist")}
       </button>
       {open && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Add ${customerName} to blacklist`}
+          aria-label={tCust("addToBlacklist")}
           onMouseDown={close}
           className="fixed inset-0 z-[60] grid place-items-end bg-black/70 sm:place-items-center sm:p-4"
         >
@@ -86,22 +97,22 @@ export function BlacklistDialog({
               save();
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
+            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] text-start sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
           >
             <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
               <div>
-                <p className="text-sm text-[var(--accent)]">CUSTOMER BLACKLIST</p>
-                <h2 className="mt-1 text-xl font-semibold">Add to Blacklist</h2>
+                <p className="text-sm text-[var(--accent)]">{tBl("dialogEyebrow")}</p>
+                <h2 className="mt-1 text-xl font-semibold">{tCust("addToBlacklist")}</h2>
                 <p className="mt-2 text-sm text-[var(--muted)]">
                   {customerName} · {customerNumber} · {mobile}
                 </p>
                 <span className="mt-2 inline-flex rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs text-emerald-200">
-                  Currently eligible
+                  {tBl("currentlyEligible")}
                 </span>
               </div>
               <button
                 type="button"
-                aria-label="Close blacklist form"
+                aria-label={tCommon("close")}
                 disabled={pending}
                 onClick={close}
                 className="min-h-11 px-3"
@@ -111,9 +122,9 @@ export function BlacklistDialog({
             </header>
             <div className="space-y-5 p-5 sm:p-6">
               <section>
-                <h3 className="font-medium">Blacklist reason</h3>
+                <h3 className="font-medium">{tBl("blacklistReason")}</h3>
                 <label className="mt-3 block text-sm">
-                  Reason
+                  {tCommon("reason")}
                   <input
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -123,7 +134,7 @@ export function BlacklistDialog({
                 </label>
                 {errors.reason && <p className="mt-1 text-sm text-red-300">{errors.reason}</p>}
                 <label className="mt-4 block text-sm">
-                  Description
+                  {tCommon("description")}
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -137,16 +148,18 @@ export function BlacklistDialog({
               </section>
               <section>
                 <h3 className="font-medium">
-                  Effective period{" "}
-                  <span className="text-sm font-normal text-[var(--muted)]">(optional)</span>
+                  {tBl("effectivePeriodCol")}{" "}
+                  <span className="text-sm font-normal text-[var(--muted)]">
+                    ({tCommon("optional")})
+                  </span>
                 </h3>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <label htmlFor="blacklist-start" className="text-sm">
-                    Start date
+                    {tBl("startDate")}
                     <CalendarInput id="blacklist-start" value={startsAt} onChange={setStartsAt} />
                   </label>
                   <label htmlFor="blacklist-end" className="text-sm">
-                    End date
+                    {tBl("endDate")}
                     <CalendarInput id="blacklist-end" value={endsAt} onChange={setEndsAt} />
                   </label>
                 </div>
@@ -165,14 +178,14 @@ export function BlacklistDialog({
                 onClick={close}
                 className="min-h-11 rounded-lg px-4"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 font-semibold text-black"
               >
-                {pending ? "Adding…" : "Add to Blacklist"}
+                {pending ? tBl("adding") : tCust("addToBlacklist")}
               </button>
             </footer>
           </form>

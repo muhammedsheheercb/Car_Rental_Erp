@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { RentalLatePreview } from "@/components/rental-late-preview";
 import { RentalLifecycleForms } from "@/components/rental-lifecycle-forms";
 import { db } from "@/db/client";
@@ -20,6 +21,7 @@ import { totals } from "@/features/finance/service";
 import { formatOMR } from "@/features/rentals/calculations";
 import { cancellationPolicy } from "@/features/rentals/late-charges";
 import { can, requirePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const date = (value: Date) =>
   value.toLocaleString("en-GB", {
@@ -33,7 +35,15 @@ export default async function AgreementPage({
   params: Promise<{ id: string; locale: string }>;
 }) {
   const actor = await requirePermission("rentals", "read");
-  const { id, locale } = await params;
+  const [{ id, locale }, tRentals, tCust, tCommon, tStatus, tOps, tFinance] = await Promise.all([
+    params,
+    getTranslations("rentals"),
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("operations"),
+    getTranslations("finance"),
+  ]);
   if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) notFound();
   const [record] = await db
     .select({
@@ -93,48 +103,50 @@ export default async function AgreementPage({
   }).allowed;
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">Agreement {rental.agreementNumber}</h1>
+      <h1 className="text-3xl font-semibold">
+        {tRentals("agreementTitle", { number: rental.agreementNumber })}
+      </h1>
       <div className="flex flex-wrap gap-3">
         {can(actor, "rentals", "print", rental.branchId) && (
           <Link className="btn" href={`/${locale}/documents/agreement/${id}` as never}>
-            Print Agreement A4
+            {tRentals("printAgreementA4")}
           </Link>
         )}
         {rental.status === "ACTIVE" && canUpdate && (
           <Link className="btn" href={`/${locale}/transfers?booking=${id}` as never}>
-            Transfer Vehicle
+            {tRentals("transferVehicle")}
           </Link>
         )}
         {can(actor, "finance", "read", rental.branchId) && (
           <Link className="btn" href={`/${locale}/invoices?booking=${id}` as never}>
-            Invoice
+            {tRentals("invoice")}
           </Link>
         )}
         {can(actor, "customers", "read") && can(actor, "finance", "read", rental.branchId) && (
           <Link className="btn" href={`/${locale}/ledger?customerId=${rental.customerId}` as never}>
-            Customer Ledger
+            {tCust("customerLedger")}
           </Link>
         )}
       </div>
       <p className="text-sm text-[var(--muted)]">
-        {rental.status} · {record.branch} · All dates and times are Oman time.
+        {translateStatus(tStatus, rental.status)} · {record.branch} · {tCommon("omanTimeFull")}
       </p>
       <dl className="grid gap-3 rounded-xl border border-[var(--edge)] p-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Object.entries({
-          "Booking Number": rental.agreementNumber,
-          "Out Date/Time": date(rental.startsAt),
-          "Vehicle Name": vehicle.vehicleNumber,
-          Model: record.model,
-          "Registration Number": vehicle.registrationNumber,
-          "Customer Name": customer.name,
-          Mobile: customer.mobile,
-          Address: customer.address,
-          "Expected Return": date(rental.expectedReturnAt),
-          "Starting KM": rental.pickupOdometerKm ?? vehicle.currentOdometerKm,
-          "Ending KM": rental.returnOdometerKm ?? "—",
-          "Recorded total": formatOMR(rental.totalBaisa),
-        }).map(([label, value]) => (
-          <div key={label} className="min-w-0">
+        {[
+          [tFinance("bookingNumber"), rental.agreementNumber],
+          [tOps("outDateTime"), date(rental.startsAt)],
+          [tCommon("vehicle"), vehicle.vehicleNumber],
+          [tOps("model"), record.model],
+          [tCommon("registration"), vehicle.registrationNumber],
+          [tCommon("customer"), customer.name],
+          [tOps("mobile"), customer.mobile],
+          [tCust("address"), customer.address],
+          [tOps("expectedReturn"), date(rental.expectedReturnAt)],
+          [tRentals("startingKm"), rental.pickupOdometerKm ?? vehicle.currentOdometerKm],
+          [tRentals("endingKm"), rental.returnOdometerKm ?? "—"],
+          [tCommon("total"), formatOMR(rental.totalBaisa)],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="min-w-0">
             <dt className="text-xs text-[var(--muted)]">{label}</dt>
             <dd className="mt-1 break-words text-sm">{value}</dd>
           </div>
@@ -155,19 +167,14 @@ export default async function AgreementPage({
       )}
       <RentalLifecycleForms
         cancellationDetails={{
-          "Booking Number": rental.agreementNumber,
-          "Out Date": rental.startsAt.toLocaleDateString("en-GB", { timeZone: "Asia/Muscat" }),
-          "Out Time": rental.startsAt.toLocaleTimeString("en-GB", {
-            timeZone: "Asia/Muscat",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          "Vehicle Name": vehicle.vehicleNumber,
-          Model: record.model,
-          "Registration Number": vehicle.registrationNumber,
-          "Customer Name": customer.name,
-          Mobile: customer.mobile,
-          Address: customer.address,
+          [tFinance("bookingNumber")]: rental.agreementNumber,
+          [tOps("outDateTime")]: date(rental.startsAt),
+          [tCommon("vehicle")]: vehicle.vehicleNumber,
+          [tOps("model")]: record.model,
+          [tCommon("registration")]: vehicle.registrationNumber,
+          [tCommon("customer")]: customer.name,
+          [tOps("mobile")]: customer.mobile,
+          [tCust("address")]: customer.address,
         }}
         id={id}
         status={rental.status}
@@ -181,9 +188,9 @@ export default async function AgreementPage({
         initialNow={now.toISOString()}
       />
       <section className="rounded-xl border border-[var(--edge)] p-4">
-        <h2 className="text-lg font-semibold">Extension history</h2>
+        <h2 className="text-lg font-semibold">{tRentals("extensionHistory")}</h2>
         {!extensions.length && (
-          <p className="mt-3 text-sm text-[var(--muted)]">No approved extensions.</p>
+          <p className="mt-3 text-sm text-[var(--muted)]">{tRentals("noExtensions")}</p>
         )}
         {extensions.map(({ history, user }) => (
           <div key={history.id} className="mt-3 border-t border-[var(--edge)] pt-3 text-sm">
@@ -191,48 +198,45 @@ export default async function AgreementPage({
               {date(history.previousExpectedReturnAt)} → {date(history.newExpectedReturnAt)}
             </p>
             <p>
-              {history.duration} {history.period.toLowerCase()} periods ·{" "}
-              {formatOMR(history.additionalRentBaisa)} · {user} · Approved{" "}
-              {date(history.approvedAt)}
+              {history.duration} {translateStatus(tStatus, history.period)} ·{" "}
+              {formatOMR(history.additionalRentBaisa)} · {user} · {date(history.approvedAt)}
             </p>
             <p className="break-words">{history.remarks}</p>
           </div>
         ))}
       </section>
       <section className="rounded-xl border border-[var(--edge)] p-4">
-        <h2 className="text-lg font-semibold">Cancellation history</h2>
+        <h2 className="text-lg font-semibold">{tRentals("cancellationHistory")}</h2>
         {!cancellations.length && (
-          <p className="mt-3 text-sm text-[var(--muted)]">No cancellations.</p>
+          <p className="mt-3 text-sm text-[var(--muted)]">{tRentals("noCancellations")}</p>
         )}
         {cancellations.map(({ history, user }) => (
           <div key={history.id} className="mt-3 text-sm">
             <p>
               {date(history.cancelledAt)} · {user} ·{" "}
-              {history.overridden ? "Admin override" : "Within cancellation window"} · Previous
-              status {history.previousStatus}
+              {translateStatus(tStatus, history.previousStatus)}
             </p>
             <p>
-              {history.startingKm} → {history.endingKm} KM
+              {history.startingKm} → {history.endingKm} {tCommon("km")}
             </p>
             <p className="break-words">{history.remarks}</p>
-            <p>
-              Financial records are retained. Refunds and adjustments require separate transactions.
-            </p>
+            <p>{tRentals("cancelAllowedNote")}</p>
           </div>
         ))}
       </section>
       <section className="rounded-xl border border-[var(--edge)] p-4">
-        <h2 className="text-lg font-semibold">Financial components</h2>
+        <h2 className="text-lg font-semibold">{tRentals("financialComponents")}</h2>
         <p className="mt-3 text-xl font-semibold">
-          Invoice balance: {formatOMR(financial.balance)}
+          {tRentals("invoiceBalance")}: {formatOMR(financial.balance)}
         </p>
         <p>
-          Payback approved: {formatOMR(financial.approvedBaisa)} · Returned:{" "}
-          {formatOMR(financial.returnedBaisa)} · Remaining: {formatOMR(financial.remainingBaisa)}
+          {tFinance("amountDueBack")}: {formatOMR(financial.approvedBaisa)} ·{" "}
+          {tFinance("alreadyReturned")}: {formatOMR(financial.returnedBaisa)} ·{" "}
+          {tFinance("remaining")}: {formatOMR(financial.remainingBaisa)}
         </p>
         {charges.map((charge) => (
           <p key={charge.id} className="mt-2 break-words text-sm">
-            {charge.component.replaceAll("_", " ")} · {charge.description} ·{" "}
+            {translateStatus(tStatus, charge.component)} · {charge.description} ·{" "}
             {formatOMR(charge.amountBaisa)}
           </p>
         ))}
@@ -244,7 +248,9 @@ export default async function AgreementPage({
           className="rounded-xl border border-[var(--edge)] p-4"
         >
           <h2 className="text-lg font-semibold">
-            {phase === "BEFORE_RENTAL" ? "Before-rental" : "After-return"} scratch / damage evidence
+            {phase === "BEFORE_RENTAL"
+              ? tRentals("beforeRentalEvidence")
+              : tRentals("afterReturnEvidence")}
           </h2>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {evidence

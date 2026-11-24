@@ -1,6 +1,8 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useState } from "react";
 import { financeAction } from "@/app/[locale]/(protected)/finance/actions";
+import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
 export type FinanceBooking = {
   id: string;
@@ -31,6 +33,11 @@ export function FinanceForm({
   };
   previous?: { id: string; vehicleId: string; text: string }[];
 }) {
+  const tRoot = useTranslations();
+  const tFinance = useTranslations("finance");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tFields = useTranslations("fieldLabels");
   const [state, action, pending] = useActionState(financeAction, { error: "", message: "" });
   const [bookingId, setBookingId] = useState("");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -56,7 +63,7 @@ export function FinanceForm({
       {!!bookings.length && (
         <>
           <SearchableCombobox
-            label="Booking Number / Customer / Vehicle"
+            label={tFinance("bookingPickerLabel")}
             value={bookingId}
             options={bookings}
             onChange={(id) => {
@@ -71,14 +78,14 @@ export function FinanceForm({
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           {Object.entries(booking.snapshot).map(([k, v]) => (
             <p key={k}>
-              {k}: {v ?? "—"}
+              {translateFieldLabel(tFields, k)}: {v ?? "—"}
             </p>
           ))}
         </div>
       )}
       {kind === "LEGAL" && booking && (
         <aside className="rounded-lg border border-[var(--edge)] p-3">
-          <h3>Previous legal fines for this vehicle</h3>
+          <h3>{tFinance("previousLegalFines")}</h3>
           {previous
             .filter((p) => p.vehicleId === booking.vehicleId)
             .map((p) => (
@@ -87,13 +94,13 @@ export function FinanceForm({
               </p>
             ))}
           {!previous.some((p) => p.vehicleId === booking.vehicleId) && (
-            <p>No previous legal fines.</p>
+            <p>{tFinance("noPreviousLegalFines")}</p>
           )}
         </aside>
       )}
       {operation !== "delete" && (
         <label>
-          Amount (OMR)
+          {tCommon("amountOmr")}
           <input
             name="amount"
             required
@@ -107,7 +114,7 @@ export function FinanceForm({
       {fine && (
         <>
           <label>
-            Date From (Oman)
+            {tFinance("dateFrom")}
             <input
               key={`from-${bookingId}`}
               name="dateFrom"
@@ -117,7 +124,7 @@ export function FinanceForm({
             />
           </label>
           <label>
-            Date To (Oman)
+            {tFinance("dateTo")}
             <input
               key={`to-${bookingId}`}
               name="dateTo"
@@ -127,7 +134,7 @@ export function FinanceForm({
             />
           </label>
           <label>
-            Fine details
+            {tFinance("fineDetails")}
             <textarea name="details" required maxLength={2000} defaultValue={record?.details} />
           </label>
         </>
@@ -135,24 +142,22 @@ export function FinanceForm({
       {(operation === "payment" || operation === "correction") && (
         <>
           <label>
-            Payment Mode
+            {tCommon("paymentMode")}
             <select name="method" defaultValue={record?.method ?? "CASH"}>
-              <option>CASH</option>
-              <option>CARD</option>
-              <option>BANK_TRANSFER</option>
+              <option value="CASH">{tStatus("CASH")}</option>
+              <option value="CARD">{tStatus("CARD")}</option>
+              <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
             </select>
           </label>
           <label>
-            Reference
+            {tCommon("reference")}
             <input name="reference" maxLength={120} />
           </label>
         </>
       )}
       {operation !== "delete" && (
         <label>
-          {operation === "correction"
-            ? "Correction reason (zero amount reverses receipt)"
-            : "Remarks"}
+          {operation === "correction" ? tFinance("correctionReason") : tCommon("remarks")}
           <textarea
             name="remarks"
             maxLength={1000}
@@ -163,22 +168,26 @@ export function FinanceForm({
       )}
       {(operation === "edit" || operation === "delete") && (
         <label>
-          Reason
+          {tCommon("reason")}
           <input name="reason" required maxLength={1000} />
         </label>
       )}
       {state.error && (
         <p role="alert" className="text-red-400">
-          {state.error}
+          {translateValidation(tRoot, state.error)}
         </p>
       )}
-      {state.message && <p role="status">{state.message}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button
         type="submit"
         disabled={pending || (!!bookings.length && !bookingId)}
         className="rounded-lg bg-[var(--accent)] px-4 py-3 text-black disabled:opacity-50"
       >
-        {pending ? "Saving…" : operation === "delete" ? "Delete legal fine" : "Save"}
+        {pending
+          ? tCommon("saving")
+          : operation === "delete"
+            ? tFinance("deleteLegalFine")
+            : tCommon("save")}
       </button>
     </form>
   );

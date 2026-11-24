@@ -1,8 +1,10 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { LEDGER_FILTER_TYPES, type LedgerFilterType } from "@/features/ledger/calculations";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 type CustomerOption = {
   id: string;
@@ -11,20 +13,6 @@ type CustomerOption = {
   mobile: string;
   blacklistId: string | null;
   isActive: boolean;
-};
-
-const TYPE_LABELS: Record<LedgerFilterType, string> = {
-  ALL: "All transaction types",
-  RENT_CHARGE: "Rent Charge",
-  DEPOSIT: "Deposit",
-  ADVANCE: "Advance",
-  RECEIPT: "Receipt",
-  PAYBACK: "Payback",
-  REVERSAL: "Reversal",
-  FINE: "Fine",
-  LEGAL_FINE: "Legal Fine",
-  DAMAGE: "Damage",
-  ADJUSTMENT: "Adjustment",
 };
 
 export function LedgerCustomerPicker({
@@ -36,6 +24,8 @@ export function LedgerCustomerPicker({
   selectedCustomerId: string;
   initialQuery: string;
 }) {
+  const tLedger = useTranslations("ledger");
+  const tStatus = useTranslations("status");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -87,31 +77,35 @@ export function LedgerCustomerPicker({
       className="grid gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] md:items-end print:hidden"
     >
       <label className="block text-xs text-[var(--muted)]">
-        Search customer
+        {tLedger("searchCustomer")}
         <input
           type="search"
           name="q"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Name, mobile, CU-number, Civil ID, licence…"
-          aria-label="Search customer for ledger"
+          placeholder={tLedger("searchPlaceholder")}
+          aria-label={tLedger("searchCustomer")}
           className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3 text-sm text-[var(--ink)]"
         />
       </label>
 
       <label className="block text-xs text-[var(--muted)]">
-        Select customer ({customers.length} shown)
+        {tLedger("selectCustomer", { count: customers.length })}
         <select
-          aria-label="Select customer"
+          aria-label={tLedger("chooseCustomer")}
           value={selectedCustomerId}
           onChange={(e) => selectCustomer(e.target.value)}
           className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3 text-sm text-[var(--ink)]"
         >
-          <option value="">Choose a customer…</option>
+          <option value="">{tLedger("chooseCustomer")}</option>
           {customers.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} · {c.customerNumber} · {c.mobile}
-              {c.blacklistId ? " [BLACKLISTED]" : !c.isActive ? " [INACTIVE]" : ""}
+              {c.blacklistId
+                ? ` [${tStatus("BLACKLISTED")}]`
+                : !c.isActive
+                  ? ` [${tStatus("INACTIVE")}]`
+                  : ""}
             </option>
           ))}
         </select>
@@ -123,7 +117,7 @@ export function LedgerCustomerPicker({
           onClick={() => selectCustomer("")}
           className="min-h-11 rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--muted)] hover:text-white"
         >
-          All customers
+          {tLedger("allCustomers")}
         </button>
       )}
     </div>
@@ -143,6 +137,9 @@ export function LedgerTransactionFilters({
   initialType: LedgerFilterType;
   searchQuery: string;
 }) {
+  const tLedger = useTranslations("ledger");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const router = useRouter();
   const pathname = usePathname();
   const [from, setFrom] = useState(initialFrom);
@@ -184,7 +181,7 @@ export function LedgerTransactionFilters({
       className="grid gap-3 rounded-xl border border-[var(--edge)] bg-black/20 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.2fr_auto] lg:items-end print:hidden"
     >
       <label className="block text-xs text-[var(--muted)]">
-        From date (Oman)
+        {tCommon("fromDate")}
         <input
           type="date"
           name="from"
@@ -195,7 +192,7 @@ export function LedgerTransactionFilters({
       </label>
 
       <label className="block text-xs text-[var(--muted)]">
-        To date (Oman)
+        {tCommon("toDate")}
         <input
           type="date"
           name="to"
@@ -206,7 +203,7 @@ export function LedgerTransactionFilters({
       </label>
 
       <label className="block text-xs text-[var(--muted)]">
-        Transaction type
+        {tLedger("transactionType")}
         <select
           name="type"
           value={type}
@@ -215,7 +212,7 @@ export function LedgerTransactionFilters({
         >
           {LEDGER_FILTER_TYPES.map((t) => (
             <option key={t} value={t}>
-              {TYPE_LABELS[t]}
+              {t === "ALL" ? tLedger("allTransactionTypes") : translateStatus(tStatus, t)}
             </option>
           ))}
         </select>
@@ -226,7 +223,7 @@ export function LedgerTransactionFilters({
           type="submit"
           className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
         >
-          Filter
+          {tCommon("filter")}
         </button>
         {hasFilters && (
           <button
@@ -234,7 +231,7 @@ export function LedgerTransactionFilters({
             onClick={clear}
             className="min-h-11 rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--muted)] hover:text-white"
           >
-            Clear
+            {tCommon("clear")}
           </button>
         )}
       </div>

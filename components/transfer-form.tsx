@@ -1,9 +1,11 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 import { transferAction } from "@/app/[locale]/(protected)/transfers/actions";
 import { parseOMR } from "@/features/finance/calculations";
 import { omrInput } from "@/features/invoices/calculations";
 import { transferBalance, transferMileage } from "@/features/transfers/calculations";
+import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
 export type ReplacementOption = {
   id: string;
@@ -28,6 +30,11 @@ export function TransferForm({
   options: ReplacementOption[];
   transferredAt: string;
 }) {
+  const tRoot = useTranslations();
+  const tTransfers = useTranslations("transfers");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tFields = useTranslations("fieldLabels");
   const [state, action, pending] = useActionState(transferAction, { error: "", message: "" });
   const [requestId] = useState(() => crypto.randomUUID());
   const [vehicleId, setVehicleId] = useState("");
@@ -62,12 +69,18 @@ export function TransferForm({
   } catch (e) {
     error = e instanceof Error ? e.message : "Invalid values.";
   }
+  const chargeLabels = {
+    damage: tTransfers("damageOmr"),
+    washing: tTransfers("washingOmr"),
+    petrol: tTransfers("petrolOmr"),
+    received: tTransfers("receivedOmr"),
+  } as const;
   return (
     <form action={action} className="grid gap-4 rounded-xl border border-[var(--edge)] p-4">
       <input type="hidden" name="rentalId" value={rental.id} />
       <input type="hidden" name="requestId" value={requestId} />
       <SearchableCombobox
-        label="New Transfer Vehicle"
+        label={tTransfers("newTransferVehicle")}
         options={options}
         value={vehicleId}
         onChange={setVehicleId}
@@ -77,7 +90,7 @@ export function TransferForm({
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(selected.details).map(([k, v]) => (
             <div key={k}>
-              <dt className="text-sm text-[var(--muted)]">{k}</dt>
+              <dt className="text-sm text-[var(--muted)]">{translateFieldLabel(tFields, k)}</dt>
               <dd>{v ?? "—"}</dd>
             </div>
           ))}
@@ -85,7 +98,7 @@ export function TransferForm({
       )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label>
-          Transfer Date / Time (Oman)
+          {tTransfers("transferDateTime")}
           <input
             name="transferredAt"
             type="datetime-local"
@@ -95,7 +108,7 @@ export function TransferForm({
           />
         </label>
         <label>
-          Current vehicle Ending KM
+          {tTransfers("currentEndingKm")}
           <input
             name="endingKm"
             inputMode="numeric"
@@ -108,7 +121,7 @@ export function TransferForm({
         </label>
         {selected && (
           <label>
-            New vehicle Starting KM
+            {tTransfers("newStartingKm")}
             <input
               key={selected.id}
               name="newStartingKm"
@@ -122,7 +135,7 @@ export function TransferForm({
         )}
         {(["damage", "washing", "petrol", "received"] as const).map((k) => (
           <label key={k}>
-            {k === "received" ? "Received Amount / Down Payment" : k} (OMR)
+            {chargeLabels[k]}
             <input
               name={k}
               inputMode="decimal"
@@ -134,11 +147,11 @@ export function TransferForm({
           </label>
         ))}
         <label>
-          Payment Mode
+          {tCommon("paymentMode")}
           <select name="method" className="input mt-1">
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank</option>
+            <option value="CASH">{tStatus("CASH")}</option>
+            <option value="CARD">{tStatus("CARD")}</option>
+            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
           </select>
         </label>
       </div>
@@ -154,27 +167,27 @@ export function TransferForm({
             "New Balance (OMR)": omrInput(preview.newBalance),
           }).map(([k, v]) => (
             <div key={k}>
-              {k}: <strong>{v}</strong>
+              {translateFieldLabel(tFields, k)}: <strong>{v}</strong>
             </div>
           ))}
         </dl>
       )}
       <label>
-        Remarks
+        {tCommon("remarks")}
         <textarea name="remarks" required maxLength={1000} className="input mt-1" />
       </label>
       {(error || state.error) && (
         <p role="alert" className="text-red-400">
-          {state.error || error}
+          {translateValidation(tRoot, state.error || error)}
         </p>
       )}
-      {state.message && <p role="status">{state.message}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button
         type="submit"
         className="btn"
         disabled={pending || !selected || !!error || !!state.message}
       >
-        {pending ? "Transferring…" : "Transfer Vehicle"}
+        {pending ? tTransfers("transferring") : tTransfers("submit")}
       </button>
     </form>
   );

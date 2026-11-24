@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Option = { id: string; name: string };
@@ -16,6 +17,7 @@ export function SearchableCombobox({
   disabled?: boolean;
   onChange: (id: string) => void;
 }) {
+  const t = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -51,7 +53,9 @@ export function SearchableCombobox({
       >
         <span className={selected ? "truncate" : "text-[var(--muted)]"}>
           {selected?.name ??
-            (disabled ? "Select a brand first" : `Select ${label.toLocaleLowerCase()}`)}
+            (disabled
+              ? t("selectBrandFirst")
+              : t("selectField", { label: label.toLocaleLowerCase() }))}
         </span>
         <span>⌄</span>
       </button>
@@ -61,7 +65,7 @@ export function SearchableCombobox({
           onClick={() => onChange("")}
           className="mt-1 text-xs text-[var(--muted)]"
         >
-          Clear selection
+          {t("clearSelection")}
         </button>
       )}
       {open && !disabled && (
@@ -87,7 +91,7 @@ export function SearchableCombobox({
                 choose(results[active].id);
               }
             }}
-            placeholder={`Search ${label.toLocaleLowerCase()}…`}
+            placeholder={t("searchField", { label: label.toLocaleLowerCase() })}
             className="min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3 text-white placeholder:text-[var(--muted)]"
           />
           <div className="mt-2 max-h-60 overflow-y-auto">
@@ -106,9 +110,7 @@ export function SearchableCombobox({
                 </button>
               ))
             ) : (
-              <p className="p-3 text-sm text-[var(--muted)]">
-                No matching options. Clear the search to view all options.
-              </p>
+              <p className="p-3 text-sm text-[var(--muted)]">{t("noMatchingOptions")}</p>
             )}
           </div>
         </div>

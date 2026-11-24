@@ -1,8 +1,13 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useState } from "react";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { useToast } from "@/components/toast";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { loginAction } from "./actions";
 export default function LoginPage() {
+  const t = useTranslations();
+  const tAuth = useTranslations("auth");
   const [state, action, pending] = useActionState(loginAction, { error: "" });
   const [passwordVisible, setPasswordVisible] = useState(false);
   const { show } = useToast();
@@ -24,13 +29,16 @@ export default function LoginPage() {
         action={action}
         className="relative w-full max-w-sm rounded-3xl border border-white/15 bg-[#11120f]/95 p-7 shadow-2xl backdrop-blur"
       >
-        <p className="text-xs font-semibold tracking-[.2em] text-[var(--accent)]">MUSCAT CARS</p>
-        <h1 className="mt-4 text-3xl font-semibold">Welcome back</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Sign in to your secure operations workspace.
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[.2em] text-[var(--accent)]">
+            {t("appName")}
+          </p>
+          <LanguageSwitcher className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-[var(--muted)] hover:text-white" />
+        </div>
+        <h1 className="mt-4 text-3xl font-semibold">{tAuth("welcomeBack")}</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">{tAuth("signInSubtitle")}</p>
         <label className="mt-7 block text-sm">
-          Username
+          {tAuth("username")}
           <input
             name="username"
             autoComplete="username"
@@ -39,7 +47,7 @@ export default function LoginPage() {
           />
         </label>
         <label className="mt-4 block text-sm">
-          Password
+          {tAuth("password")}
           <span className="relative mt-2 block">
             <input
               name="password"
@@ -50,7 +58,7 @@ export default function LoginPage() {
             />
             <button
               type="button"
-              aria-label={passwordVisible ? "Hide password" : "Show password"}
+              aria-label={passwordVisible ? tAuth("hidePassword") : tAuth("showPassword")}
               aria-pressed={passwordVisible}
               onClick={() => setPasswordVisible((visible) => !visible)}
               className="absolute inset-y-0 end-0 grid min-h-11 w-11 place-items-center text-[var(--muted)] hover:text-white"
@@ -69,7 +77,7 @@ export default function LoginPage() {
         </label>
         {state.error && (
           <p role="alert" className="mt-4 text-sm text-red-300">
-            {state.error}
+            {translateValidation(t, state.error)}
           </p>
         )}
         <button
@@ -77,7 +85,7 @@ export default function LoginPage() {
           disabled={pending}
           className="mt-7 min-h-11 w-full rounded-lg bg-[var(--accent)] px-4 font-semibold text-black disabled:opacity-60"
         >
-          {pending ? "Signing in…" : "Sign in"}
+          {pending ? tAuth("signingIn") : tAuth("signIn")}
         </button>
       </form>
     </main>

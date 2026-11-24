@@ -21,6 +21,7 @@ import { operationalBlocking } from "@/features/rentals/availability";
 import { parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
 import { can, requirePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -42,9 +43,12 @@ export default async function RentalsPage({
   }>;
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
-  const [identity, t] = await Promise.all([
+  const [identity, t, tRentals, tCommon, tStatus] = await Promise.all([
     requirePermission("rentals", "read"),
     getTranslations(),
+    getTranslations("rentals"),
+    getTranslations("common"),
+    getTranslations("status"),
   ]);
   const scoped =
     identity.role === "SUPER_ADMIN" ? undefined : inArray(vehicles.branchId, identity.branchIds);
@@ -263,12 +267,9 @@ export default async function RentalsPage({
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-sm text-[var(--accent)]">OPERATIONS / RENTALS</p>
-        <h1 className="mt-2 text-3xl font-semibold">{t("rentals")}</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Reservations are checked against customer identity, blacklist status and vehicle conflicts
-          on the server.
-        </p>
+        <p className="text-sm text-[var(--accent)]">{tRentals("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{t("nav.rentals")}</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">{tRentals("subtitle")}</p>
       </div>
       <OperationsLinks locale={locale} />
       {canCreate && (
@@ -295,21 +296,21 @@ export default async function RentalsPage({
       )}
       <section className="overflow-hidden rounded-2xl border border-[var(--edge)] bg-[var(--surface)]">
         <div className="border-b border-[var(--edge)] p-4">
-          <h2 className="font-semibold">Bookings & rental agreements</h2>
+          <h2 className="font-semibold">{tRentals("bookingsHeading")}</h2>
         </div>
         <BookingsControls total={total} branches={branchRows} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[66rem] text-start text-sm">
             <thead className="bg-[var(--raised)] text-[var(--muted)]">
               <tr>
-                <th className="p-3 text-start">Agreement</th>
-                <th className="p-3 text-start">Customer</th>
-                <th className="p-3 text-start">Vehicle</th>
-                <th className="p-3 text-start">Branch</th>
-                <th className="p-3 text-start">Period (Oman)</th>
-                <th className="p-3 text-center">Status</th>
-                <th className="p-3 text-end">Total</th>
-                <th className="p-3 text-center">Actions</th>
+                <th className="p-3 text-start">{tRentals("agreementCol")}</th>
+                <th className="p-3 text-start">{tCommon("customer")}</th>
+                <th className="p-3 text-start">{tCommon("vehicle")}</th>
+                <th className="p-3 text-start">{tCommon("branch")}</th>
+                <th className="p-3 text-start">{tRentals("periodCol")}</th>
+                <th className="p-3 text-center">{tCommon("status")}</th>
+                <th className="p-3 text-end">{tCommon("total")}</th>
+                <th className="p-3 text-center">{tCommon("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -348,7 +349,7 @@ export default async function RentalsPage({
                               : "bg-white/10 text-[var(--muted)]"
                       }`}
                     >
-                      {r.status}
+                      {translateStatus(tStatus, r.status)}
                     </span>
                   </td>
                   <td className="p-3 text-end font-mono">{formatOMR(r.total)}</td>
@@ -382,7 +383,7 @@ export default async function RentalsPage({
               {recent.length === 0 && (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-[var(--muted)]">
-                    No matching bookings found.
+                    {tRentals("noBookings")}
                   </td>
                 </tr>
               )}
@@ -391,7 +392,7 @@ export default async function RentalsPage({
         </div>
         {total > PAGE_SIZE && (
           <nav
-            aria-label="Booking pages"
+            aria-label={tRentals("bookingsHeading")}
             className="flex items-center justify-end gap-3 border-t border-[var(--edge)] p-4 text-sm"
           >
             {page > 1 && (
@@ -399,18 +400,18 @@ export default async function RentalsPage({
                 href={pageHref(page - 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Previous
+                {tCommon("previous")}
               </Link>
             )}
             <span className="text-[var(--muted)]">
-              Page {page} of {totalPages}
+              {tCommon("pageOf", { page, total: totalPages })}
             </span>
             {page < totalPages && (
               <Link
                 href={pageHref(page + 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Next
+                {tCommon("next")}
               </Link>
             )}
           </nav>

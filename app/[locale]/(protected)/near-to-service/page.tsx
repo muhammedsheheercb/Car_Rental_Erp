@@ -1,10 +1,12 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/db/client";
 import { branches, vehicleServiceSettings, vehicles } from "@/db/schema";
 import { serviceDue } from "@/features/maintenance/calculations";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
 import { requirePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -17,7 +19,14 @@ export default async function NearServicePage({
   searchParams: Promise<{ q?: string; branch?: string; page?: string }>;
 }) {
   const actor = await requirePermission("fleet", "read");
-  const [{ locale }, query] = await Promise.all([params, searchParams]);
+  const [{ locale }, query, tNear, tExpiry, tCommon, tStatus] = await Promise.all([
+    params,
+    searchParams,
+    getTranslations("fleet.nearService"),
+    getTranslations("fleet.expiry"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const q = query.q?.trim() ?? "";
   const branchFilter = query.branch && UUID_RE.test(query.branch) ? query.branch : "";
   const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
@@ -98,18 +107,17 @@ export default async function NearServicePage({
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-[var(--accent)]">MAINTENANCE ALERTS</p>
-          <h1 className="mt-2 text-3xl font-semibold">Near To Service</h1>
+          <p className="text-sm text-[var(--accent)]">{tNear("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tNear("title")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Vehicles within {policy.nearServiceKm.toLocaleString()} KM of the next service,
-            including overdue service.
+            {tNear("subtitle", { km: policy.nearServiceKm.toLocaleString() })}
           </p>
         </div>
         <Link
           href={`/${locale}/service` as never}
           className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-4 text-sm"
         >
-          Service records
+          {tNear("serviceRecords")}
         </Link>
       </div>
 
@@ -117,17 +125,17 @@ export default async function NearServicePage({
         <input
           name="q"
           defaultValue={q}
-          placeholder="Vehicle / Registration / Branch"
-          aria-label="Search near service"
+          placeholder={tExpiry("searchPlaceholder")}
+          aria-label={tCommon("search")}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         />
         <select
           name="branch"
           defaultValue={branchFilter}
-          aria-label="Filter by branch"
+          aria-label={tCommon("branch")}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         >
-          <option value="">All branches</option>
+          <option value="">{tCommon("allBranches")}</option>
           {branchOptions.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name} · {b.code}
@@ -139,36 +147,34 @@ export default async function NearServicePage({
             type="submit"
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
           >
-            Search
+            {tCommon("search")}
           </button>
           {(q || branchFilter) && (
             <Link
               href={`/${locale}/near-to-service` as never}
               className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
             >
-              Clear
+              {tCommon("clear")}
             </Link>
           )}
         </div>
       </form>
 
-      <p className="text-sm text-[var(--muted)]">
-        {total} alert{total === 1 ? "" : "s"}
-      </p>
+      <p className="text-sm text-[var(--muted)]">{tNear("alertsCount", { count: total })}</p>
 
       <div className="overflow-x-auto rounded-2xl border border-[var(--edge)] bg-[var(--surface)]">
         <table className="w-full min-w-[46rem] text-start text-sm">
           <thead className="bg-[var(--raised)] text-[var(--muted)]">
             <tr>
               {[
-                "Vehicle",
-                "Registration",
-                "Service Type",
-                "Current KM",
-                "Next Service KM",
-                "KM Remaining",
-                "Branch",
-                "Status",
+                tCommon("vehicle"),
+                tCommon("registration"),
+                tNear("serviceTypeCol"),
+                tNear("currentKmCol"),
+                tNear("nextServiceKmCol"),
+                tNear("kmRemainingCol"),
+                tCommon("branch"),
+                tCommon("status"),
               ].map((h) => (
                 <th key={h} className="p-3 text-start text-xs font-medium uppercase tracking-wide">
                   {h}
@@ -181,7 +187,7 @@ export default async function NearServicePage({
               <tr key={`${a.v.id}-${a.type}`} className="border-t border-[var(--edge)]">
                 <td className="p-3 font-medium">{a.v.vehicleNumber}</td>
                 <td className="p-3 font-mono text-xs">{a.v.registrationNumber}</td>
-                <td className="p-3">{a.type}</td>
+                <td className="p-3">{translateStatus(tStatus, a.type)}</td>
                 <td className="p-3">{a.v.currentOdometerKm.toLocaleString()}</td>
                 <td className="p-3">{a.nextServiceKm.toLocaleString()}</td>
                 <td className="p-3 font-semibold">{a.remainingKm.toLocaleString()}</td>
@@ -194,40 +200,35 @@ export default async function NearServicePage({
                         : "bg-amber-400/20 text-amber-200"
                     }`}
                   >
-                    {a.status}
+                    {translateStatus(tStatus, a.status)}
                   </span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!shown.length && (
-          <p className="p-6 text-sm text-[var(--muted)]">No vehicles near service.</p>
-        )}
+        {!shown.length && <p className="p-6 text-sm text-[var(--muted)]">{tNear("noAlerts")}</p>}
       </div>
 
       {total > PAGE_SIZE && (
-        <nav
-          aria-label="Near to service pages"
-          className="flex items-center justify-end gap-3 text-sm"
-        >
+        <nav aria-label={tNear("title")} className="flex items-center justify-end gap-3 text-sm">
           {safePage > 1 && (
             <Link
               href={pageHref(safePage - 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="text-[var(--muted)]">
-            Page {safePage} of {totalPages}
+            {tCommon("pageOf", { page: safePage, total: totalPages })}
           </span>
           {safePage < totalPages && (
             <Link
               href={pageHref(safePage + 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

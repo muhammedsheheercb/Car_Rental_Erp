@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PrintButton } from "@/components/print-button";
 import { formatOmanDateTimeDisplay } from "@/features/ledger/calculations";
-import { formatPaymentModeLabel, REPORT_PRINT_MAX_ROWS } from "@/features/reports/definitions";
+import { REPORT_PRINT_MAX_ROWS, type ReportSummaryCard } from "@/features/reports/definitions";
 import { loadReport } from "@/features/reports/service";
 import { documentSignature } from "@/features/signatures/service";
 import { can, requireIdentity } from "@/lib/auth";
+import {
+  translateReportColumn,
+  translateReportSummary,
+  translateSafe,
+  translateStatus,
+} from "@/lib/i18n-helpers";
 
 export default async function ReportsPrintPage({
   params,
@@ -22,7 +29,15 @@ export default async function ReportsPrintPage({
     to?: string;
   }>;
 }) {
-  const [actor, { locale }, query] = await Promise.all([requireIdentity(), params, searchParams]);
+  const [actor, { locale }, query, tReports, tCommon, tStatus, tActivity] = await Promise.all([
+    requireIdentity(),
+    params,
+    searchParams,
+    getTranslations("reports"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("activity"),
+  ]);
   if (!can(actor, "reports", "read") || !can(actor, "reports", "print")) {
     redirect(`/${locale}/forbidden`);
   }
@@ -45,12 +60,56 @@ export default async function ReportsPrintPage({
     documentSignature(actor.id),
   ]);
 
+  const slug = data.definition.slug;
+  const reportTitle = translateSafe(tReports, `catalog.${slug}.title`, data.definition.title);
+  const statusLabel = data.definition.supportsStatus
+    ? translateSafe(tReports, `catalog.${slug}.statusLabel`, data.definition.statusLabel)
+    : tCommon("status");
+
+  const translateSummaryValue = (card: ReportSummaryCard) => {
+    if (card.label !== "Visibility Scope") return card.value;
+    if (card.value === "Super Admin") return tStatus("SUPER_ADMIN");
+    if (card.value === "All Branches") return tCommon("allBranches");
+    if (card.value === "Permitted Branches" || card.value === "Permitted Scope") {
+      return tActivity("scopeBranchTitle");
+    }
+    if (card.value === "Own Activity") return tActivity("scopeSelfTitle");
+    return card.value;
+  };
+
+  const translateStatusFilterValue = (value: string) => {
+    if (value === "ALL") return tCommon("all");
+    if (slug === "daily-activity") {
+      return translateSafe(tActivity, `categories.${value}`, value);
+    }
+    return translateStatus(tStatus, value);
+  };
+
+  const translateCellValue = (colKey: string, text: string, isBadge: boolean) => {
+    if (!text || text === "—") return text;
+    if (
+      isBadge ||
+      colKey === "status" ||
+      colKey === "mode" ||
+      colKey === "paidBy" ||
+      colKey === "type" ||
+      colKey === "direction" ||
+      colKey === "serviceType"
+    ) {
+      return translateStatus(tStatus, text);
+    }
+    return text;
+  };
+
   const printedAt = formatOmanDateTimeDisplay(new Date());
   const selectedBranch = data.branches.find((b) => b.id === data.filters.branchId);
   const periodLabel =
     data.filters.from || data.filters.to
-      ? `${data.filters.from || "Beginning"} to ${data.filters.to || "Present"}`
-      : "All Dates";
+      ? tReports("periodRange", {
+          from: data.filters.from || tCommon("beginning"),
+          to: data.filters.to || tCommon("present"),
+        })
+      : tCommon("allDates");
 
   const backParams = new URLSearchParams();
   backParams.set("report", data.filters.report);
@@ -69,72 +128,79 @@ export default async function ReportsPrintPage({
           href={`/${locale}/reports?${backParams.toString()}` as never}
           className="rounded-lg border border-[var(--edge)] px-3 py-2 text-sm"
         >
-          Back to Reports
+          {tReports("backToReports")}
         </Link>
         <p className="text-sm text-[var(--muted)]">
-          A4 Print View · {data.definition.title} · {data.rows.length} row
-          {data.rows.length === 1 ? "" : "s"}
-          {data.truncated ? ` (capped at ${REPORT_PRINT_MAX_ROWS} of ${data.totalRows})` : ""}
+          {tReports("printBarSummary", { title: reportTitle, count: data.rows.length })}
+          {data.truncated
+            ? tReports("printBarCapped", { limit: REPORT_PRINT_MAX_ROWS, total: data.totalRows })
+            : ""}
         </p>
       </div>
 
-      <article className="print-document" aria-label={`${data.definition.title} A4 print preview`}>
+      <article className="print-document" aria-label={reportTitle}>
         <div className="document-heading">
           <div>
             <div className="document-brand">
               MUSCAT <span>CARS</span>
             </div>
-            <p>Oman Car Rental ERP · Official Report</p>
-            <p>Sultanate of Oman · Currency: OMR</p>
+            <p>{tReports("officialReportSubtitle")}</p>
+            <p>{tReports("omanCurrency")}</p>
           </div>
           <div className="document-heading-right">
-            <h1>{data.definition.title}</h1>
-            <p className="document-number">Report #{data.definition.number} of 12</p>
-            <p>Period: {periodLabel} (Oman)</p>
-            <p>Generated: {printedAt} Oman</p>
+            <h1>{reportTitle}</h1>
+            <p className="document-number">
+              {tReports("reportNumber", { number: data.definition.number })}
+            </p>
+            <p>
+              {tReports("period")}: {periodLabel} ({tCommon("omanTime")})
+            </p>
+            <p>
+              {tReports("generated")}: {printedAt} {tCommon("omanTime")}
+            </p>
           </div>
         </div>
 
         <div className="document-body">
           <section>
-            <h2>Applied Filters &amp; Scope</h2>
+            <h2>{tReports("appliedFilters")}</h2>
             <dl className="document-fields">
               <div>
-                <dt>Branch</dt>
+                <dt>{tCommon("branch")}</dt>
                 <dd>
                   {selectedBranch
                     ? `${selectedBranch.name} (${selectedBranch.code})`
-                    : "All Permitted Branches"}
+                    : tCommon("allPermittedBranches")}
                 </dd>
               </div>
               <div>
-                <dt>{data.definition.supportsStatus ? data.definition.statusLabel : "Status"}</dt>
-                <dd>{data.filters.status === "ALL" ? "All" : data.filters.status}</dd>
+                <dt>{statusLabel}</dt>
+                <dd>{translateStatusFilterValue(data.filters.status)}</dd>
               </div>
               <div>
-                <dt>Payment Mode</dt>
+                <dt>{tCommon("paymentMode")}</dt>
                 <dd>
                   {data.definition.supportsPaymentMode
                     ? data.filters.paymentMode === "ALL"
-                      ? "All Modes"
-                      : formatPaymentModeLabel(data.filters.paymentMode)
-                    : "N/A"}
+                      ? tCommon("allModes")
+                      : translateStatus(tStatus, data.filters.paymentMode)
+                    : tReports("notApplicable")}
                 </dd>
               </div>
               <div>
-                <dt>Search Keyword</dt>
-                <dd>{data.filters.q || "None"}</dd>
+                <dt>{tReports("searchKeyword")}</dt>
+                <dd>{data.filters.q || tCommon("none")}</dd>
               </div>
             </dl>
           </section>
 
           <section>
-            <h2>Summary Totals</h2>
+            <h2>{tReports("summaryTotals")}</h2>
             <dl className="document-totals">
               {data.summary.map((card) => (
                 <div key={card.label}>
-                  <dt>{card.label}</dt>
-                  <dd>{card.value}</dd>
+                  <dt>{translateReportSummary(tReports, card.label)}</dt>
+                  <dd>{translateSummaryValue(card)}</dd>
                 </div>
               ))}
             </dl>
@@ -142,14 +208,20 @@ export default async function ReportsPrintPage({
 
           <section>
             <h2>
-              {data.definition.title} ({data.rows.length}
-              {data.truncated ? ` of ${data.totalRows}` : ""} records)
+              {data.truncated
+                ? tReports("tableHeadingTruncated", {
+                    title: reportTitle,
+                    count: data.rows.length,
+                    total: data.totalRows,
+                  })
+                : tReports("tableHeading", { title: reportTitle, count: data.rows.length })}
             </h2>
             {data.truncated && (
               <p className="document-remarks">
-                Showing first {REPORT_PRINT_MAX_ROWS.toLocaleString("en-US")} of{" "}
-                {data.totalRows.toLocaleString("en-US")} records. Narrow the date/branch filters or
-                use CSV export to include every record.
+                {tReports("truncatedNotice", {
+                  limit: REPORT_PRINT_MAX_ROWS.toLocaleString("en-US"),
+                  total: data.totalRows.toLocaleString("en-US"),
+                })}
               </p>
             )}
             <table className="document-table" style={{ fontSize: "7.5pt" }}>
@@ -160,7 +232,7 @@ export default async function ReportsPrintPage({
                       key={col.key}
                       className={col.align === "end" ? "document-money" : undefined}
                     >
-                      {col.label}
+                      {translateReportColumn(tReports, col.label)}
                     </th>
                   ))}
                 </tr>
@@ -175,7 +247,9 @@ export default async function ReportsPrintPage({
                           key={col.key}
                           className={col.align === "end" ? "document-money" : undefined}
                         >
-                          <div>{cell.text}</div>
+                          <div>
+                            {translateCellValue(col.key, cell.text, Boolean(cell.badgeTone))}
+                          </div>
                           {cell.subtext && (
                             <div style={{ fontSize: "6.5pt", color: "#506176" }}>
                               {cell.subtext}
@@ -189,7 +263,7 @@ export default async function ReportsPrintPage({
                 {!data.rows.length && (
                   <tr>
                     <td colSpan={Math.max(1, data.columns.length)}>
-                      No records match the selected filters.
+                      {tReports("noMatchingGeneric")}
                     </td>
                   </tr>
                 )}
@@ -198,32 +272,32 @@ export default async function ReportsPrintPage({
           </section>
         </div>
 
-        <section className="document-signatures" aria-label="Authorization signatures">
+        <section className="document-signatures" aria-label={tReports("preparedByStaff")}>
           <div className="document-signature">
             <div className="document-signature-space" />
-            <p className="document-signature-label">Reviewed / Approved By</p>
-            <p>Management / Branch Supervisor</p>
+            <p className="document-signature-label">{tReports("reviewedBy")}</p>
+            <p>{tReports("managementSupervisor")}</p>
           </div>
           <div className="document-signature">
             <div className="document-signature-space">
               {staffSignature?.src && (
                 <>
                   {/* biome-ignore lint/performance/noImgElement: private signature embedded after reports:print check. */}
-                  <img src={staffSignature.src} alt={`${actor.displayName} signature`} />
+                  <img src={staffSignature.src} alt={actor.displayName} />
                 </>
               )}
             </div>
-            <p className="document-signature-label">Prepared By (Authorized Staff)</p>
+            <p className="document-signature-label">{tReports("preparedByStaff")}</p>
             <p>{actor.displayName}</p>
           </div>
         </section>
 
         <footer className="document-footer">
           <span>
-            {data.definition.title} · {periodLabel}
+            {reportTitle} · {periodLabel}
           </span>
           <span>
-            Printed by: {actor.displayName} · {printedAt} Oman
+            {tReports("preparedByStaff")}: {actor.displayName} · {printedAt} {tCommon("omanTime")}
           </span>
         </footer>
       </article>

@@ -1,4 +1,5 @@
 import { desc } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { BranchActions } from "@/components/branch-actions";
 import { BranchCodePreview } from "@/components/branch-code-preview";
 import { TrimmedForm } from "@/components/trimmed-form";
@@ -8,12 +9,17 @@ import { requirePermission } from "@/lib/auth";
 import { createBranchAction } from "../actions";
 export default async function BranchesPage() {
   const actor = await requirePermission("branches", "read");
-  const records = await db.select().from(branches).orderBy(desc(branches.createdAt));
+  const [tAdmin, tCommon, tStatus, records] = await Promise.all([
+    getTranslations("admin"),
+    getTranslations("common"),
+    getTranslations("status"),
+    db.select().from(branches).orderBy(desc(branches.createdAt)),
+  ]);
   return (
     <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0">
-        <p className="text-sm text-[var(--accent)]">ADMINISTRATION</p>
-        <h1 className="mt-2 text-3xl font-semibold">Branches</h1>
+        <p className="text-sm text-[var(--accent)]">{tAdmin("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{tAdmin("branchesTitle")}</h1>
         <div className="mt-6 max-w-full overflow-x-auto rounded-2xl border border-[var(--edge)] [overscroll-behavior-inline:contain] sm:mt-8">
           <table className="min-w-[48rem] w-full table-fixed text-start text-sm">
             <colgroup>
@@ -29,31 +35,31 @@ export default async function BranchesPage() {
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  Branch
+                  {tAdmin("branchCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  Location
+                  {tAdmin("locationCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  Code
+                  {tAdmin("codeCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
                 >
-                  Status
+                  {tCommon("status")}
                 </th>
                 <th
                   scope="col"
                   className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
                 >
-                  Actions
+                  {tCommon("actions")}
                 </th>
               </tr>
             </thead>
@@ -68,7 +74,7 @@ export default async function BranchesPage() {
                   <td className="px-4 py-3 font-mono">{branch.code}</td>
                   <td className="px-4 py-3 text-center">
                     <span className="inline-flex rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs">
-                      {branch.isActive ? "Active" : "Inactive"}
+                      {branch.isActive ? tStatus("ACTIVE") : tStatus("INACTIVE")}
                     </span>
                   </td>
                   <td className="px-2 py-2 text-center">
@@ -80,7 +86,7 @@ export default async function BranchesPage() {
               ))}
             </tbody>
           </table>
-          {!records.length && <p className="p-8 text-[var(--muted)]">No branches yet.</p>}
+          {!records.length && <p className="p-8 text-[var(--muted)]">{tAdmin("noBranches")}</p>}
         </div>
       </section>
       {actor.role === "SUPER_ADMIN" && (
@@ -88,10 +94,10 @@ export default async function BranchesPage() {
           action={createBranchAction}
           className="h-fit rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5"
         >
-          <h2 className="font-semibold">New branch</h2>
+          <h2 className="font-semibold">{tAdmin("newBranch")}</h2>
           <BranchCodePreview />
           <label className="mt-4 block text-sm">
-            Location
+            {tAdmin("locationCol")}
             <input
               name="location"
               required
@@ -102,7 +108,7 @@ export default async function BranchesPage() {
             type="submit"
             className="mt-6 min-h-11 w-full rounded-lg bg-[var(--accent)] font-semibold text-black"
           >
-            Create branch
+            {tAdmin("createBranch")}
           </button>
         </TrimmedForm>
       )}

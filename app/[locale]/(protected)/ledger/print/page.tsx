@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { PrintButton } from "@/components/print-button";
 import { formatOmanDateTimeDisplay } from "@/features/ledger/calculations";
 import { loadCustomerLedger } from "@/features/ledger/service";
 import { formatOMR } from "@/features/rentals/calculations";
 import { documentSignature } from "@/features/signatures/service";
 import { can, requirePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 export default async function CustomerLedgerPrintPage({
   params,
@@ -14,10 +16,15 @@ export default async function CustomerLedgerPrintPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ customerId?: string; from?: string; to?: string; type?: string }>;
 }) {
-  const [actor, { locale }, query] = await Promise.all([
+  const [actor, { locale }, query, tLedger, tCust, tCommon, tStatus, tReports] = await Promise.all([
     requirePermission("customers", "read"),
     params,
     searchParams,
+    getTranslations("ledger"),
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("reports"),
   ]);
 
   if (
@@ -45,10 +52,12 @@ export default async function CustomerLedgerPrintPage({
   const printedAt = formatOmanDateTimeDisplay(new Date());
   const periodLabel =
     data.filters.from || data.filters.to
-      ? `${data.filters.from || "Beginning"} to ${data.filters.to || "Present"}`
-      : "All Dates";
+      ? `${data.filters.from || tCommon("beginning")} — ${data.filters.to || tCommon("present")}`
+      : tCommon("allDates");
   const typeLabel =
-    data.filters.type === "ALL" ? "All Transactions" : data.filters.type.replaceAll("_", " ");
+    data.filters.type === "ALL"
+      ? tLedger("allTransactionTypes")
+      : translateStatus(tStatus, data.filters.type);
 
   const backParams = new URLSearchParams();
   backParams.set("customerId", data.customer.id);
@@ -64,70 +73,75 @@ export default async function CustomerLedgerPrintPage({
           href={`/${locale}/ledger?${backParams.toString()}` as never}
           className="rounded-lg border border-[var(--edge)] px-3 py-2 text-sm"
         >
-          Back to Ledger
+          {tLedger("backToLedger")}
         </Link>
         <p className="text-sm text-[var(--muted)]">
-          A4 Customer Ledger Statement · {data.ledger.filteredRows.length} transaction
-          {data.ledger.filteredRows.length === 1 ? "" : "s"} · Oman time
+          {tLedger("statementTitle")} ·{" "}
+          {tCommon("recordsCount", { count: data.ledger.filteredRows.length })} ·{" "}
+          {tCommon("omanTime")}
         </p>
       </div>
 
-      <article className="print-document" aria-label="Customer Ledger Statement print preview">
+      <article className="print-document" aria-label={tLedger("statementTitle")}>
         <div className="document-heading">
           <div>
             <div className="document-brand">
               MUSCAT <span>CARS</span>
             </div>
-            <p>Customer Account &amp; Financial Ledger</p>
-            <p>Sultanate of Oman · Currency: OMR</p>
+            <p>{tLedger("title")}</p>
+            <p>{tReports("omanCurrency")}</p>
           </div>
           <div className="document-heading-right">
-            <h1>Customer Ledger Statement</h1>
+            <h1>{tLedger("statementTitle")}</h1>
             <p className="document-number">{data.customer.customerNumber}</p>
             <p>
-              Period: {periodLabel} · {typeLabel}
+              {tReports("period")}: {periodLabel} · {typeLabel}
             </p>
-            <p>Generated: {printedAt} Oman</p>
+            <p>
+              {tReports("generated")}: {printedAt} ({tCommon("omanTime")})
+            </p>
           </div>
         </div>
 
         <div className="document-body">
           <section>
-            <h2>Customer Profile &amp; Identity Summary</h2>
+            <h2>{tCommon("customer")}</h2>
             <dl className="document-fields">
               <div>
-                <dt>Customer Name</dt>
+                <dt>{tCommon("customer")}</dt>
                 <dd>{data.customer.name}</dd>
               </div>
               <div>
-                <dt>Account Status</dt>
+                <dt>{tCommon("status")}</dt>
                 <dd>
                   {data.blacklist
-                    ? `Blacklisted (${data.blacklist.reason})`
+                    ? `${tStatus("BLACKLISTED")} (${data.blacklist.reason})`
                     : data.customer.isActive
-                      ? "Active"
-                      : "Inactive"}
+                      ? tStatus("ACTIVE")
+                      : tStatus("INACTIVE")}
                 </dd>
               </div>
               <div>
-                <dt>Mobile / Email</dt>
+                <dt>
+                  {tCust("mobileCol")} / {tCust("email")}
+                </dt>
                 <dd>
                   {data.customer.mobile}
                   {data.customer.email ? ` · ${data.customer.email}` : ""}
                 </dd>
               </div>
               <div>
-                <dt>Address</dt>
+                <dt>{tCust("address")}</dt>
                 <dd>{data.customer.address}</dd>
               </div>
               <div>
-                <dt>Driving Licence / Expiry</dt>
+                <dt>{tCust("drivingLicence")}</dt>
                 <dd>
                   {data.customer.drivingLicenceNumber} ({data.customer.drivingLicenceExpiry})
                 </dd>
               </div>
               <div>
-                <dt>Civil ID / Expiry</dt>
+                <dt>{tCust("civilId")}</dt>
                 <dd>
                   {data.customer.civilIdNumber
                     ? `${data.customer.civilIdNumber} (${data.customer.civilIdExpiry ?? "—"})`
@@ -135,7 +149,7 @@ export default async function CustomerLedgerPrintPage({
                 </dd>
               </div>
               <div>
-                <dt>Passport / Expiry</dt>
+                <dt>{tCust("passport")}</dt>
                 <dd>
                   {data.customer.passportNumber
                     ? `${data.customer.passportNumber} (${data.customer.passportExpiry ?? "—"})`
@@ -143,7 +157,9 @@ export default async function CustomerLedgerPrintPage({
                 </dd>
               </div>
               <div>
-                <dt>Visa / Sponsor</dt>
+                <dt>
+                  {tCust("visa")} / {tCust("sponsor")}
+                </dt>
                 <dd>
                   {[data.customer.visaNumber, data.customer.sponsorDetails]
                     .filter(Boolean)
@@ -154,41 +170,49 @@ export default async function CustomerLedgerPrintPage({
           </section>
 
           <section>
-            <h2>Account Summary — OMR</h2>
+            <h2>{tReports("summaryTotals")}</h2>
             <dl className="document-totals">
               <div>
-                <dt>Total Debits (Charges)</dt>
+                <dt>{tLedger("totalDebits")}</dt>
                 <dd>{formatOMR(data.financials.totalDebitsBaisa)}</dd>
               </div>
               <div>
-                <dt>Total Credits (Payments)</dt>
+                <dt>{tLedger("totalCredits")}</dt>
                 <dd>{formatOMR(data.financials.totalCreditsBaisa)}</dd>
               </div>
               <div>
-                <dt>Advance Payments ({data.financials.advanceCount})</dt>
+                <dt>
+                  {tLedger("advancePayments")} ({data.financials.advanceCount})
+                </dt>
                 <dd>{formatOMR(data.financials.advancesBaisa)}</dd>
               </div>
               <div>
-                <dt>Receipts Collected ({data.financials.receiptCount})</dt>
+                <dt>
+                  {tLedger("receiptsCollected")} ({data.financials.receiptCount})
+                </dt>
                 <dd>{formatOMR(data.financials.receiptsBaisa)}</dd>
               </div>
               <div>
-                <dt>Active Invoices ({data.financials.activeInvoiceCount})</dt>
+                <dt>
+                  {tLedger("activeInvoices")} ({data.financials.activeInvoiceCount})
+                </dt>
                 <dd>{formatOMR(data.financials.invoicedBaisa)}</dd>
               </div>
               <div>
                 <dt>
-                  Fines &amp; Additional Charges (
+                  {tLedger("finesNormalLegal")} (
                   {data.financials.fineCount + data.financials.extraChargeCount})
                 </dt>
                 <dd>{formatOMR(data.financials.finesAndChargesBaisa)}</dd>
               </div>
               <div>
-                <dt>Paybacks ({data.financials.paybackCount})</dt>
+                <dt>
+                  {tLedger("paybackTransactions")} ({data.financials.paybackCount})
+                </dt>
                 <dd>{formatOMR(data.financials.paybacksBaisa)}</dd>
               </div>
               <div>
-                <dt>Total Outstanding Balance</dt>
+                <dt>{tLedger("outstandingBalance")}</dt>
                 <dd>{formatOMR(data.financials.outstandingBalanceBaisa)}</dd>
               </div>
             </dl>
@@ -196,15 +220,15 @@ export default async function CustomerLedgerPrintPage({
 
           {!!data.bookings.length && (
             <section>
-              <h2>Vehicles &amp; Bookings Summary ({data.bookings.length})</h2>
+              <h2>{tLedger("bookingHistory", { count: data.bookings.length })}</h2>
               <table className="document-table">
                 <thead>
                   <tr>
-                    <th>Agreement</th>
-                    <th>Vehicle / Reg</th>
-                    <th>Out / Return (Oman)</th>
-                    <th>Status</th>
-                    <th className="document-money">Total</th>
+                    <th>{tReports("columns.Agreement")}</th>
+                    <th>{tCommon("vehicle")}</th>
+                    <th>{tReports("columns.Period (Oman)")}</th>
+                    <th>{tCommon("status")}</th>
+                    <th className="document-money">{tCommon("total")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -218,7 +242,7 @@ export default async function CustomerLedgerPrintPage({
                         {formatOmanDateTimeDisplay(b.startsAt)} —{" "}
                         {formatOmanDateTimeDisplay(b.actualReturnAt ?? b.expectedReturnAt)}
                       </td>
-                      <td>{b.status}</td>
+                      <td>{translateStatus(tStatus, b.status)}</td>
                       <td className="document-money">{formatOMR(b.totalBaisa)}</td>
                     </tr>
                   ))}
@@ -229,28 +253,27 @@ export default async function CustomerLedgerPrintPage({
 
           <section>
             <h2>
-              Chronological Transaction Ledger ({data.ledger.filteredRows.length} entries ·{" "}
-              {periodLabel})
+              {tLedger("chronologicalTitle")} ({data.ledger.filteredRows.length} · {periodLabel})
             </h2>
             <table className="document-table">
               <thead>
                 <tr>
-                  <th>Date / Time</th>
-                  <th>Type</th>
-                  <th>Reference</th>
-                  <th>Description</th>
-                  <th className="document-money">Debit</th>
-                  <th className="document-money">Credit</th>
-                  <th className="document-money">Balance</th>
+                  <th>{tCommon("dateTimeOman")}</th>
+                  <th>{tLedger("transactionType")}</th>
+                  <th>{tCommon("reference")}</th>
+                  <th>{tCommon("description")}</th>
+                  <th className="document-money">{tLedger("debitCol")}</th>
+                  <th className="document-money">{tLedger("creditCol")}</th>
+                  <th className="document-money">{tLedger("runningBalanceCol")}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.filters.from && (
                   <tr>
-                    <td>Before {data.filters.from}</td>
-                    <td>Opening</td>
+                    <td>{tLedger("openingBefore", { date: data.filters.from })}</td>
+                    <td>{tLedger("openingBalance")}</td>
                     <td>—</td>
-                    <td>Opening balance brought forward</td>
+                    <td>{tLedger("openingBroughtForward")}</td>
                     <td className="document-money">—</td>
                     <td className="document-money">—</td>
                     <td className="document-money">{formatOMR(data.ledger.openingBalanceBaisa)}</td>
@@ -259,7 +282,7 @@ export default async function CustomerLedgerPrintPage({
                 {data.ledger.filteredRows.map((entry) => (
                   <tr key={entry.id}>
                     <td>{formatOmanDateTimeDisplay(entry.createdAt)}</td>
-                    <td>{entry.displayLabel}</td>
+                    <td>{translateStatus(tStatus, entry.displayType)}</td>
                     <td>
                       {[entry.agreementNumber, entry.receiptNumber].filter(Boolean).join(" / ") ||
                         "—"}
@@ -276,7 +299,7 @@ export default async function CustomerLedgerPrintPage({
                 ))}
                 {!data.ledger.filteredRows.length && (
                   <tr>
-                    <td colSpan={7}>No ledger transactions in the selected period.</td>
+                    <td colSpan={7}>{tLedger("noTransactions")}</td>
                   </tr>
                 )}
               </tbody>
@@ -284,10 +307,10 @@ export default async function CustomerLedgerPrintPage({
           </section>
         </div>
 
-        <section className="document-signatures" aria-label="Signature positions">
+        <section className="document-signatures" aria-label={tLedger("authorizedStaffSignature")}>
           <div className="document-signature">
             <div className="document-signature-space" />
-            <p className="document-signature-label">Customer Acknowledgement</p>
+            <p className="document-signature-label">{tLedger("customerAcknowledgement")}</p>
             <p>{data.customer.name}</p>
           </div>
           <div className="document-signature">
@@ -295,21 +318,21 @@ export default async function CustomerLedgerPrintPage({
               {staffSignature?.src && (
                 <>
                   {/* biome-ignore lint/performance/noImgElement: private signature embedded after print permission check. */}
-                  <img src={staffSignature.src} alt={`${actor.displayName} signature`} />
+                  <img src={staffSignature.src} alt={`${actor.displayName}`} />
                 </>
               )}
             </div>
-            <p className="document-signature-label">Authorized Staff Signature</p>
+            <p className="document-signature-label">{tLedger("authorizedStaffSignature")}</p>
             <p>{actor.displayName}</p>
           </div>
         </section>
 
         <footer className="document-footer">
           <span>
-            Customer: {data.customer.name} ({data.customer.customerNumber})
+            {tCommon("customer")}: {data.customer.name} ({data.customer.customerNumber})
           </span>
           <span>
-            Printed by: {actor.displayName} · {printedAt} Oman
+            {tLedger("printedBy")}: {actor.displayName} · {printedAt} ({tCommon("omanTime")})
           </span>
         </footer>
       </article>

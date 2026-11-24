@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { createReservationAction } from "@/app/[locale]/(protected)/rentals/actions";
 
@@ -11,6 +12,7 @@ import {
   parseOmanDateTime,
   periodsOverlap,
 } from "@/features/rentals/booking-calculations";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { OmanDateTimePicker } from "./oman-datetime-picker";
 
 type Vehicle = {
@@ -77,6 +79,12 @@ export function RentalBookingForm({
   userName: string;
   reservations: { vehicleId: string; startsAt: string; expectedReturnAt: string; status: string }[];
 }) {
+  const t = useTranslations();
+  const tRentals = useTranslations("rentals");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tCust = useTranslations("customers");
+  const tFleet = useTranslations("fleet");
   const [vehicleId, setVehicleId] = useState(
     vehicles.some((v) => v.id === initialVehicleId) ? initialVehicleId : "",
   );
@@ -163,11 +171,11 @@ export function RentalBookingForm({
   const cls = "min-h-11 min-w-0 w-full border border-[var(--edge)] bg-[var(--raised)] px-3";
   return (
     <section className="border border-[var(--edge)] bg-[var(--surface)] p-4 sm:p-6">
-      <h2 className="text-lg font-semibold">New booking / rental agreement</h2>
+      <h2 className="text-lg font-semibold">{tRentals("newBookingTitle")}</h2>
       <form action={action} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <input type="hidden" name="locale" value={locale} />
         <label className="grid min-w-0 gap-1 text-sm">
-          Customer
+          {tCommon("customer")}
           <select
             required
             name="customerId"
@@ -175,7 +183,7 @@ export function RentalBookingForm({
             onChange={(event) => setCustomerId(event.target.value)}
             className={cls}
           >
-            <option value="">Search/select customer</option>
+            <option value="">{tRentals("selectCustomer")}</option>
             {customers.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.mobile}
@@ -188,11 +196,11 @@ export function RentalBookingForm({
             href={addCustomerHref as never}
             className="min-h-11 border border-[var(--edge)] px-3 py-3 text-center text-sm hover:border-[var(--accent)]"
           >
-            Add customer
+            {tRentals("addCustomer")}
           </Link>
         </div>
         <label className="grid min-w-0 gap-1 text-sm">
-          Vehicle
+          {tCommon("vehicle")}
           <select
             required
             name="vehicleId"
@@ -200,7 +208,7 @@ export function RentalBookingForm({
             onChange={(event) => setVehicleId(event.target.value)}
             className={cls}
           >
-            <option value="">Search/select eligible vehicle</option>
+            <option value="">{tRentals("selectVehicle")}</option>
             {availableVehicles.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.number} · {item.registration} · {item.brand} {item.model}
@@ -211,54 +219,58 @@ export function RentalBookingForm({
         {vehicle && (
           <div className="grid gap-2 rounded-xl border border-[var(--edge)] bg-black/20 p-3 text-xs sm:grid-cols-2 md:col-span-2 xl:col-span-3 xl:grid-cols-4">
             <div>
-              <p className="text-[var(--muted)]">Vehicle Name / Brand & Model</p>
+              <p className="text-[var(--muted)]">{tCommon("vehicle")}</p>
               <p className="mt-0.5 font-medium text-white">
                 {vehicle.number} · {vehicle.brand} {vehicle.model}
               </p>
             </div>
             <div>
-              <p className="text-[var(--muted)]">Registration / Branch</p>
+              <p className="text-[var(--muted)]">
+                {tCommon("registration")} / {tCommon("branch")}
+              </p>
               <p className="mt-0.5 font-mono text-white">
                 {vehicle.registration} · {vehicle.branchName}
               </p>
             </div>
             <div>
-              <p className="text-[var(--muted)]">Current KM / Next Engine Service</p>
+              <p className="text-[var(--muted)]">{tFleet("nextServiceKm")}</p>
               <p className="mt-0.5 text-white">
-                {vehicle.currentOdometerKm.toLocaleString()} KM · Next{" "}
+                {vehicle.currentOdometerKm.toLocaleString()} {tCommon("km")} ·{" "}
                 {vehicle.nextEngineServiceKm != null
-                  ? `${vehicle.nextEngineServiceKm.toLocaleString()} KM`
+                  ? `${vehicle.nextEngineServiceKm.toLocaleString()} ${tCommon("km")}`
                   : "—"}
               </p>
             </div>
             <div>
-              <p className="text-[var(--muted)]">Next Gear Oil / Insurance Expiry</p>
+              <p className="text-[var(--muted)]">
+                {tStatus("GEAR_OIL")} / {tFleet("insurance")}
+              </p>
               <p className="mt-0.5 text-white">
                 {vehicle.nextGearOilKm != null
-                  ? `${vehicle.nextGearOilKm.toLocaleString()} KM`
+                  ? `${vehicle.nextGearOilKm.toLocaleString()} ${tCommon("km")}`
                   : "—"}{" "}
-                · Ins: {vehicle.insuranceExpiry ?? "—"}
+                · {vehicle.insuranceExpiry ?? "—"}
               </p>
             </div>
           </div>
         )}
         <label className="grid min-w-0 gap-1 text-sm">
-          Rental category
+          {tRentals("rentalCategory")}
           <select
             name="pricingPeriod"
             value={period}
             onChange={(event) => setPeriod(event.target.value as Price["period"])}
             className={cls}
           >
-            <option value="DAILY">Daily</option>
-            <option value="WEEKLY">Weekly</option>
-            <option value="MONTHLY">Monthly</option>
+            <option value="DAILY">{tStatus("DAILY")}</option>
+            <option value="WEEKLY">{tStatus("WEEKLY")}</option>
+            <option value="MONTHLY">{tStatus("MONTHLY")}</option>
           </select>
         </label>
         {[
-          ["branchId", "Operating branch"],
-          ["pickupBranchId", "Pickup branch"],
-          ["returnBranchId", "Return branch"],
+          ["branchId", tRentals("operatingBranch")],
+          ["pickupBranchId", tRentals("pickupBranch")],
+          ["returnBranchId", tRentals("returnBranch")],
         ].map(([name, label]) => (
           <label key={name} className="grid min-w-0 gap-1 text-sm">
             {label}
@@ -282,21 +294,27 @@ export function RentalBookingForm({
         <OmanDateTimePicker
           id="bookingStartsAt"
           name="startsAt"
-          label="Reservation / pickup date and time (Oman)"
+          label={tRentals("pickupDateTime")}
           required
           value={startsAt}
           onChange={setStartsAt}
         />
         <OmanDateTimePicker
           id="expectedReturnAt"
-          label="Expected return date and time (Oman)"
+          label={tRentals("expectedReturnDateTime")}
           min={startsAt || undefined}
           value={expectedReturn}
           onChange={handleExpectedReturnChange}
         />
         <label className="grid min-w-0 gap-1 text-sm">
-          Rent duration (
-          {period === "DAILY" ? "days" : period === "WEEKLY" ? "weeks" : "calendar months"})
+          {tRentals("rentDuration", {
+            unit:
+              period === "DAILY"
+                ? tCommon("days")
+                : period === "WEEKLY"
+                  ? tCommon("weeks")
+                  : tCommon("calendarMonths"),
+          })}
           <input
             required
             name="rentDuration"
@@ -309,9 +327,9 @@ export function RentalBookingForm({
           />
         </label>
         {[
-          ["includedKm", "KM Maximum (total booking allowance)", price?.includedKm],
-          ["excessKmChargeBaisa", "Excess KM charge (baisa)", price?.excessKmChargeBaisa],
-          ["lateFeeBaisa", "Hourly late fee (baisa)", price?.lateFeeBaisa],
+          ["includedKm", tRentals("kmMaximum"), price?.includedKm],
+          ["excessKmChargeBaisa", tRentals("excessKmCharge"), price?.excessKmChargeBaisa],
+          ["lateFeeBaisa", tRentals("hourlyLateFee"), price?.lateFeeBaisa],
         ].map(([name, label, value]) => (
           <label key={String(name)} className="grid min-w-0 gap-1 text-sm">
             {label}
@@ -327,10 +345,10 @@ export function RentalBookingForm({
           </label>
         ))}
         {[
-          ["pickupOdometerKm", "Starting KM", startingKm, setStartingKm],
-          ["freeKm", "Additional Free KM", freeKm, setFreeKm],
-          ["depositBaisa", "Security deposit (baisa)", deposit, setDeposit],
-          ["downPaymentBaisa", "Down payment (baisa)", downPayment, setDownPayment],
+          ["pickupOdometerKm", tRentals("startingKm"), startingKm, setStartingKm],
+          ["freeKm", tRentals("additionalFreeKm"), freeKm, setFreeKm],
+          ["depositBaisa", tRentals("securityDeposit"), deposit, setDeposit],
+          ["downPaymentBaisa", tRentals("downPayment"), downPayment, setDownPayment],
         ].map(([name, label, value, setValue]) => (
           <label key={String(name)} className="grid min-w-0 gap-1 text-sm">
             {String(label)}
@@ -347,7 +365,7 @@ export function RentalBookingForm({
           </label>
         ))}
         <label className="grid min-w-0 gap-1 text-sm">
-          Rent amount per {period.toLowerCase()} period (baisa)
+          {tRentals("rentAmountPer", { period: translateStatus(tStatus, period) })}
           <input
             required
             name="dailyRateBaisa"
@@ -367,61 +385,61 @@ export function RentalBookingForm({
             checked={openKm}
             onChange={(event) => setOpenKm(event.target.checked)}
           />
-          Open KM (no excess KM charges)
+          {tRentals("openKmLabel")}
         </label>
         <label className="grid min-w-0 gap-1 text-sm">
-          Payment mode
+          {tCommon("paymentMode")}
           <select name="paymentMode" className={cls}>
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank</option>
+            <option value="CASH">{tStatus("CASH")}</option>
+            <option value="CARD">{tStatus("CARD")}</option>
+            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
           </select>
         </label>
         <label className="grid min-w-0 gap-1 text-sm">
-          User
+          {tCommon("user")}
           <input readOnly value={userName} className={cls} />
         </label>
         <p className="text-sm text-[var(--muted)] md:col-span-2">
-          Included KM:{" "}
+          {tFleet("includedKm")}:{" "}
           {openKm
-            ? "Unlimited"
+            ? tCommon("unlimited")
             : /^\d+$/.test(freeKm) &&
                 Number.isSafeInteger(Number(freeKm)) &&
                 Number(freeKm) <= 2_147_483_647
               ? calculateIncludedKm(price?.includedKm ?? 0, Number(freeKm))
-              : "—"}
-          . Rental total: {Number.isFinite(total) ? total : "—"} baisa. Maximum down payment:{" "}
-          {Number.isFinite(maximumPayment) ? maximumPayment : "—"} baisa. All dates and times use
-          Asia/Muscat (UTC+04:00).
+              : "—"}{" "}
+          · {tCommon("total")}: {Number.isFinite(total) ? total : "—"} {tCommon("baisa")} ·{" "}
+          {tRentals("downPayment")}: {Number.isFinite(maximumPayment) ? maximumPayment : "—"}{" "}
+          {tCommon("baisa")} · {tCommon("omanTimeFull")}
         </p>
         {vehicleId && !selectedAvailable && (
           <p role="alert" className="text-sm text-red-300">
-            Selected vehicle is reserved or rented for this period. Choose another vehicle or
-            period.
+            {tRentals("vehicleConflict")}
           </p>
         )}
         {state.error && (
           <p role="alert" className="text-sm text-red-300 md:col-span-2">
-            {state.error}
+            {translateValidation(t, state.error)}
           </p>
         )}
         {price && (
           <p className="text-sm text-[var(--muted)]">
-            Lowest permitted rate: {price.minimumRentBaisa} baisa.
-            {canOverridePrice ? " Your role may override this rate; the action is audited." : ""}
+            {tRentals("lowestPermittedRate", { rate: price.minimumRentBaisa })}
+            {canOverridePrice ? ` ${tRentals("overrideAudited")}` : ""}
           </p>
         )}
         {customer && (
           <div className="rounded border border-[var(--edge)] p-3 text-xs text-[var(--muted)] xl:col-span-3">
-            Customer ID information: Civil {customer.civilIdNumber ?? "—"} (expires{" "}
-            {customer.civilIdExpiry ?? "—"}) · Passport {customer.passportNumber ?? "—"} (expires{" "}
-            {customer.passportExpiry ?? "—"}) · Licence {customer.drivingLicenceNumber} (expires{" "}
-            {customer.drivingLicenceExpiry}) · Visa {customer.visaNumber ?? "—"} · Sponsor{" "}
-            {customer.sponsorDetails ?? "—"} · Address {customer.address}
+            {tCust("civilId")}: {customer.civilIdNumber ?? "—"} ({customer.civilIdExpiry ?? "—"}) ·{" "}
+            {tCust("passport")}: {customer.passportNumber ?? "—"} ({customer.passportExpiry ?? "—"})
+            · {tCust("drivingLicence")}: {customer.drivingLicenceNumber} (
+            {customer.drivingLicenceExpiry}) · {tCust("visa")}: {customer.visaNumber ?? "—"} ·{" "}
+            {tCust("sponsor")}: {customer.sponsorDetails ?? "—"} · {tCust("address")}:{" "}
+            {customer.address}
           </div>
         )}
         <label className="grid min-w-0 gap-1 text-sm md:col-span-2">
-          Remarks / notes
+          {tCommon("remarksNotes")}
           <textarea name="notes" rows={2} className={cls} />
         </label>
         <div className="flex items-end">
@@ -430,7 +448,7 @@ export function RentalBookingForm({
             disabled={pending || !price || !expectedReturn || !selectedAvailable}
             className="min-h-11 w-full bg-[var(--accent)] px-4 font-semibold text-black"
           >
-            {pending ? "Saving reservation…" : "Create reservation"}
+            {pending ? tRentals("savingReservation") : tRentals("createReservation")}
           </button>
         </div>
       </form>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { setUserActiveAction, updateUserAction } from "@/app/[locale]/(protected)/admin/actions";
 import type { UserRole } from "@/features/admin/users";
+import { translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { ConfirmDialog } from "./confirm-dialog";
 import { useToast } from "./toast";
 import { UserPermissionsGrid } from "./user-permissions-grid";
@@ -37,6 +39,10 @@ export function UserActions({
   canReactivate: boolean;
   isSelf: boolean;
 }) {
+  const t = useTranslations();
+  const tAdmin = useTranslations("admin");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -52,7 +58,7 @@ export function UserActions({
     if (displayNameInput) {
       displayNameInput.value = displayNameInput.value.trim();
       if (!displayNameInput.value) {
-        setError("Display name is required.");
+        setError(translateValidation(t, "Display name is required."));
         displayNameInput.focus();
         return;
       }
@@ -62,7 +68,7 @@ export function UserActions({
       try {
         const result = await updateUserAction(user.id, formData);
         if (!result.ok) {
-          setError(result.message);
+          setError(translateValidation(t, result.message));
           show(result.message, "error", `user-edit-${user.id}`);
           return;
         }
@@ -70,7 +76,7 @@ export function UserActions({
         setEditing(false);
         router.refresh();
       } catch {
-        setError("We could not update this user. Please try again.");
+        setError(translateValidation(t, "We could not update this user. Please try again."));
       }
     });
   };
@@ -101,15 +107,15 @@ export function UserActions({
             }}
             className="min-h-10 rounded-lg px-2 text-sm font-medium text-[var(--accent)]"
           >
-            Edit
+            {tCommon("edit")}
           </button>
         )}
         {!isSelf && user.isActive && canDeactivate && (
           <ConfirmDialog
-            title={`Deactivate ${user.displayName}?`}
-            description={`Username: ${user.username}. They will be signed out immediately and unable to access the system.`}
-            confirmLabel="Deactivate"
-            processingLabel="Deactivating…"
+            title={tAdmin("deactivateUserTitle", { name: user.displayName })}
+            description={tAdmin("deactivateUserDesc", { username: user.username })}
+            confirmLabel={tCommon("deactivate")}
+            processingLabel={tCommon("deactivating")}
             pending={toggling}
             onConfirm={() => toggleActive(false)}
             trigger={
@@ -118,17 +124,17 @@ export function UserActions({
                 disabled={toggling}
                 className="min-h-10 rounded-lg px-2 text-sm text-red-300 disabled:opacity-60"
               >
-                Deactivate
+                {tCommon("deactivate")}
               </button>
             }
           />
         )}
         {!isSelf && !user.isActive && canReactivate && (
           <ConfirmDialog
-            title={`Activate ${user.displayName}?`}
-            description={`Username: ${user.username}. This will allow the account to sign in again with its assigned role and permissions.`}
-            confirmLabel="Activate"
-            processingLabel="Activating…"
+            title={tAdmin("activateUserTitle", { name: user.displayName })}
+            description={tAdmin("activateUserDesc", { username: user.username })}
+            confirmLabel={tCommon("activate")}
+            processingLabel={tCommon("activating")}
             pending={toggling}
             onConfirm={() => toggleActive(true)}
             trigger={
@@ -137,13 +143,15 @@ export function UserActions({
                 disabled={toggling}
                 className="min-h-10 rounded-lg border border-[var(--edge)] px-2 text-sm text-[var(--accent)] disabled:opacity-60"
               >
-                Activate
+                {tCommon("activate")}
               </button>
             }
           />
         )}
         {!canEdit && (isSelf || (!canDeactivate && !canReactivate)) && (
-          <span className="text-xs text-[var(--muted)]">{isSelf ? "Current user" : "—"}</span>
+          <span className="text-xs text-[var(--muted)]">
+            {isSelf ? tAdmin("currentUser") : "—"}
+          </span>
         )}
       </div>
 
@@ -151,7 +159,7 @@ export function UserActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Edit user ${user.username}`}
+          aria-label={tAdmin("editUserTitle", { name: user.displayName })}
           onMouseDown={() => !pending && setEditing(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -163,14 +171,16 @@ export function UserActions({
             <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                  USER ACCESS
+                  {tAdmin("userAccessEyebrow")}
                 </p>
-                <h2 className="mt-1 text-xl font-semibold">Edit {user.displayName}</h2>
+                <h2 className="mt-1 text-xl font-semibold">
+                  {tAdmin("editUserTitle", { name: user.displayName })}
+                </h2>
                 <p className="mt-1 font-mono text-xs text-[var(--muted)]">{user.username}</p>
               </div>
               <button
                 type="button"
-                aria-label="Close edit user dialog"
+                aria-label={tCommon("close")}
                 disabled={pending}
                 onClick={() => setEditing(false)}
                 className="min-h-11 px-3 text-lg"
@@ -182,7 +192,7 @@ export function UserActions({
             <div className="p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm">
-                  Display name
+                  {tAdmin("displayName")}
                   <input
                     name="displayName"
                     defaultValue={user.displayName}
@@ -192,7 +202,7 @@ export function UserActions({
                   />
                 </label>
                 <label className="block text-sm">
-                  Role
+                  {tAdmin("roleCol")}
                   <select
                     name="role"
                     defaultValue={user.role}
@@ -200,7 +210,7 @@ export function UserActions({
                   >
                     {assignableRoles.map((role) => (
                       <option key={role} value={role}>
-                        {role}
+                        {translateStatus(tStatus, role)}
                       </option>
                     ))}
                   </select>
@@ -208,7 +218,7 @@ export function UserActions({
               </div>
 
               <fieldset className="mt-5">
-                <legend className="text-sm font-medium">Branch access</legend>
+                <legend className="text-sm font-medium">{tAdmin("branchAccess")}</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {assignableBranches.map((branch) => (
                     <label
@@ -227,7 +237,7 @@ export function UserActions({
                     </label>
                   ))}
                   {!assignableBranches.length && (
-                    <p className="text-sm text-[var(--muted)]">No active branches available.</p>
+                    <p className="text-sm text-[var(--muted)]">{tAdmin("noActiveBranches")}</p>
                   )}
                 </div>
               </fieldset>
@@ -252,14 +262,14 @@ export function UserActions({
                 onClick={() => setEditing(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {pending ? "Saving…" : "Save changes"}
+                {pending ? tCommon("saving") : tCommon("saveChanges")}
               </button>
             </footer>
           </form>

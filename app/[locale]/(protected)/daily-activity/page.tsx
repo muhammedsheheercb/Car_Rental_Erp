@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { DailyActivityControls } from "@/components/daily-activity-controls";
 import {
   type ActivityScopeMode,
@@ -9,6 +10,7 @@ import {
 import { loadDailyActivity } from "@/features/daily-activity/service";
 import { formatOmanDateTimeDisplay } from "@/features/ledger/calculations";
 import { requireIdentity } from "@/lib/auth";
+import { translateSafe } from "@/lib/i18n-helpers";
 
 function toneBadgeClass(tone: ActivityTone): string {
   switch (tone) {
@@ -27,17 +29,6 @@ function toneBadgeClass(tone: ActivityTone): string {
   }
 }
 
-function scopeLabel(scopeMode: ActivityScopeMode): { title: string; subtitle: string } {
-  switch (scopeMode) {
-    case "ALL":
-      return { title: "All Branches & Users", subtitle: "Super Admin full visibility" };
-    case "BRANCH_ADMIN":
-      return { title: "Permitted Branches", subtitle: "Admin & supervisor visibility" };
-    case "SELF":
-      return { title: "Own Activity", subtitle: "Scoped to your branch & modules" };
-  }
-}
-
 export default async function DailyActivityPage({
   params,
   searchParams,
@@ -53,7 +44,13 @@ export default async function DailyActivityPage({
     page?: string;
   }>;
 }) {
-  const [actor, { locale }, query] = await Promise.all([requireIdentity(), params, searchParams]);
+  const [actor, { locale }, query, tActivity, tCommon] = await Promise.all([
+    requireIdentity(),
+    params,
+    searchParams,
+    getTranslations("activity"),
+    getTranslations("common"),
+  ]);
   if (!canAccessDailyActivity(actor)) redirect(`/${locale}/forbidden`);
 
   const requestedPage = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
@@ -67,6 +64,16 @@ export default async function DailyActivityPage({
     page: requestedPage,
   });
 
+  const scopeLabel = (scopeMode: ActivityScopeMode) => {
+    switch (scopeMode) {
+      case "ALL":
+        return { title: tActivity("scopeAllTitle"), subtitle: tActivity("scopeAllSubtitle") };
+      case "BRANCH_ADMIN":
+        return { title: tActivity("scopeBranchTitle"), subtitle: tActivity("scopeBranchSubtitle") };
+      case "SELF":
+        return { title: tActivity("scopeSelfTitle"), subtitle: tActivity("scopeSelfSubtitle") };
+    }
+  };
   const scope = scopeLabel(data.scopeMode);
   const rangeStart = data.totalMatching ? (data.page - 1) * data.pageSize + 1 : 0;
   const rangeEnd = Math.min(data.totalMatching, data.page * data.pageSize);
@@ -89,50 +96,51 @@ export default async function DailyActivityPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">AUDIT / DAILY ACTIVITY</p>
-          <h1 className="mt-2 text-3xl font-semibold">Daily Activity</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Unified chronological feed of system actions across authentication, branches, users,
-            vehicles, customers, blacklist, bookings, rentals, transfers, finance, invoices, and
-            services (Asia/Muscat).
-          </p>
+          <p className="text-sm text-[var(--accent)]">{tActivity("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tActivity("title")}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">{tActivity("subtitle")}</p>
         </div>
         <p className="text-xs text-[var(--muted)]">
           {data.totalMatching
-            ? `Showing ${rangeStart}–${rangeEnd} of ${data.totalMatching} activities`
-            : "0 matching activities"}{" "}
-          · Page {data.page} of {data.totalPages}
+            ? tActivity("matchingCount", {
+                start: rangeStart,
+                end: rangeEnd,
+                total: data.totalMatching,
+              })
+            : tActivity("zeroMatching")}{" "}
+          · {tCommon("pageOf", { page: data.page, total: data.totalPages })}
         </p>
       </div>
 
       {/* KPI Summary Strip */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4">
-          <p className="text-xs text-[var(--muted)]">Matching Activities</p>
+          <p className="text-xs text-[var(--muted)]">{tActivity("matchingActivities")}</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{data.totalMatching}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            {data.pageSize} per page · {data.totalPages} page{data.totalPages === 1 ? "" : "s"}
+            {tCommon("perPage", { count: data.pageSize })} ·{" "}
+            {tActivity("pagesCount", { count: data.totalPages })}
           </p>
         </div>
 
         <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4">
-          <p className="text-xs text-[var(--muted)]">Today (Oman)</p>
+          <p className="text-xs text-[var(--muted)]">{tActivity("todayOman")}</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-[var(--accent)]">
             {data.todayCount}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Recorded since 00:00 Asia/Muscat</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{tActivity("todaySubtitle")}</p>
         </div>
 
         <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4">
-          <p className="text-xs text-[var(--muted)]">Active Users in Feed</p>
+          <p className="text-xs text-[var(--muted)]">{tActivity("activeUsers")}</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
             {data.distinctActors}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Distinct actors matching filters</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{tActivity("activeUsersSubtitle")}</p>
         </div>
 
         <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4">
-          <p className="text-xs text-[var(--muted)]">Visibility Scope</p>
+          <p className="text-xs text-[var(--muted)]">{tActivity("visibilityScope")}</p>
           <p className="mt-1 text-base font-semibold">{scope.title}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">{scope.subtitle}</p>
         </div>
@@ -150,13 +158,11 @@ export default async function DailyActivityPage({
       <section className="space-y-4 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Chronological Activity Feed</h2>
-            <p className="text-xs text-[var(--muted)]">
-              Ordered newest first. Timestamps displayed in Oman time (UTC+04:00).
-            </p>
+            <h2 className="text-lg font-semibold">{tActivity("feedTitle")}</h2>
+            <p className="text-xs text-[var(--muted)]">{tActivity("feedSubtitle")}</p>
           </div>
           <span className="text-xs text-[var(--muted)]">
-            Page {data.page} of {data.totalPages}
+            {tCommon("pageOf", { page: data.page, total: data.totalPages })}
           </span>
         </div>
 
@@ -164,11 +170,11 @@ export default async function DailyActivityPage({
           <table className="min-w-[58rem] w-full text-sm">
             <thead className="bg-[var(--raised)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
-                <th className="px-3 py-3 text-start">Date / Time (Oman)</th>
-                <th className="px-3 py-3 text-start">Activity</th>
-                <th className="px-3 py-3 text-start">Actor</th>
-                <th className="px-3 py-3 text-start">Branch</th>
-                <th className="px-3 py-3 text-start">Entity &amp; Details</th>
+                <th className="px-3 py-3 text-start">{tCommon("dateTimeOman")}</th>
+                <th className="px-3 py-3 text-start">{tActivity("activityCol")}</th>
+                <th className="px-3 py-3 text-start">{tActivity("actorCol")}</th>
+                <th className="px-3 py-3 text-start">{tCommon("branch")}</th>
+                <th className="px-3 py-3 text-start">{tActivity("entityDetailsCol")}</th>
               </tr>
             </thead>
             <tbody>
@@ -184,12 +190,24 @@ export default async function DailyActivityPage({
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${toneBadgeClass(entry.tone)}`}
                     >
-                      {entry.label}
+                      {translateSafe(tActivity, `events.${entry.event}`, entry.label)}
                     </span>
-                    <p className="mt-1 text-[11px] text-[var(--muted)]">{entry.categoryLabel}</p>
+                    <p className="mt-1 text-[11px] text-[var(--muted)]">
+                      {translateSafe(
+                        tActivity,
+                        `categories.${entry.category}`,
+                        entry.categoryLabel,
+                      )}
+                    </p>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    <p className="font-medium">{entry.actorName}</p>
+                    <p className="font-medium">
+                      {entry.actorName === "System / Guest"
+                        ? tCommon("systemGuest")
+                        : entry.actorName === "Former user"
+                          ? tCommon("formerUser")
+                          : entry.actorName}
+                    </p>
                     {entry.actorUsername && (
                       <p className="font-mono text-xs text-[var(--muted)]">
                         @{entry.actorUsername}
@@ -207,13 +225,17 @@ export default async function DailyActivityPage({
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-[var(--muted)]">Global / System</span>
+                      <span className="text-xs text-[var(--muted)]">{tCommon("globalSystem")}</span>
                     )}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded border border-[var(--edge)] bg-black/25 px-1.5 py-0.5 text-[11px] text-[var(--muted)]">
-                        {entry.entityLabel}
+                        {translateSafe(
+                          tActivity,
+                          `entities.${entry.entityType}`,
+                          entry.entityLabel,
+                        )}
                       </span>
                       <span className="text-sm">{entry.summary}</span>
                       {entry.href && (
@@ -221,7 +243,7 @@ export default async function DailyActivityPage({
                           href={entry.href as never}
                           className="text-xs font-medium text-[var(--accent)] hover:underline"
                         >
-                          Open →
+                          {tActivity("openLink")}
                         </Link>
                       )}
                     </div>
@@ -231,19 +253,21 @@ export default async function DailyActivityPage({
             </tbody>
           </table>
           {!data.entries.length && (
-            <p className="p-8 text-sm text-[var(--muted)]">
-              No activity entries match your selected filters.
-            </p>
+            <p className="p-8 text-sm text-[var(--muted)]">{tActivity("noEntries")}</p>
           )}
         </div>
 
         {data.totalPages > 1 && (
           <nav
-            aria-label="Daily activity pages"
+            aria-label={tActivity("title")}
             className="flex flex-wrap items-center justify-between gap-3 text-sm"
           >
             <span className="text-xs text-[var(--muted)]">
-              Showing {rangeStart}–{rangeEnd} of {data.totalMatching}
+              {tCommon("showingRange", {
+                start: rangeStart,
+                end: rangeEnd,
+                total: data.totalMatching,
+              })}
             </span>
             <div className="flex items-center gap-2">
               {data.page > 1 && (
@@ -251,18 +275,18 @@ export default async function DailyActivityPage({
                   href={pageHref(data.page - 1) as never}
                   className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 hover:border-[var(--accent)]"
                 >
-                  Previous
+                  {tCommon("previous")}
                 </Link>
               )}
               <span className="px-2 text-[var(--muted)]">
-                Page {data.page} of {data.totalPages}
+                {tCommon("pageOf", { page: data.page, total: data.totalPages })}
               </span>
               {data.page < data.totalPages && (
                 <Link
                   href={pageHref(data.page + 1) as never}
                   className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 hover:border-[var(--accent)]"
                 >
-                  Next
+                  {tCommon("next")}
                 </Link>
               )}
             </div>

@@ -19,7 +19,7 @@ html {
 body {
   min-height: 100vh;
   background: radial-gradient(circle at 85% -10%, #29311a 0, transparent 30rem), #0b0b0a;
-  font-family: Arial, sans-serif;
+  font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
   margin: 0;
 }
 img,
@@ -151,7 +151,7 @@ select:focus-visible {
   padding: 9mm;
   background: #fff;
   color: #18273b;
-  font-family: Arial, sans-serif;
+  font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
   font-size: 10pt;
   line-height: 1.4;
   display: flex;
@@ -173,6 +173,9 @@ select:focus-visible {
   font-weight: 800;
   letter-spacing: 1px;
   color: #183953;
+}
+[dir="rtl"] .document-brand {
+  letter-spacing: 0;
 }
 .document-brand span {
   color: #947026;

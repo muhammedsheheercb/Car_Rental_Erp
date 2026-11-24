@@ -1,5 +1,6 @@
 "use client";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 export function ConfirmDialog({
   trigger,
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   alternativeLabel?: string;
   onAlternative?: () => void | Promise<void>;
 }) {
+  const t = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState(false);
   const run = async (action: () => void | Promise<void>) => {
@@ -46,7 +48,7 @@ export function ConfirmDialog({
           </AlertDialog.Description>
           <div className="mt-6 flex flex-col-reverse gap-3 min-[360px]:flex-row min-[360px]:justify-end">
             <AlertDialog.Cancel disabled={busy} className="min-h-11 rounded-lg px-4">
-              Cancel
+              {t("cancel")}
             </AlertDialog.Cancel>
             {alternativeLabel && onAlternative && (
               <AlertDialog.Action
@@ -57,7 +59,7 @@ export function ConfirmDialog({
                 disabled={busy}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 disabled:opacity-60"
               >
-                {busy ? (processingLabel ?? "Working…") : alternativeLabel}
+                {busy ? (processingLabel ?? t("working")) : alternativeLabel}
               </AlertDialog.Action>
             )}
             <AlertDialog.Action

@@ -67,7 +67,7 @@ export async function createBranchAction(formData: FormData) {
     code: branch.code,
     location: branch.location,
   });
-  revalidatePath("/en/admin/branches");
+  for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/admin/branches`);
   return { ok: true, message: "Branch created successfully." };
 }
 export async function deactivateBranchAction(id: string) {
@@ -83,7 +83,7 @@ export async function deactivateBranchAction(id: string) {
     .set({ isActive: false, deactivatedAt: new Date(), updatedAt: new Date() })
     .where(eq(branches.id, id));
   await audit("BRANCH_DEACTIVATED", "branch", id, actor.id, id);
-  revalidatePath("/en/admin/branches");
+  for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/admin/branches`);
   return { ok: true, message: "Branch deactivated successfully." };
 }
 export async function updateBranchAction(id: string, formData: FormData) {
@@ -100,7 +100,7 @@ export async function updateBranchAction(id: string, formData: FormData) {
       name: parsed.data.name,
       location: parsed.data.location,
     });
-    revalidatePath("/en/admin/branches");
+    for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/admin/branches`);
     return { ok: true, message: "Branch updated successfully." };
   } catch {
     return { ok: false, message: "We could not update this branch." };
@@ -127,7 +127,7 @@ export async function deleteBranchAction(id: string) {
     };
   await db.delete(branches).where(eq(branches.id, id));
   await audit("BRANCH_DELETED", "branch", id, actor.id);
-  revalidatePath("/en/admin/branches");
+  for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/admin/branches`);
   return { ok: true, message: "Branch deleted successfully." };
 }
 export async function createUserAction(formData: FormData) {

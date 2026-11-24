@@ -1,12 +1,13 @@
-export default function Forbidden() {
+import { getTranslations } from "next-intl/server";
+
+export default async function Forbidden() {
+  const t = await getTranslations("auth");
   return (
     <main className="grid min-h-[60vh] place-items-center text-center">
       <div>
         <p className="text-[var(--accent)]">403</p>
-        <h1 className="mt-3 text-3xl font-semibold">Access restricted.</h1>
-        <p className="mt-2 text-[var(--muted)]">
-          Your account does not have permission for this action.
-        </p>
+        <h1 className="mt-3 text-3xl font-semibold">{t("forbiddenTitle")}</h1>
+        <p className="mt-2 text-[var(--muted)]">{t("forbiddenDescription")}</p>
       </div>
     </main>
   );

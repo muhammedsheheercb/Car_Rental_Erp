@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   getCustomerBlacklistHistoryAction,
   updateBlacklistEntryAction,
 } from "@/app/[locale]/(protected)/customers/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { CalendarInput } from "./calendar-input";
 import { useToast } from "./toast";
 import { UnblacklistButton } from "./unblacklist-button";
@@ -36,6 +38,10 @@ export function BlacklistRowActions({
   };
   canUpdate: boolean;
 }) {
+  const t = useTranslations();
+  const tBl = useTranslations("customers.blacklistPage");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [editing, setEditing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [reason, setReason] = useState(entry.reason);
@@ -61,10 +67,10 @@ export function BlacklistRowActions({
 
   const saveEdit = () => {
     const next: Record<string, string> = {};
-    if (!reason.trim()) next.reason = "Reason is required.";
-    if (!description.trim()) next.description = "Description is required.";
+    if (!reason.trim()) next.reason = translateValidation(t, "Reason is required.");
+    if (!description.trim()) next.description = translateValidation(t, "Description is required.");
     if (startsAt && endsAt && endsAt < startsAt)
-      next.endsAt = "End date cannot be before start date.";
+      next.endsAt = translateValidation(t, "End date cannot be before start date.");
     setErrors(next);
     if (Object.keys(next).length) return;
     startSave(async () => {
@@ -77,7 +83,7 @@ export function BlacklistRowActions({
           endsAt,
         });
         if (!result.ok) {
-          setErrors({ form: result.message });
+          setErrors({ form: translateValidation(t, result.message) });
           show(result.message, "error", `blacklist-edit-${entry.id}`);
           return;
         }
@@ -85,7 +91,9 @@ export function BlacklistRowActions({
         setEditing(false);
         router.refresh();
       } catch {
-        setErrors({ form: "We could not update this blacklist record. Please retry." });
+        setErrors({
+          form: translateValidation(t, "We could not update this blacklist record. Please retry."),
+        });
       }
     });
   };
@@ -98,9 +106,8 @@ export function BlacklistRowActions({
       try {
         setHistoryData(await getCustomerBlacklistHistoryAction(entry.customerId));
       } catch (cause) {
-        setHistoryError(
-          cause instanceof Error ? cause.message : "Could not load blacklist history.",
-        );
+        const raw = cause instanceof Error ? cause.message : "Could not load blacklist history.";
+        setHistoryError(translateValidation(t, raw));
       }
     });
   };
@@ -114,7 +121,7 @@ export function BlacklistRowActions({
             onClick={openEdit}
             className="min-h-10 rounded-lg px-2 text-sm font-medium text-[var(--accent)]"
           >
-            Edit
+            {tCommon("edit")}
           </button>
         )}
         <button
@@ -122,7 +129,7 @@ export function BlacklistRowActions({
           onClick={openHistory}
           className="min-h-10 rounded-lg border border-[var(--edge)] px-2.5 text-sm"
         >
-          History
+          {tBl("history")}
         </button>
         {canUpdate && entry.isActive && (
           <UnblacklistButton
@@ -138,7 +145,7 @@ export function BlacklistRowActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Edit blacklist entry for ${entry.customerName}`}
+          aria-label={tBl("editTitle")}
           onMouseDown={() => !saving && setEditing(false)}
           className="fixed inset-0 z-[60] grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -153,16 +160,16 @@ export function BlacklistRowActions({
             <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                  BLACKLIST ENTRY
+                  {tBl("editEyebrow")}
                 </p>
-                <h2 className="mt-1 text-xl font-semibold">Edit Blacklist Details</h2>
+                <h2 className="mt-1 text-xl font-semibold">{tBl("editTitle")}</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   {entry.customerName} · {entry.customerNumber}
                 </p>
               </div>
               <button
                 type="button"
-                aria-label="Close edit blacklist dialog"
+                aria-label={tCommon("close")}
                 disabled={saving}
                 onClick={() => setEditing(false)}
                 className="min-h-11 px-3 text-lg"
@@ -173,7 +180,7 @@ export function BlacklistRowActions({
 
             <div className="space-y-4 p-5 sm:p-6">
               <label className="block text-sm">
-                Reason
+                {tCommon("reason")}
                 <input
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -185,7 +192,7 @@ export function BlacklistRowActions({
               {errors.reason && <p className="text-sm text-red-300">{errors.reason}</p>}
 
               <label className="block text-sm">
-                Description
+                {tCommon("description")}
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -198,7 +205,7 @@ export function BlacklistRowActions({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label htmlFor={`edit-bl-start-${entry.id}`} className="text-sm">
-                  Start date (optional)
+                  {tBl("startDateOptional")}
                   <CalendarInput
                     id={`edit-bl-start-${entry.id}`}
                     value={startsAt}
@@ -206,7 +213,7 @@ export function BlacklistRowActions({
                   />
                 </label>
                 <label htmlFor={`edit-bl-end-${entry.id}`} className="text-sm">
-                  End date (optional)
+                  {tBl("endDateOptional")}
                   <CalendarInput
                     id={`edit-bl-end-${entry.id}`}
                     value={endsAt}
@@ -229,14 +236,14 @@ export function BlacklistRowActions({
                 onClick={() => setEditing(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {saving ? "Saving…" : "Save changes"}
+                {saving ? tCommon("saving") : tCommon("saveChanges")}
               </button>
             </footer>
           </form>
@@ -247,7 +254,7 @@ export function BlacklistRowActions({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Blacklist history for ${entry.customerName}`}
+          aria-label={tBl("historyEyebrow")}
           onMouseDown={() => setHistoryOpen(false)}
           className="fixed inset-0 z-[60] grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -259,7 +266,7 @@ export function BlacklistRowActions({
             <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-[var(--edge)] bg-[var(--raised)] p-5 sm:p-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                  BLACKLIST HISTORY
+                  {tBl("historyEyebrow")}
                 </p>
                 <h2 className="mt-1 text-xl font-semibold">{entry.customerName}</h2>
                 <p className="mt-1 font-mono text-xs text-[var(--muted)]">
@@ -269,7 +276,7 @@ export function BlacklistRowActions({
               </div>
               <button
                 type="button"
-                aria-label="Close history dialog"
+                aria-label={tCommon("close")}
                 onClick={() => setHistoryOpen(false)}
                 className="min-h-11 px-3 text-lg"
               >
@@ -279,7 +286,7 @@ export function BlacklistRowActions({
 
             <div className="space-y-4 p-5 sm:p-6">
               {historyLoading && (
-                <p className="text-sm text-[var(--muted)]">Loading customer blacklist history…</p>
+                <p className="text-sm text-[var(--muted)]">{tBl("loadingHistory")}</p>
               )}
               {historyError && (
                 <div className="space-y-3">
@@ -291,15 +298,14 @@ export function BlacklistRowActions({
                     onClick={openHistory}
                     className="min-h-10 rounded-lg border border-[var(--edge)] px-3 text-sm"
                   >
-                    Retry
+                    {tCommon("retry")}
                   </button>
                 </div>
               )}
               {historyData && (
                 <>
                   <p className="text-sm text-[var(--muted)]">
-                    {historyData.entries.length} total blacklist record
-                    {historyData.entries.length === 1 ? "" : "s"} (active and removed).
+                    {tBl("totalHistory", { count: historyData.entries.length })}
                   </p>
                   <div className="space-y-3">
                     {historyData.entries.map((item) => (
@@ -312,29 +318,31 @@ export function BlacklistRowActions({
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-xs ${item.isActive ? "bg-red-400/20 text-red-200" : "bg-white/10 text-[var(--muted)]"}`}
                           >
-                            {item.isActive ? "Active" : "Removed"}
+                            {item.isActive ? tStatus("ACTIVE") : tStatus("REMOVED")}
                           </span>
                         </div>
                         <p className="mt-2 break-words text-[var(--ink)]">{item.description}</p>
                         <dl className="mt-3 grid gap-2 text-xs text-[var(--muted)] sm:grid-cols-2">
                           <div>
-                            <dt>Effective period</dt>
+                            <dt>{tBl("effectivePeriodCol")}</dt>
                             <dd className="text-[var(--ink)]">
                               {item.startsAt ?? "—"} – {item.endsAt ?? "—"}
                             </dd>
                           </div>
                           <div>
-                            <dt>Recorded by</dt>
-                            <dd className="text-[var(--ink)]">{item.recordedBy ?? "System"}</dd>
+                            <dt>{tBl("recordedBy")}</dt>
+                            <dd className="text-[var(--ink)]">
+                              {item.recordedBy ?? tCommon("system")}
+                            </dd>
                           </div>
                           <div>
-                            <dt>Created (Oman)</dt>
+                            <dt>{tBl("createdOman")}</dt>
                             <dd className="text-[var(--ink)]">
                               {formatOmanDateTime(item.createdAt)}
                             </dd>
                           </div>
                           <div>
-                            <dt>Removed (Oman)</dt>
+                            <dt>{tBl("removedOman")}</dt>
                             <dd className="text-[var(--ink)]">
                               {item.deactivatedAt ? formatOmanDateTime(item.deactivatedAt) : "—"}
                             </dd>

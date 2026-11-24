@@ -1,4 +1,5 @@
 import { and, count, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { OperationsLinks } from "@/components/operations-links";
 import { db } from "@/db/client";
 import {
@@ -22,6 +23,7 @@ import { requireIdentity } from "@/lib/auth";
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const user = await requireIdentity();
+  const [t, tCommon] = await Promise.all([getTranslations("dashboard"), getTranslations("common")]);
   const now = new Date();
   const day = formatOmanDateTime(now).slice(0, 10);
   const todayStart = parseOmanDateTime(`${day}T00:00`);
@@ -177,33 +179,31 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
       };
     }),
   );
-  const metrics = [
-    ["Total vehicles", totalVehicles[0]?.value ?? 0],
-    ["Available vehicles", availableVehicles[0]?.value ?? 0],
-    ["On rent", onRent[0]?.value ?? 0],
-    ["Reserved", reserved[0]?.value ?? 0],
-    ["Today Arrival", todayArrivals[0]?.value ?? 0],
-    ["Today Reserve", todayReservations[0]?.value ?? 0],
-    ["Late Car", lateVehicles[0]?.value ?? 0],
-    ["Near service", nearService[0]?.value ?? 0],
-    [`Mulkiya expiry alerts (${policy.expirySoonDays} days)`, mulkiyaExpiring[0]?.value ?? 0],
-    [`Insurance expiry alerts (${policy.expirySoonDays} days)`, insuranceExpiring[0]?.value ?? 0],
-    ["Active customers", activeCustomers[0]?.value ?? 0],
-    ["Outstanding payments", formatOMR(outstanding[0]?.value ?? 0)],
-    ["Advance collected", formatOMR(advances[0]?.value ?? 0)],
-    ["Current rental revenue", formatOMR(revenue[0]?.value ?? 0)],
+  const metrics: [string, string | number][] = [
+    [t("totalVehicles"), totalVehicles[0]?.value ?? 0],
+    [t("availableVehicles"), availableVehicles[0]?.value ?? 0],
+    [t("onRent"), onRent[0]?.value ?? 0],
+    [t("reserved"), reserved[0]?.value ?? 0],
+    [t("todayArrival"), todayArrivals[0]?.value ?? 0],
+    [t("todayReserve"), todayReservations[0]?.value ?? 0],
+    [t("lateCar"), lateVehicles[0]?.value ?? 0],
+    [t("nearService"), nearService[0]?.value ?? 0],
+    [t("mulkiyaAlerts", { days: policy.expirySoonDays }), mulkiyaExpiring[0]?.value ?? 0],
+    [t("insuranceAlerts", { days: policy.expirySoonDays }), insuranceExpiring[0]?.value ?? 0],
+    [t("activeCustomers"), activeCustomers[0]?.value ?? 0],
+    [t("outstandingPayments"), formatOMR(outstanding[0]?.value ?? 0)],
+    [t("advanceCollected"), formatOMR(advances[0]?.value ?? 0)],
+    [t("currentRevenue"), formatOMR(revenue[0]?.value ?? 0)],
   ];
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-sm text-[var(--accent)]">OPERATIONS / OMAN</p>
-        <h1 className="mt-2 text-3xl font-semibold">Good to see you, {user.displayName}.</h1>
+        <p className="text-sm text-[var(--accent)]">{t("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{t("greeting", { name: user.displayName })}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Live data for{" "}
           {user.role === "SUPER_ADMIN"
-            ? "all branches"
-            : `${user.branchIds.length} assigned branch${user.branchIds.length === 1 ? "" : "es"}`}
-          . Financial values are OMR.
+            ? t("scopeAll")
+            : t("scopeAssigned", { count: user.branchIds.length })}
         </p>
       </div>
       <OperationsLinks locale={locale} />
@@ -217,16 +217,16 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
       </section>
       <section className="border border-[var(--edge)] bg-[var(--surface)]">
         <div className="border-b border-[var(--edge)] p-4">
-          <h2 className="font-semibold">Branch operations</h2>
+          <h2 className="font-semibold">{t("branchOperations")}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[34rem] text-start text-sm">
             <thead className="bg-[var(--raised)] text-[var(--muted)]">
               <tr>
-                <th className="p-3">Branch</th>
-                <th className="p-3 text-center">Available</th>
-                <th className="p-3 text-center">On rent</th>
-                <th className="p-3 text-center">Reserved</th>
+                <th className="p-3">{tCommon("branch")}</th>
+                <th className="p-3 text-center">{t("available")}</th>
+                <th className="p-3 text-center">{t("onRent")}</th>
+                <th className="p-3 text-center">{t("reserved")}</th>
               </tr>
             </thead>
             <tbody>
@@ -246,7 +246,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
               {!branchSummary.length && (
                 <tr>
                   <td colSpan={4} className="p-8 text-center text-[var(--muted)]">
-                    No assigned branches.
+                    {t("noAssignedBranches")}
                   </td>
                 </tr>
               )}

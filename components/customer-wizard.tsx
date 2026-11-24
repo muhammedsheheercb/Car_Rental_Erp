@@ -1,33 +1,35 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   saveCustomerAction,
   uploadCustomerDocumentAction,
 } from "@/app/[locale]/(protected)/customers/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { CalendarInput } from "./calendar-input";
 import { DocumentPicker } from "./document-picker";
 import { useToast } from "./toast";
 
 const fields = [
-  ["name", "Customer name", true],
-  ["mobile", "Mobile number", true],
-  ["email", "Email", false],
-  ["address", "Address", true],
-  ["remarks", "Remarks", false],
-  ["civilIdNumber", "Civil ID number", false],
-  ["civilIdExpiry", "Civil ID expiry", false, "date"],
-  ["passportNumber", "Passport number", false],
-  ["passportExpiry", "Passport expiry", false, "date"],
-  ["visaNumber", "Visa number", false],
-  ["visaExpiry", "Visa expiry", false, "date"],
-  ["drivingLicenceNumber", "Driving licence number", true],
-  ["drivingLicenceExpiry", "Driving licence expiry", true, "date"],
-  ["sponsorDetails", "Sponsor name/details", false],
+  ["name", "name", true],
+  ["mobile", "mobile", true],
+  ["email", "email", false],
+  ["address", "address", true],
+  ["remarks", "remarks", false],
+  ["civilIdNumber", "civilIdNumber", false],
+  ["civilIdExpiry", "civilIdExpiry", false, "date"],
+  ["passportNumber", "passportNumber", false],
+  ["passportExpiry", "passportExpiry", false, "date"],
+  ["visaNumber", "visaNumber", false],
+  ["visaExpiry", "visaExpiry", false, "date"],
+  ["drivingLicenceNumber", "drivingLicenceNumber", true],
+  ["drivingLicenceExpiry", "drivingLicenceExpiry", true, "date"],
+  ["sponsorDetails", "sponsorDetails", false],
 ] as const;
 const documents = [
-  ["LICENCE_FRONT", "Licence front", true],
-  ["LICENCE_BACK", "Licence back", true],
-  ["SIGNATURE", "Customer signature", true],
+  ["LICENCE_FRONT", "licenceFront", true],
+  ["LICENCE_BACK", "licenceBack", true],
+  ["SIGNATURE", "signature", true],
 ] as const;
 export function CustomerWizard({
   customerId,
@@ -50,6 +52,9 @@ export function CustomerWizard({
   returnTo?: string;
   onSuccess?: (message: string) => void;
 }) {
+  const t = useTranslations();
+  const tWiz = useTranslations("customers.wizard");
+  const tCommon = useTranslations("common");
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Record<string, string>>(initialData ?? {});
   const [pending, start] = useTransition();
@@ -64,7 +69,7 @@ export function CustomerWizard({
     start(async () => {
       const result = await saveCustomerAction(data, customerId);
       if (!result.ok) {
-        setError(result.message);
+        setError(translateValidation(t, result.message));
         return;
       }
       setSavedCustomerId(result.id);
@@ -74,7 +79,10 @@ export function CustomerWizard({
     });
   const submitDocuments = () =>
     start(async () => {
-      if (!savedCustomerId) return setError("Save customer details before uploading documents.");
+      if (!savedCustomerId)
+        return setError(
+          translateValidation(t, "Save customer details before uploading documents."),
+        );
       const missing = documents.filter(
         ([type, , required]) =>
           required &&
@@ -82,7 +90,9 @@ export function CustomerWizard({
           !existingDocuments.some((document) => document.type === type),
       );
       if (missing.length)
-        return setError("Licence front, licence back, and signature are required.");
+        return setError(
+          translateValidation(t, "Licence front, licence back, and signature are required."),
+        );
       for (const [type, item] of Object.entries(documentFiles)) {
         const result = await uploadCustomerDocumentAction(
           savedCustomerId,
@@ -91,7 +101,7 @@ export function CustomerWizard({
           item.width,
           item.height,
         );
-        if (!result.ok) return setError(result.message);
+        if (!result.ok) return setError(translateValidation(t, result.message));
       }
       if (onSuccess) onSuccess("Customer saved with documents.");
       else if (returnTo) {
@@ -102,20 +112,18 @@ export function CustomerWizard({
     });
   return (
     <div className="mx-auto max-w-4xl">
-      <p className="text-sm text-[var(--accent)]">CUSTOMERS / {customerId ? "EDIT" : "CREATE"}</p>
+      <p className="text-sm text-[var(--accent)]">
+        {customerId ? tWiz("eyebrowEdit") : tWiz("eyebrowCreate")}
+      </p>
       <h1 className="mt-2 text-3xl font-semibold">
-        {customerId ? "Edit customer" : "New customer"}
+        {customerId ? tWiz("editTitle") : tWiz("newTitle")}
       </h1>
       {returnTo && (
         <p className="mt-3 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
-          Creating customer for a booking — after completing documents you will return to the
-          booking form with this customer automatically selected.
+          {tWiz("bookingReturnHint")}
         </p>
       )}
-      <p className="mt-3 text-sm text-[var(--muted)]">
-        Minimum rental requirement: a valid driving licence, licence front/back images, signature,
-        and one valid identity document (Civil ID, passport, or visa where applicable).
-      </p>
+      <p className="mt-3 text-sm text-[var(--muted)]">{tWiz("requirementNote")}</p>
       <div className="mt-6 grid grid-cols-2 gap-2 text-sm">
         <button
           type="button"
@@ -126,7 +134,7 @@ export function CustomerWizard({
               : "border-b border-[var(--edge)] pb-2"
           }
         >
-          1. Details
+          {tWiz("step1")}
         </button>
         <button
           type="button"
@@ -137,15 +145,15 @@ export function CustomerWizard({
               : "border-b border-[var(--edge)] pb-2"
           }
         >
-          2. Documents
+          {tWiz("step2")}
         </button>
       </div>
       <section className="mt-6 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5">
         {step === 1 ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            {fields.map(([key, label, required, type]) => (
+            {fields.map(([key, labelKey, required, type]) => (
               <label key={key} htmlFor={key} className="text-sm">
-                {label}
+                {tWiz(labelKey)}
                 {type === "date" ? (
                   <CalendarInput
                     id={key}
@@ -167,10 +175,10 @@ export function CustomerWizard({
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {documents.map(([key, label, required]) => (
+            {documents.map(([key, labelKey, required]) => (
               <DocumentPicker
                 key={key}
-                label={label}
+                label={tWiz(labelKey)}
                 required={required}
                 existing={existingDocuments.find((document) => document.type === key)}
                 onChange={(file, width, height) =>
@@ -192,7 +200,7 @@ export function CustomerWizard({
             disabled={step === 1}
             className="min-h-11 px-4"
           >
-            Back
+            {tCommon("back")}
           </button>
           {step === 1 ? (
             <button
@@ -200,7 +208,7 @@ export function CustomerWizard({
               onClick={saveDetails}
               className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-black"
             >
-              Continue
+              {tCommon("continue")}
             </button>
           ) : (
             <button
@@ -211,11 +219,11 @@ export function CustomerWizard({
             >
               {pending
                 ? customerId
-                  ? "Updating…"
-                  : "Saving…"
+                  ? tCommon("updating")
+                  : tCommon("saving")
                 : customerId
-                  ? "Update customer"
-                  : "Create customer"}
+                  ? tWiz("updateCustomer")
+                  : tWiz("createCustomer")}
             </button>
           )}
         </div>

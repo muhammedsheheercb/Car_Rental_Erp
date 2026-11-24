@@ -1,5 +1,6 @@
 import { and, count, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { SignatureForm } from "@/components/settings-forms";
 import { db } from "@/db/client";
 import { userSignatures } from "@/db/schema";
@@ -12,7 +13,7 @@ export default async function SignatureSettingsPage({
   params: Promise<{ locale: string }>;
 }) {
   const actor = await requirePermission("settings", "read");
-  const { locale } = await params;
+  const [{ locale }, tSettings] = await Promise.all([params, getTranslations("settings")]);
   const options = await signatureUsers(actor);
   const optionIds = options.map((u) => u.id);
 
@@ -39,19 +40,19 @@ export default async function SignatureSettingsPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">SETTINGS / SIGNATURES</p>
-          <h1 className="mt-2 text-3xl font-semibold">User Signature Management</h1>
+          <p className="text-sm text-[var(--accent)]">{tSettings("signaturesEyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tSettings("signaturesTitle")}</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
             {canManageOthers
-              ? "Select your account or an authorized branch user to draw, capture, or upload a signature."
-              : "Draw, capture via camera, or upload your personal signature for printed bills and agreements."}
+              ? tSettings("signaturesSubtitleAdmin")
+              : tSettings("signaturesSubtitleSelf")}
           </p>
         </div>
         <Link
           href={`/${locale}/settings` as never}
           className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-4 text-center text-sm"
         >
-          Back to Settings
+          {tSettings("backToSettings")}
         </Link>
       </div>
 
@@ -64,34 +65,25 @@ export default async function SignatureSettingsPage({
           />
         ) : (
           <section className="rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5">
-            <h2 className="text-lg font-semibold">Signature updates unavailable</h2>
+            <h2 className="text-lg font-semibold">{tSettings("signatureUnavailableTitle")}</h2>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Updating signatures requires the <span className="font-mono">settings:update</span>{" "}
-              permission. Contact your branch administrator.
+              {tSettings("signatureUnavailableBody")}
             </p>
           </section>
         )}
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5 text-sm">
-            <h2 className="text-base font-semibold">How signatures are used</h2>
+            <h2 className="text-base font-semibold">{tSettings("howSignaturesUsed")}</h2>
             <ul className="mt-3 list-disc space-y-2 ps-5 text-[var(--muted)]">
-              <li>
-                Automatically placed in the <strong className="text-white">Authorized Staff</strong>{" "}
-                area when you print Rental Agreements, Invoices, Receipts, and Legal Fines.
-              </li>
-              <li>
-                Updating a signature preserves previous signature versions for audit compliance.
-              </li>
-              <li>
-                All signature images are compressed automatically and stored in private Cloudflare
-                R2 storage without public URLs.
-              </li>
+              <li>{tSettings("signatureBullet1")}</li>
+              <li>{tSettings("signatureBullet2")}</li>
+              <li>{tSettings("signatureBullet3")}</li>
             </ul>
           </section>
 
           <section className="rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5 text-sm">
-            <h2 className="text-base font-semibold">Configured accounts</h2>
+            <h2 className="text-base font-semibold">{tSettings("configuredAccounts")}</h2>
             <div className="mt-3 divide-y divide-[var(--edge)]">
               {options.map((u) => {
                 const hasCurrent = existing.some((item) => item.userId === u.id);
@@ -102,7 +94,9 @@ export default async function SignatureSettingsPage({
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs ${hasCurrent ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-[var(--muted)]"}`}
                     >
-                      {hasCurrent ? `Saved (${versions} v)` : "Not set"}
+                      {hasCurrent
+                        ? tSettings("savedVersions", { count: versions })
+                        : tSettings("notSet")}
                     </span>
                   </div>
                 );
