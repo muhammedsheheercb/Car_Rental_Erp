@@ -26,6 +26,7 @@ export async function AppShell({
     { href: "/finance/advance", label: "Finance", module: "finance" },
     { href: "/transfers", label: "Transfer", module: "rentals" },
     { href: "/invoices", label: "Invoices", module: "finance" },
+    { href: "/reports", label: "Reports", module: "reports" },
     { href: "/admin/branches", label: t("branches"), module: "branches" },
     { href: "/admin/users", label: t("users"), module: "users" },
   ].filter(
@@ -48,12 +49,12 @@ export async function AppShell({
         >
           MUSCAT <span className="text-[var(--accent)]">CARS</span>
         </Link>
-        <nav className="hidden min-w-0 items-center gap-2.5 overflow-x-auto whitespace-nowrap lg:flex xl:gap-3">
+        <nav className="hidden min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap lg:flex xl:gap-2.5">
           {items.map((item) => (
             <Link
               key={item.href}
               href={`/${locale}${item.href}` as never}
-              className="text-xs text-[var(--muted)] hover:text-white xl:text-[13px]"
+              className="text-xs text-[var(--muted)] hover:text-white"
             >
               {item.label}
             </Link>
