@@ -54,18 +54,36 @@ describe("User management authorization & scoping (§6)", () => {
     expect(canManageUserTarget(admin, { id: TARGET_ID, role: "USER", branchIds: [] })).toBe(false);
   });
 
-  it("validates role and branch assignment scope", () => {
-    const admin = { id: ACTOR_ID, role: "ADMIN" as const, branchIds: [BRANCH_A] };
+  it("validates role, branch, and permission assignment scope (prevents escalation)", () => {
+    const admin = {
+      id: ACTOR_ID,
+      role: "ADMIN" as const,
+      branchIds: [BRANCH_A],
+      permissions: new Set(["users:create", "customers:read", "fleet:read"]),
+    };
     expect(validateUserAssignment(admin, { role: "SUPER_ADMIN", branchIds: [BRANCH_A] }).ok).toBe(
       false,
     );
     expect(validateUserAssignment(admin, { role: "USER", branchIds: [] }).ok).toBe(false);
     expect(validateUserAssignment(admin, { role: "USER", branchIds: [BRANCH_B] }).ok).toBe(false);
-    expect(validateUserAssignment(admin, { role: "USER", branchIds: [BRANCH_A] }).ok).toBe(true);
+    expect(
+      validateUserAssignment(admin, {
+        role: "USER",
+        branchIds: [BRANCH_A],
+        permissions: ["customers:read", "finance:override_price"],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateUserAssignment(admin, {
+        role: "USER",
+        branchIds: [BRANCH_A],
+        permissions: ["customers:read", "fleet:read"],
+      }).ok,
+    ).toBe(true);
     expect(
       validateUserAssignment(
-        { id: ACTOR_ID, role: "SUPER_ADMIN", branchIds: [] },
-        { role: "SUPER_ADMIN", branchIds: [] },
+        { id: ACTOR_ID, role: "SUPER_ADMIN", branchIds: [], permissions: new Set() },
+        { role: "SUPER_ADMIN", branchIds: [], permissions: ["finance:override_price"] },
       ).ok,
     ).toBe(true);
   });

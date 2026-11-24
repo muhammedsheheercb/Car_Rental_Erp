@@ -120,6 +120,7 @@ export default async function UsersPage({
   const total = totalRows[0]?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const assignableRoles = allowedRolesForActor(actor.role);
+  const assignablePermissions = actor.role === "SUPER_ADMIN" ? undefined : [...actor.permissions];
   const canCreate = can(actor, "users", "create");
   const canUpdate = can(actor, "users", "update");
   const canDelete = can(actor, "users", "delete");
@@ -313,6 +314,7 @@ export default async function UsersPage({
                         }}
                         assignableRoles={assignableRoles}
                         assignableBranches={branchRows}
+                        allowedPermissions={assignablePermissions}
                         canEdit={canUpdate && manageable}
                         canDeactivate={canDelete && manageable}
                         canReactivate={canUpdate && manageable}
@@ -420,7 +422,10 @@ export default async function UsersPage({
               <p className="mt-2 text-xs text-[var(--muted)]">No active branches assigned.</p>
             )}
           </fieldset>
-          <UserPermissionsGrid maxHeightClass="max-h-64" />
+          <UserPermissionsGrid
+            allowedPermissions={assignablePermissions}
+            maxHeightClass="max-h-64"
+          />
           <button
             type="submit"
             className="mt-6 min-h-11 w-full rounded-lg bg-[var(--accent)] font-semibold text-black"

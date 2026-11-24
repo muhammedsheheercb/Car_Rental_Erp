@@ -1,10 +1,12 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   auditLogs,
   rentals,
   vehicleBrands,
+  vehicleImages,
   vehicleInsurance,
   vehicleModels,
   vehicleOdometerHistory,
@@ -14,6 +16,8 @@ import {
   vehicles,
 } from "@/db/schema";
 import { can, type Identity } from "@/lib/auth";
+import { validateEvidencePhoto } from "@/lib/image-file";
+import { putPrivateCustomerDocument } from "@/lib/r2";
 import { brandSchema, normalizeMasterName, vehicleSchema } from "@/lib/validation";
 
 export async function createBrand(input: unknown, actor: Identity) {
@@ -362,6 +366,7 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
       .where(eq(rentals.vehicleId, id))
       .limit(1);
     if (history) throw new Error("Vehicle has rental history. Deactivate it instead.");
+    await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, id));
     await tx.delete(vehiclePricing).where(eq(vehiclePricing.vehicleId, id));
     await tx.delete(vehicleRegistrations).where(eq(vehicleRegistrations.vehicleId, id));
     await tx.delete(vehicleServiceSettings).where(eq(vehicleServiceSettings.vehicleId, id));
@@ -370,6 +375,60 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
     await tx.delete(vehicles).where(eq(vehicles.id, id));
   });
   return { deactivated: false };
+}
+
+export async function saveVehicleImage(
+  vehicleId: string,
+  file: File,
+  width: number,
+  height: number,
+  actor: Identity,
+) {
+  await validateEvidencePhoto(file);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1)
+    throw new Error("The vehicle image dimensions are invalid.");
+  const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  return db.transaction(async (tx) => {
+    const [vehicle] = await tx
+      .select({ id: vehicles.id, branchId: vehicles.branchId })
+      .from(vehicles)
+      .where(eq(vehicles.id, vehicleId))
+      .for("update");
+    if (!vehicle) throw new Error("Vehicle not found.");
+    if (
+      !can(actor, "fleet", "update", vehicle.branchId) &&
+      !can(actor, "fleet", "create", vehicle.branchId)
+    )
+      throw new Error("FORBIDDEN");
+    const objectKey = `vehicles/${vehicle.id}/${randomUUID()}.${extension}`;
+    await putPrivateCustomerDocument(objectKey, file);
+    await tx
+      .update(vehicleImages)
+      .set({ isPrimary: false })
+      .where(and(eq(vehicleImages.vehicleId, vehicle.id), eq(vehicleImages.isPrimary, true)));
+    const [image] = await tx
+      .insert(vehicleImages)
+      .values({
+        vehicleId: vehicle.id,
+        objectKey,
+        contentType: file.type,
+        sizeBytes: file.size,
+        width,
+        height,
+        isPrimary: true,
+        uploadedBy: actor.id,
+      })
+      .returning();
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "VEHICLE_UPDATED",
+      entityType: "vehicle",
+      entityId: vehicle.id,
+      branchId: vehicle.branchId,
+      metadata: { imageUpdated: true, imageId: image.id },
+    });
+    return image;
+  });
 }
 
 export async function setVehicleActive(id: string, active: boolean, actor: Identity) {

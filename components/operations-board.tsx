@@ -131,6 +131,24 @@ export function OperationsBoard({
               </div>
             ))}
           </dl>
+          {view === "available" && (
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--edge)] pt-3">
+              <Link
+                href={`/${locale}/rentals?vehicleId=${row.id}` as never}
+                className="min-h-10 content-center rounded-lg bg-[var(--accent)] px-3 text-sm font-semibold text-black"
+              >
+                Book vehicle
+              </Link>
+              <Link
+                href={
+                  `/${locale}/fleet?registration=${encodeURIComponent(row.registration)}` as never
+                }
+                className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 text-sm"
+              >
+                Fleet actions
+              </Link>
+            </div>
+          )}
         </article>
       ))}
     </section>

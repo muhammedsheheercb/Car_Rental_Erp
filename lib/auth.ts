@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { hash, verify } from "@node-rs/argon2";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, ne } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
@@ -161,14 +161,25 @@ export async function changePassword(
 ) {
   const [user] = await db.select().from(users).where(eq(users.id, identity.id));
   if (!user || !(await passwordVerify(currentPassword, user.passwordHash))) return false;
-  await db
-    .update(users)
-    .set({
-      passwordHash: await passwordHash(newPassword),
-      mustChangePassword: false,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, identity.id));
+  const currentToken = (await cookies()).get(COOKIE)?.value;
+  const nextPasswordHash = await passwordHash(newPassword);
+  await db.transaction(async (tx) => {
+    await tx
+      .update(users)
+      .set({
+        passwordHash: nextPasswordHash,
+        mustChangePassword: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, identity.id));
+    await tx
+      .delete(sessions)
+      .where(
+        currentToken
+          ? and(eq(sessions.userId, identity.id), ne(sessions.tokenHash, hashText(currentToken)))
+          : eq(sessions.userId, identity.id),
+      );
+  });
   await audit("PASSWORD_CHANGED", "user", identity.id, identity.id);
   return true;
 }

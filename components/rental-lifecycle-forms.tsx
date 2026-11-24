@@ -1,21 +1,24 @@
 "use client";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { rentalLifecycleAction } from "@/app/[locale]/(protected)/rentals/lifecycle-actions";
 import type { RentalPeriod } from "@/features/rentals/booking-calculations";
 import {
   calculateExpectedReturn,
   formatOmanDateTime,
 } from "@/features/rentals/booking-calculations";
+import { compressImageFile } from "@/lib/image-compress";
 
 const cls = "min-h-11 min-w-0 w-full rounded border border-[var(--edge)] bg-[var(--raised)] px-3";
 function ActionForm({
   id,
+  anchorId,
   operation,
   title,
   children,
   blocked = false,
 }: {
   id: string;
+  anchorId?: string;
   operation: string;
   title: string;
   children: React.ReactNode;
@@ -26,7 +29,11 @@ function ActionForm({
     message: "",
   });
   return (
-    <form action={action} className="grid min-w-0 gap-3 rounded-xl border border-[var(--edge)] p-4">
+    <form
+      id={anchorId}
+      action={action}
+      className="grid min-w-0 gap-3 rounded-xl border border-[var(--edge)] p-4"
+    >
       <h2 className="text-lg font-semibold">{title}</h2>
       <input type="hidden" name="rentalId" value={id} />
       <input type="hidden" name="operation" value={operation} />
@@ -78,7 +85,41 @@ export function RentalLifecycleForms({
 }) {
   const [duration, setDuration] = useState("1");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [photoCompressing, setPhotoCompressing] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  useEffect(() => {
+    if (!photo) {
+      setPhotoPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+  const handleDamagePhoto = async (raw?: File) => {
+    setPhotoError("");
+    if (!raw) {
+      setPhoto(null);
+      return;
+    }
+    setPhotoCompressing(true);
+    try {
+      const optimized = await compressImageFile(raw, {
+        maxDimension: 1800,
+        quality: 0.82,
+        maxInputBytes: 10 * 1024 * 1024,
+        maxOutputBytes: 5 * 1024 * 1024,
+        preserveTransparency: raw.type === "image/png",
+      });
+      setPhoto(optimized.file);
+    } catch (cause) {
+      setPhoto(null);
+      setPhotoError(cause instanceof Error ? cause.message : "Use a photo up to 5 MB.");
+    } finally {
+      setPhotoCompressing(false);
+    }
+  };
   let deadline = "";
   try {
     deadline = formatOmanDateTime(
@@ -107,7 +148,7 @@ export function RentalLifecycleForms({
         </ActionForm>
       )}
       {status === "ACTIVE" && canApprove && (
-        <ActionForm id={id} operation="extend" title="Approve contract extension">
+        <ActionForm id={id} anchorId="extend" operation="extend" title="Approve contract extension">
           <p className="text-sm text-[var(--muted)]">
             Previous expected return:{" "}
             {formatOmanDateTime(new Date(expectedReturnAt)).replace("T", " ")} (Oman)
@@ -172,7 +213,13 @@ export function RentalLifecycleForms({
         </ActionForm>
       )}
       {["RESERVED", "ACTIVE"].includes(status) && (
-        <ActionForm id={id} operation="cancel" title="Cancel agreement" blocked={!canCancel}>
+        <ActionForm
+          id={id}
+          anchorId="cancel"
+          operation="cancel"
+          title="Cancel agreement"
+          blocked={!canCancel}
+        >
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             {Object.entries(cancellationDetails).map(([label, value]) => (
               <label key={label} className="min-w-0 text-sm">
@@ -215,9 +262,10 @@ export function RentalLifecycleForms({
       {["RESERVED", "RETURNED"].includes(status) && (
         <ActionForm
           id={id}
+          anchorId="damage"
           operation="damage"
           title="Save scratch / damage evidence"
-          blocked={!photo || !!photoError}
+          blocked={photoCompressing || !photo || !!photoError}
         >
           <input
             name="phase"
@@ -248,14 +296,7 @@ export function RentalLifecycleForms({
                 accept="image/jpeg,image/png,image/webp"
                 capture="environment"
                 onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file && file.size <= 5 * 1024 * 1024) {
-                    setPhoto(file);
-                    setPhotoError("");
-                  } else {
-                    setPhoto(null);
-                    setPhotoError("Use a photo up to 5 MB.");
-                  }
+                  void handleDamagePhoto(event.target.files?.[0]);
                 }}
               />
             </label>
@@ -266,14 +307,7 @@ export function RentalLifecycleForms({
                 className="sr-only"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file && file.size <= 5 * 1024 * 1024) {
-                    setPhoto(file);
-                    setPhotoError("");
-                  } else {
-                    setPhoto(null);
-                    setPhotoError("Use a photo up to 5 MB.");
-                  }
+                  void handleDamagePhoto(event.target.files?.[0]);
                 }}
               />
             </label>
@@ -291,7 +325,29 @@ export function RentalLifecycleForms({
               }
             }}
           />
-          {photo && <p className="break-all text-sm">Selected: {photo.name}</p>}
+          {photoCompressing && (
+            <p className="text-xs text-[var(--muted)]" role="status">
+              Compressing photo…
+            </p>
+          )}
+          {photo && (
+            <div className="flex items-center gap-3">
+              {photoPreview && (
+                /* biome-ignore lint/performance/noImgElement: local object URL preview for selected damage photo */
+                <img
+                  src={photoPreview}
+                  alt="Selected scratch evidence preview"
+                  className="h-16 w-24 rounded-lg border border-[var(--edge)] object-cover"
+                />
+              )}
+              <div className="min-w-0 text-sm">
+                <p className="break-all">Selected: {photo.name}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {(photo.size / 1024).toFixed(1)} KB (compressed)
+                </p>
+              </div>
+            </div>
+          )}
           {photoError && (
             <p role="alert" className="text-sm text-red-300">
               {photoError}

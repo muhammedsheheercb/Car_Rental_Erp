@@ -14,6 +14,7 @@ export function UserActions({
   user,
   assignableRoles,
   assignableBranches,
+  allowedPermissions,
   canEdit,
   canDeactivate,
   canReactivate,
@@ -30,6 +31,7 @@ export function UserActions({
   };
   assignableRoles: UserRole[];
   assignableBranches: BranchOption[];
+  allowedPermissions?: string[];
   canEdit: boolean;
   canDeactivate: boolean;
   canReactivate: boolean;
@@ -230,7 +232,11 @@ export function UserActions({
                 </div>
               </fieldset>
 
-              <UserPermissionsGrid defaultSelected={user.permissions} maxHeightClass="max-h-64" />
+              <UserPermissionsGrid
+                defaultSelected={user.permissions}
+                allowedPermissions={allowedPermissions}
+                maxHeightClass="max-h-64"
+              />
 
               {error && (
                 <p role="alert" className="mt-4 text-sm text-red-300">

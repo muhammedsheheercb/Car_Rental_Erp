@@ -1,11 +1,15 @@
-import { and, count, desc, eq, ilike, inArray, lt, not, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, lt, not, or, sql } from "drizzle-orm";
 import Link from "next/link";
 import { FleetControls } from "@/components/fleet-controls";
+import { VehicleActionModalTrigger } from "@/components/vehicle-action-modal";
 import { VehicleActions } from "@/components/vehicle-actions";
 import { db } from "@/db/client";
 import {
   branches,
+  customers,
+  rentals,
   vehicleBrands,
+  vehicleImages,
   vehicleInsurance,
   vehicleModels,
   vehicleRegistrations,
@@ -13,12 +17,52 @@ import {
   vehicles,
 } from "@/db/schema";
 import {
+  resolveVehicleOperationalStatus,
+  type VehicleOperationalStatus,
+} from "@/features/fleet/vehicle-actions";
+import { fleetAlertSettings } from "@/features/maintenance/settings";
+import {
   availableFleet,
   operationalBlocking,
   vehicleCommitmentStatus,
 } from "@/features/rentals/availability";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { requirePermission } from "@/lib/auth";
+import { can, requirePermission } from "@/lib/auth";
+
+const PAGE_SIZE = 15;
+const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+const ROW_STYLES: Record<VehicleOperationalStatus, string> = {
+  ON_RENT: "bg-red-500/15 text-red-50 hover:bg-red-500/20",
+  AVAILABLE: "bg-white/[0.06] text-white hover:bg-white/[0.11]",
+  RESERVED: "bg-amber-400/10 text-amber-50 hover:bg-amber-400/15",
+  SERVICE_OR_TRANSFER: "bg-zinc-500/10 text-zinc-200 hover:bg-zinc-500/15",
+  INACTIVE: "bg-black/30 text-[var(--muted)] hover:bg-white/5",
+};
+
+const BADGE_STYLES: Record<VehicleOperationalStatus, { label: string; className: string }> = {
+  ON_RENT: {
+    label: "ON RENT",
+    className: "border border-red-400/50 bg-red-500/30 text-red-100",
+  },
+  AVAILABLE: {
+    label: "AVAILABLE",
+    className: "border border-white/80 bg-white text-black font-semibold",
+  },
+  RESERVED: {
+    label: "RESERVED",
+    className: "border border-amber-400/40 bg-amber-400/20 text-amber-100",
+  },
+  SERVICE_OR_TRANSFER: {
+    label: "SERVICE / TRANSFER",
+    className: "border border-zinc-500/40 bg-zinc-500/20 text-zinc-200",
+  },
+  INACTIVE: {
+    label: "INACTIVE",
+    className: "border border-zinc-600/40 bg-zinc-700/30 text-zinc-300",
+  },
+};
+
 export default async function FleetPage({
   searchParams,
   params,
@@ -39,21 +83,39 @@ export default async function FleetPage({
     await Promise.all([searchParams, params]);
   const currentPage = Math.max(1, Number(page) || 1);
   const today = formatOmanDateTime(new Date()).slice(0, 10);
+
   const filterWhere =
     filter === "available"
       ? availableFleet
-      : filter === "unavailable"
-        ? not(availableFleet)
-        : filter === "mulkiya_expired"
-          ? lt(vehicleRegistrations.mulkiyaExpiryDate, today)
-          : filter === "insurance_expired"
-            ? lt(vehicleInsurance.validUntil, today)
-            : undefined;
+      : filter === "on_rent"
+        ? sql`(${vehicleCommitmentStatus}) = 'ACTIVE'`
+        : filter === "reserved"
+          ? sql`(${vehicleCommitmentStatus}) = 'RESERVED'`
+          : filter === "blocked"
+            ? and(
+                eq(vehicles.isActive, true),
+                sql`(${vehicleCommitmentStatus}) is null`,
+                operationalBlocking,
+              )
+            : filter === "inactive"
+              ? or(eq(vehicles.isActive, false), eq(vehicles.status, "INACTIVE"))
+              : filter === "unavailable"
+                ? not(availableFleet)
+                : filter === "mulkiya_expired"
+                  ? lt(vehicleRegistrations.mulkiyaExpiryDate, today)
+                  : filter === "insurance_expired"
+                    ? lt(vehicleInsurance.validUntil, today)
+                    : undefined;
+
+  const branchWhere = branch
+    ? UUID_RE.test(branch)
+      ? eq(vehicles.branchId, branch)
+      : or(ilike(branches.name, `%${branch}%`), ilike(branches.code, `%${branch}%`))
+    : undefined;
+
   const where = and(
     actor.role === "SUPER_ADMIN" ? undefined : inArray(vehicles.branchId, actor.branchIds),
-    branch && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(branch)
-      ? eq(vehicles.branchId, branch)
-      : undefined,
+    branchWhere,
     registration ? ilike(vehicles.registrationNumber, `%${registration}%`) : undefined,
     brand ? ilike(vehicleBrands.name, `%${brand}%`) : undefined,
     model ? ilike(vehicleModels.name, `%${model}%`) : undefined,
@@ -63,60 +125,161 @@ export default async function FleetPage({
           ilike(vehicles.vehicleNumber, `%${q}%`),
           ilike(vehicleBrands.name, `%${q}%`),
           ilike(vehicleModels.name, `%${q}%`),
+          ilike(branches.name, `%${q}%`),
         )
       : undefined,
     filterWhere,
   );
-  const [records, total] = await Promise.all([
-    db
-      .select({
-        id: vehicles.id,
-        number: vehicles.vehicleNumber,
-        registration: vehicles.registrationNumber,
-        status: vehicles.status,
-        isActive: vehicles.isActive,
-        branch: branches.name,
-        brand: vehicleBrands.name,
-        model: vehicleModels.name,
-        odometer: vehicles.currentOdometerKm,
-        mulkiyaExpiry: vehicleRegistrations.mulkiyaExpiryDate,
-        insuranceExpiry: vehicleInsurance.validUntil,
-        nextServiceKm: sql<number>`${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
-        rentalStatus: vehicleCommitmentStatus,
-        operationallyBlocked: operationalBlocking,
-      })
-      .from(vehicles)
-      .innerJoin(vehicleBrands, eq(vehicles.brandId, vehicleBrands.id))
-      .innerJoin(vehicleModels, eq(vehicles.modelId, vehicleModels.id))
-      .innerJoin(branches, eq(vehicles.branchId, branches.id))
-      .leftJoin(vehicleInsurance, eq(vehicleInsurance.vehicleId, vehicles.id))
-      .leftJoin(vehicleRegistrations, eq(vehicleRegistrations.vehicleId, vehicles.id))
-      .leftJoin(vehicleServiceSettings, eq(vehicleServiceSettings.vehicleId, vehicles.id))
-      .where(where)
-      .orderBy(desc(vehicles.createdAt))
-      .limit(15)
-      .offset((currentPage - 1) * 15),
-    db
-      .select({ count: count() })
-      .from(vehicles)
-      .innerJoin(vehicleBrands, eq(vehicles.brandId, vehicleBrands.id))
-      .innerJoin(vehicleModels, eq(vehicles.modelId, vehicleModels.id))
-      .innerJoin(branches, eq(vehicles.branchId, branches.id))
-      .leftJoin(vehicleInsurance, eq(vehicleInsurance.vehicleId, vehicles.id))
-      .leftJoin(vehicleRegistrations, eq(vehicleRegistrations.vehicleId, vehicles.id))
-      .leftJoin(vehicleServiceSettings, eq(vehicleServiceSettings.vehicleId, vehicles.id))
-      .where(where),
-  ]);
+
+  const [policy, records, totalRows, branchOptions, brandOptions, modelOptions] = await Promise.all(
+    [
+      fleetAlertSettings(),
+      db
+        .select({
+          id: vehicles.id,
+          number: vehicles.vehicleNumber,
+          registration: vehicles.registrationNumber,
+          status: vehicles.status,
+          isActive: vehicles.isActive,
+          branchId: vehicles.branchId,
+          branch: branches.name,
+          brand: vehicleBrands.name,
+          model: vehicleModels.name,
+          odometer: vehicles.currentOdometerKm,
+          mulkiyaExpiry: vehicleRegistrations.mulkiyaExpiryDate,
+          insuranceExpiry: vehicleInsurance.validUntil,
+          nextServiceKm: sql<number>`${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
+          rentalStatus: vehicleCommitmentStatus,
+          operationallyBlocked: operationalBlocking,
+          imageId: vehicleImages.id,
+        })
+        .from(vehicles)
+        .innerJoin(vehicleBrands, eq(vehicles.brandId, vehicleBrands.id))
+        .innerJoin(vehicleModels, eq(vehicles.modelId, vehicleModels.id))
+        .innerJoin(branches, eq(vehicles.branchId, branches.id))
+        .leftJoin(vehicleInsurance, eq(vehicleInsurance.vehicleId, vehicles.id))
+        .leftJoin(vehicleRegistrations, eq(vehicleRegistrations.vehicleId, vehicles.id))
+        .leftJoin(vehicleServiceSettings, eq(vehicleServiceSettings.vehicleId, vehicles.id))
+        .leftJoin(
+          vehicleImages,
+          and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isPrimary, true)),
+        )
+        .where(where)
+        .orderBy(desc(vehicles.createdAt))
+        .limit(PAGE_SIZE)
+        .offset((currentPage - 1) * PAGE_SIZE),
+      db
+        .select({ count: count() })
+        .from(vehicles)
+        .innerJoin(vehicleBrands, eq(vehicles.brandId, vehicleBrands.id))
+        .innerJoin(vehicleModels, eq(vehicles.modelId, vehicleModels.id))
+        .innerJoin(branches, eq(vehicles.branchId, branches.id))
+        .leftJoin(vehicleInsurance, eq(vehicleInsurance.vehicleId, vehicles.id))
+        .leftJoin(vehicleRegistrations, eq(vehicleRegistrations.vehicleId, vehicles.id))
+        .leftJoin(vehicleServiceSettings, eq(vehicleServiceSettings.vehicleId, vehicles.id))
+        .where(where),
+      db
+        .select({ id: branches.id, name: branches.name, code: branches.code })
+        .from(branches)
+        .where(
+          and(
+            eq(branches.isActive, true),
+            actor.role === "SUPER_ADMIN" ? undefined : inArray(branches.id, actor.branchIds),
+          ),
+        )
+        .orderBy(asc(branches.name)),
+      db
+        .select({ id: vehicleBrands.id, name: vehicleBrands.name })
+        .from(vehicleBrands)
+        .where(eq(vehicleBrands.isActive, true))
+        .orderBy(asc(vehicleBrands.name)),
+      db
+        .select({
+          id: vehicleModels.id,
+          brandId: vehicleModels.brandId,
+          name: vehicleModels.name,
+        })
+        .from(vehicleModels)
+        .where(eq(vehicleModels.isActive, true))
+        .orderBy(asc(vehicleModels.name)),
+    ],
+  );
+
+  const vehicleIds = records.map((v) => v.id);
+  const commitmentRows = vehicleIds.length
+    ? await db
+        .select({
+          vehicleId: rentals.vehicleId,
+          rentalId: rentals.id,
+          agreementNumber: rentals.agreementNumber,
+          status: rentals.status,
+          customerName: customers.name,
+        })
+        .from(rentals)
+        .innerJoin(customers, eq(customers.id, rentals.customerId))
+        .where(
+          and(
+            inArray(rentals.vehicleId, vehicleIds),
+            inArray(rentals.status, ["ACTIVE", "RESERVED"]),
+          ),
+        )
+        .orderBy(
+          sql`case when ${rentals.status} = 'ACTIVE' then 0 else 1 end`,
+          asc(rentals.startsAt),
+        )
+    : [];
+
+  const activeByVehicle = new Map<
+    string,
+    { rentalId: string; agreementNumber: string; customerName: string }
+  >();
+  for (const row of commitmentRows) {
+    if (!activeByVehicle.has(row.vehicleId)) {
+      activeByVehicle.set(row.vehicleId, {
+        rentalId: row.rentalId,
+        agreementNumber: row.agreementNumber,
+        customerName: row.customerName,
+      });
+    }
+  }
+
+  const total = totalRows[0]?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const pageHref = (nextPage: number) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (branch) p.set("branch", branch);
+    if (brand) p.set("brand", brand);
+    if (model) p.set("model", model);
+    if (registration) p.set("registration", registration);
+    if (filter !== "all") p.set("filter", filter);
+    p.set("page", String(nextPage));
+    return `/${locale}/fleet?${p.toString()}`;
+  };
+
   return (
     <>
       <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--accent)]">FLEET</p>
+          <p className="text-sm text-[var(--accent)]">FLEET OVERVIEW</p>
           <h1 className="mt-2 text-3xl font-semibold">Vehicles</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Click any vehicle to open contextual booking, rental, fine, service, and detail actions.
+          </p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            <Link href={`/${locale}/service` as never}>Service</Link>
-            <Link href={`/${locale}/near-to-service` as never}>Near To Service</Link>
-            <Link href={`/${locale}/expiry` as never}>Expiry</Link>
+            <Link href={`/${locale}/service` as never} className="hover:text-[var(--accent)]">
+              Service
+            </Link>
+            <Link
+              href={`/${locale}/near-to-service` as never}
+              className="hover:text-[var(--accent)]"
+            >
+              Near To Service
+            </Link>
+            <Link href={`/${locale}/expiry` as never} className="hover:text-[var(--accent)]">
+              Expiry
+            </Link>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -126,29 +289,36 @@ export default async function FleetPage({
           >
             Vehicle master
           </Link>
-          <Link
-            href={`/${locale}/fleet/new`}
-            className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-3 text-center text-sm font-semibold text-black sm:px-4"
-          >
-            Create vehicle
-          </Link>
+          {can(actor, "fleet", "create") && (
+            <Link
+              href={`/${locale}/fleet/new`}
+              className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-3 text-center text-sm font-semibold text-black sm:px-4"
+            >
+              Create vehicle
+            </Link>
+          )}
         </div>
       </div>
-      <FleetControls total={total[0]?.count ?? 0} />
+
+      <FleetControls
+        total={total}
+        branches={branchOptions}
+        brands={brandOptions}
+        models={modelOptions}
+      />
+
       <div className="mt-4 max-w-full overflow-x-auto rounded-2xl border border-[var(--edge)] [overscroll-behavior-inline:contain]">
-        <table className="w-full min-w-[76rem] table-fixed text-start text-sm">
+        <table className="w-full min-w-[78rem] table-fixed text-start text-sm">
           <colgroup>
             <col className="w-[4rem]" />
-            <col className="w-[12rem]" />
-            <col className="w-[11rem]" />
-            <col className="w-[13rem]" />
+            <col className="w-[18rem]" />
             <col className="w-[10rem]" />
+            <col className="w-[10rem]" />
+            <col className="w-[7.5rem]" />
             <col className="w-[8rem]" />
             <col className="w-[8rem]" />
-            <col className="w-[9rem]" />
-            <col className="w-[9rem]" />
-            <col className="w-[10rem]" />
-            <col className="w-[15rem]" />
+            <col className="w-[9.5rem]" />
+            <col className="w-[14rem]" />
           </colgroup>
           <thead className="bg-[var(--raised)] text-[var(--muted)]">
             <tr>
@@ -162,19 +332,13 @@ export default async function FleetPage({
                 scope="col"
                 className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
               >
-                Branch / vehicle
+                Vehicle / Branch
               </th>
               <th
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
               >
                 Registration
-              </th>
-              <th
-                scope="col"
-                className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
-              >
-                Brand / model
               </th>
               <th
                 scope="col"
@@ -195,59 +359,76 @@ export default async function FleetPage({
                 Insurance
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
-                Service KM
+                Next Service KM
               </th>
               <th
                 scope="col"
                 className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
               >
-                Actions
+                Manage
               </th>
             </tr>
           </thead>
           <tbody>
             {records.map((vehicle, index) => {
-              const operationalStatus =
-                vehicle.rentalStatus === "ACTIVE"
-                  ? "ON RENT"
-                  : vehicle.rentalStatus === "RESERVED"
-                    ? "RESERVED"
-                    : vehicle.status === "AVAILABLE" &&
-                        vehicle.isActive &&
-                        !vehicle.operationallyBlocked
-                      ? "AVAILABLE"
-                      : vehicle.operationallyBlocked
-                        ? "SERVICE / TRANSFER"
-                        : "INACTIVE";
+              const operationalStatus = resolveVehicleOperationalStatus({
+                rentalStatus: vehicle.rentalStatus,
+                status: vehicle.status,
+                isActive: vehicle.isActive,
+                operationallyBlocked: Boolean(vehicle.operationallyBlocked),
+              });
+              const badge = BADGE_STYLES[operationalStatus];
               const serviceState =
                 vehicle.nextServiceKm <= vehicle.odometer
                   ? "OVERDUE"
-                  : vehicle.nextServiceKm - vehicle.odometer <= 500
+                  : vehicle.nextServiceKm - vehicle.odometer <= policy.nearServiceKm
                     ? "NEAR"
                     : "NORMAL";
+              const commitment = activeByVehicle.get(vehicle.id);
+
               return (
                 <tr
                   key={vehicle.id}
-                  className={`border-t border-[var(--edge)] align-middle transition-colors hover:bg-white/5 focus-within:bg-white/10 ${operationalStatus === "ON RENT" ? "bg-red-400/10" : operationalStatus === "AVAILABLE" ? "bg-emerald-400/5" : "bg-amber-400/5"}`}
+                  className={`border-t border-[var(--edge)] align-middle transition-colors ${ROW_STYLES[operationalStatus]}`}
                 >
                   <td className="px-4 py-3 text-[var(--muted)]">
-                    {(currentPage - 1) * 15 + index + 1}
+                    {(currentPage - 1) * PAGE_SIZE + index + 1}
                   </td>
-                  <td className="px-4 py-3 font-medium align-middle">
-                    <p>{vehicle.branch}</p>
-                    <p className="font-mono text-xs text-[var(--muted)]">{vehicle.number}</p>
+                  <td className="px-4 py-3 align-middle">
+                    <VehicleActionModalTrigger
+                      locale={locale}
+                      vehicle={{
+                        id: vehicle.id,
+                        number: vehicle.number,
+                        registration: vehicle.registration,
+                        brand: vehicle.brand,
+                        model: vehicle.model,
+                        branch: vehicle.branch,
+                        odometer: vehicle.odometer,
+                        operationalStatus,
+                        imageId: vehicle.imageId,
+                        activeRentalId: commitment?.rentalId ?? null,
+                        activeAgreementNumber: commitment?.agreementNumber ?? null,
+                        activeCustomerName: commitment?.customerName ?? null,
+                      }}
+                      permissions={{
+                        canCreateRental: can(actor, "rentals", "create", vehicle.branchId),
+                        canUpdateRental: can(actor, "rentals", "update", vehicle.branchId),
+                        canApproveRental: can(actor, "rentals", "approve", vehicle.branchId),
+                        canReadFinance: can(actor, "finance", "read", vehicle.branchId),
+                        canCreateFinance: can(actor, "finance", "create", vehicle.branchId),
+                        canManageService: can(actor, "fleet", "read", vehicle.branchId),
+                      }}
+                    />
                   </td>
-                  <td className="break-words px-4 py-3 align-middle">{vehicle.registration}</td>
-                  <td className="px-4 py-3 font-medium align-middle">
-                    <span className="block break-words">
-                      {vehicle.brand} {vehicle.model}
-                    </span>
+                  <td className="break-words px-4 py-3 text-center font-mono text-xs align-middle">
+                    {vehicle.registration}
                   </td>
                   <td className="px-4 py-3 text-center align-middle">
                     <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${operationalStatus === "ON RENT" ? "bg-red-400/20 text-red-100" : operationalStatus === "AVAILABLE" ? "bg-emerald-400/15 text-emerald-200" : "bg-amber-400/15 text-amber-100"}`}
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs ${badge.className}`}
                     >
-                      {operationalStatus}
+                      {badge.label}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-end font-mono">
@@ -256,7 +437,13 @@ export default async function FleetPage({
                   <td className="px-4 py-3 text-xs">{vehicle.mulkiyaExpiry ?? "—"}</td>
                   <td className="px-4 py-3 text-xs">{vehicle.insuranceExpiry ?? "—"}</td>
                   <td
-                    className={`px-4 py-3 text-xs ${serviceState === "OVERDUE" ? "text-red-200" : serviceState === "NEAR" ? "text-amber-100" : "text-[var(--muted)]"}`}
+                    className={`px-4 py-3 text-xs ${
+                      serviceState === "OVERDUE"
+                        ? "font-semibold text-red-200"
+                        : serviceState === "NEAR"
+                          ? "font-medium text-amber-100"
+                          : "text-[var(--muted)]"
+                    }`}
                   >
                     {vehicle.nextServiceKm
                       ? `${vehicle.nextServiceKm.toLocaleString()} · ${serviceState}`
@@ -277,21 +464,27 @@ export default async function FleetPage({
         </table>
         {!records.length && <p className="p-8 text-[var(--muted)]">No vehicles found.</p>}
       </div>
-      {(total[0]?.count ?? 0) > 15 && (
-        <nav aria-label="Vehicle pages" className="mt-4 flex items-center justify-end gap-2">
+
+      {total > PAGE_SIZE && (
+        <nav
+          aria-label="Vehicle pages"
+          className="mt-4 flex items-center justify-end gap-3 text-sm"
+        >
           {currentPage > 1 && (
             <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(filter !== "all" ? { filter } : {}), page: String(currentPage - 1) })}`}
-              className="min-h-10 rounded-lg border border-[var(--edge)] px-3 py-2"
+              href={pageHref(currentPage - 1) as never}
+              className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
               Previous
             </Link>
           )}
-          <span className="px-2 text-sm text-[var(--muted)]">Page {currentPage}</span>
-          {currentPage * 15 < (total[0]?.count ?? 0) && (
+          <span className="px-2 text-[var(--muted)]">
+            Page {currentPage} of {totalPages}
+          </span>
+          {currentPage < totalPages && (
             <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(filter !== "all" ? { filter } : {}), page: String(currentPage + 1) })}`}
-              className="min-h-10 rounded-lg border border-[var(--edge)] px-3 py-2"
+              href={pageHref(currentPage + 1) as never}
+              className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
               Next
             </Link>

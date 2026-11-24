@@ -4,6 +4,7 @@ type UserManagementActor = {
   id: string;
   role: UserRole;
   branchIds: string[];
+  permissions?: ReadonlySet<string> | readonly string[];
 };
 
 type UserManagementTarget = {
@@ -32,7 +33,7 @@ export function canManageUserTarget(
 
 export function validateUserAssignment(
   actor: UserManagementActor,
-  input: { role: UserRole; branchIds: string[] },
+  input: { role: UserRole; branchIds: string[]; permissions?: readonly string[] },
 ): { ok: true } | { ok: false; message: string } {
   const allowed = allowedRolesForActor(actor.role);
   if (!allowed.includes(input.role)) {
@@ -52,6 +53,16 @@ export function validateUserAssignment(
         ok: false,
         message: "You can only assign users to branches within your access scope.",
       };
+    }
+    if (input.permissions?.length) {
+      const actorPermissions =
+        actor.permissions instanceof Set ? actor.permissions : new Set(actor.permissions ?? []);
+      if (input.permissions.some((permission) => !actorPermissions.has(permission))) {
+        return {
+          ok: false,
+          message: "You can only grant permissions that are assigned to your own account.",
+        };
+      }
     }
   }
   return { ok: true };

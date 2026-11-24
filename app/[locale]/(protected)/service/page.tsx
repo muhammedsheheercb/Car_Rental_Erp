@@ -21,12 +21,21 @@ export default async function ServicePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; branch?: string; page?: string }>;
 }) {
   const actor = await requirePermission("fleet", "read");
   const { locale } = await params;
   const query = await searchParams;
   const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
+  const statusFilter = ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"].includes(
+    query.status ?? "",
+  )
+    ? (query.status as string)
+    : "";
+  const branchFilter =
+    query.branch && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(query.branch)
+      ? query.branch
+      : "";
   const [fleet, staff, bookings, records] = await Promise.all([
     db
       .select({ v: vehicles, brand: vehicleBrands.name, branch: branches.name })
@@ -74,12 +83,29 @@ export default async function ServicePage({
       )
       .orderBy(desc(vehicleServices.createdAt)),
   ]);
-  const filtered = records.filter(({ s, v }) =>
-    `${v.vehicleNumber} ${v.registrationNumber} ${s.type} ${s.status} ${String(s.snapshot.customer ?? "")}`
+  const branchOptions = [
+    ...new Map(
+      fleet.map(({ v, branch }) => [v.branchId, { id: v.branchId, name: branch }]),
+    ).values(),
+  ];
+  const filtered = records.filter(({ s, v }) => {
+    if (statusFilter && s.status !== statusFilter) return false;
+    if (branchFilter && (s.branchId ?? v.branchId) !== branchFilter) return false;
+    return `${v.vehicleNumber} ${v.registrationNumber} ${s.type} ${s.status} ${String(s.snapshot.customer ?? "")}`
       .toLowerCase()
-      .includes((query.q ?? "").toLowerCase()),
-  );
-  const shown = filtered.slice((page - 1) * 20, page * 20);
+      .includes((query.q ?? "").toLowerCase());
+  });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 15));
+  const safePage = Math.min(page, totalPages);
+  const shown = filtered.slice((safePage - 1) * 15, safePage * 15);
+  const servicePageHref = (nextPage: number) => {
+    const p = new URLSearchParams();
+    if (query.q) p.set("q", query.q);
+    if (statusFilter) p.set("status", statusFilter);
+    if (branchFilter) p.set("branch", branchFilter);
+    p.set("page", String(nextPage));
+    return `/${locale}/service?${p.toString()}`;
+  };
   const history = shown.length
     ? await db
         .select()
@@ -131,17 +157,55 @@ export default async function ServicePage({
             }))}
         />
       )}
-      <form className="flex gap-3">
+      <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <input
           name="q"
           defaultValue={query.q}
           placeholder="Vehicle / Registration / Customer / Service"
           aria-label="Search service"
-          className="input"
+          className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         />
-        <button type="submit" className="btn">
-          Search
-        </button>
+        <select
+          name="status"
+          defaultValue={statusFilter}
+          aria-label="Filter by status"
+          className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
+        >
+          <option value="">All statuses</option>
+          <option value="SCHEDULED">Scheduled</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <select
+          name="branch"
+          defaultValue={branchFilter}
+          aria-label="Filter by branch"
+          className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
+        >
+          <option value="">All branches</option>
+          {branchOptions.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
+          >
+            Search
+          </button>
+          {(query.q || statusFilter || branchFilter) && (
+            <Link
+              href={`/${locale}/service` as never}
+              className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
+            >
+              Clear
+            </Link>
+          )}
+        </div>
       </form>
       <section className="grid gap-4">
         {shown.map(({ s, v, branch, staff }) => (
@@ -192,29 +256,29 @@ export default async function ServicePage({
         ))}
         {!shown.length && <p>No service records found.</p>}
       </section>
-      <div className="flex gap-4">
-        {page > 1 && (
-          <Link
-            href={
-              `/${locale}/service?page=${page - 1}&q=${encodeURIComponent(query.q ?? "")}` as never
-            }
-          >
-            Previous
-          </Link>
-        )}
-        <span>
-          Page {page} · {filtered.length} records
-        </span>
-        {page * 20 < filtered.length && (
-          <Link
-            href={
-              `/${locale}/service?page=${page + 1}&q=${encodeURIComponent(query.q ?? "")}` as never
-            }
-          >
-            Next
-          </Link>
-        )}
-      </div>
+      {filtered.length > 15 && (
+        <nav aria-label="Service pages" className="flex items-center justify-end gap-3 text-sm">
+          {safePage > 1 && (
+            <Link
+              href={servicePageHref(safePage - 1) as never}
+              className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+            >
+              Previous
+            </Link>
+          )}
+          <span className="text-[var(--muted)]">
+            Page {safePage} of {totalPages} · {filtered.length} records
+          </span>
+          {safePage < totalPages && (
+            <Link
+              href={servicePageHref(safePage + 1) as never}
+              className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+            >
+              Next
+            </Link>
+          )}
+        </nav>
+      )}
     </div>
   );
 }

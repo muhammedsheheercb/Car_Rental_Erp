@@ -67,8 +67,8 @@ export default async function InvoicesPage({
   const rows = await base()
     .where(where)
     .orderBy(desc(invoices.createdAt))
-    .limit(20)
-    .offset((page - 1) * 20);
+    .limit(15)
+    .offset((page - 1) * 15);
   const [count] = await db
     .select({ n: sql<number>`count(*)::integer` })
     .from(invoices)
@@ -173,12 +173,26 @@ export default async function InvoicesPage({
         </table>
       </div>
       {!rows.length && <p>No invoices found.</p>}
-      <div className="flex gap-4">
-        {page > 1 && <Link href={href(page - 1) as never}>Previous</Link>}
-        <span>
-          Page {page} · {count.n} invoices
+      <div className="flex items-center justify-end gap-3 text-sm">
+        {page > 1 && (
+          <Link
+            href={href(page - 1) as never}
+            className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+          >
+            Previous
+          </Link>
+        )}
+        <span className="text-[var(--muted)]">
+          Page {page} of {Math.max(1, Math.ceil(count.n / 15))} · {count.n} invoices
         </span>
-        {page * 20 < count.n && <Link href={href(page + 1) as never}>Next</Link>}
+        {page * 15 < count.n && (
+          <Link
+            href={href(page + 1) as never}
+            className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
+          >
+            Next
+          </Link>
+        )}
       </div>
     </div>
   );
