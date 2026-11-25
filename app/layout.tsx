@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "MUSCAT CARS", statusBarStyle: "black-translucent" },
   icons: { icon: "/icon.svg", apple: "/icon-maskable.svg" },
 };
-export const viewport: Viewport = { themeColor: "#0b0b0a", colorScheme: "dark" };
+export const viewport: Viewport = { themeColor: "#0d0c0b", colorScheme: "light dark" };
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   let locale = "en";
   try {

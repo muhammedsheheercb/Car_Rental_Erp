@@ -15,25 +15,26 @@ export default function LoginPage() {
     if (state.error) show(state.error, "error", "login-error");
   }, [show, state.error]);
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#080908] p-5">
+    <main
+      data-dark-surface
+      className="relative grid min-h-screen place-items-center overflow-hidden bg-[#0D0C0B] p-5 text-[#F6F3EC]"
+    >
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-cover bg-center opacity-60"
+        className="absolute inset-0 bg-cover bg-center opacity-55"
         style={{ backgroundImage: "url('/images/login-oman-night.png')" }}
       />
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/45"
+        className="absolute inset-0 bg-gradient-to-r from-[#0D0C0B] via-[#0D0C0B]/88 to-[#0D0C0B]/50"
       />
       <form
         action={action}
-        className="relative w-full max-w-sm rounded-3xl border border-white/15 bg-[#11120f]/95 p-7 shadow-2xl backdrop-blur"
+        className="relative w-full max-w-sm rounded-3xl border border-[#CFA968]/25 bg-[#12110F]/95 p-7 shadow-2xl backdrop-blur"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold tracking-[.2em] text-[var(--accent)]">
-            {t("appName")}
-          </p>
-          <LanguageSwitcher className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-[var(--muted)] hover:text-white" />
+          <p className="text-xs font-bold tracking-[.22em] text-[#CFA968]">{t("appName")}</p>
+          <LanguageSwitcher className="rounded-full border border-[#CFA968]/35 px-3 py-1 text-xs font-medium text-[#CFA968] hover:bg-[#CFA968]/15" />
         </div>
         <h1 className="mt-4 text-3xl font-semibold">{tAuth("welcomeBack")}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">{tAuth("signInSubtitle")}</p>

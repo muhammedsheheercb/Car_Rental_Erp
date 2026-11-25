@@ -57,6 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {children}
         <Toast.Root
           data-app-ui
+          data-dark-surface
           open={Boolean(notice)}
           duration={notice?.tone === "loading" ? Infinity : 4500}
           onOpenChange={(open) => {
@@ -65,7 +66,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               currentKey.current = "";
             }
           }}
-          className={`fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[70] flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl sm:inset-x-auto sm:end-4 sm:max-w-md md:bottom-4 ${notice?.tone === "error" ? "border-red-400/40 bg-red-950 text-red-100" : notice?.tone === "warning" ? "border-amber-300/40 bg-amber-950 text-amber-100" : "border-[var(--accent)]/40 bg-[var(--raised)]"}`}
+          className={`fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[70] flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl sm:inset-x-auto sm:end-4 sm:max-w-md md:bottom-4 ${notice?.tone === "error" ? "border-red-400/40 bg-red-950 text-red-100" : notice?.tone === "warning" ? "border-amber-300/40 bg-amber-950 text-amber-100" : "border-[#CFA968]/40 bg-[#161513] text-[#FAF8F5]"}`}
         >
           <span aria-hidden="true" className="grid h-5 w-5 place-items-center font-bold">
             {icon}
@@ -73,7 +74,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <Toast.Title className="text-sm font-medium">{notice?.text}</Toast.Title>
           <Toast.Close
             aria-label={t("common.dismissNotification")}
-            className="ms-auto min-h-8 px-1 text-[var(--muted)]"
+            className="ms-auto min-h-8 px-1 text-[#D7D1C7] hover:text-white"
           >
             ×
           </Toast.Close>

@@ -17,23 +17,23 @@ type Details = Awaited<ReturnType<typeof getVehicleDetailsAction>>;
 const STATUS_BADGE: Record<VehicleOperationalStatus, { label: string; className: string }> = {
   ON_RENT: {
     label: "ON RENT",
-    className: "border border-red-400/50 bg-red-500/25 text-red-100",
+    className: "border border-red-200 bg-red-50 text-red-700 font-medium",
   },
   AVAILABLE: {
     label: "AVAILABLE",
-    className: "border border-white/80 bg-white text-black font-semibold",
+    className: "border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold",
   },
   RESERVED: {
     label: "RESERVED",
-    className: "border border-amber-400/40 bg-amber-400/20 text-amber-100",
+    className: "border border-amber-200 bg-amber-50 text-amber-800 font-medium",
   },
   SERVICE_OR_TRANSFER: {
     label: "SERVICE / TRANSFER",
-    className: "border border-zinc-500/40 bg-zinc-500/20 text-zinc-200",
+    className: "border border-stone-300 bg-stone-100 text-stone-700 font-medium",
   },
   INACTIVE: {
     label: "INACTIVE",
-    className: "border border-zinc-600/40 bg-zinc-700/30 text-zinc-300",
+    className: "border border-stone-200 bg-stone-100 text-stone-500",
   },
 };
 

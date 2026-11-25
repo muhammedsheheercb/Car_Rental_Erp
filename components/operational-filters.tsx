@@ -12,7 +12,7 @@ const fields = [
   ["model", "model"],
 ] as const;
 
-export function OperationalFilters() {
+export function OperationalFilters({ direction = "down" }: { direction?: "down" | "up" }) {
   const tNav = useTranslations("nav");
   const tFilters = useTranslations("filters");
   const tCommon = useTranslations("common");
@@ -47,10 +47,14 @@ export function OperationalFilters() {
       onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
       className="relative"
     >
-      <summary className="min-h-11 cursor-pointer list-none content-center px-2 text-sm text-[var(--muted)]">
+      <summary className="min-h-11 cursor-pointer list-none content-center rounded-lg px-2 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--raised)] hover:text-[var(--ink)] sm:text-sm">
         {tNav("filters")}
       </summary>
-      <div className="absolute end-0 top-12 z-40 w-[min(22rem,calc(100vw-1.5rem))] border border-[var(--edge)] bg-[var(--raised)] p-3 shadow-2xl">
+      <div
+        className={`absolute z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-[var(--edge)] bg-[var(--raised)] p-3.5 text-[var(--ink)] shadow-2xl ${
+          direction === "up" ? "bottom-12 start-0" : "end-0 top-12"
+        }`}
+      >
         <p className="mb-2 text-xs text-[var(--muted)]">{tFilters("operationalHint")}</p>
         <div className="grid gap-2">
           {fields.map(([name, labelKey]) => (
@@ -77,7 +81,7 @@ export function OperationalFilters() {
               setValues(next);
               apply(next);
             }}
-            className="min-h-10 px-2 text-sm text-[var(--accent)]"
+            className="min-h-10 px-2 text-sm text-[var(--accent-ink)]"
           >
             {tCommon("clearFilters")}
           </button>

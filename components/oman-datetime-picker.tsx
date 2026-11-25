@@ -167,7 +167,7 @@ export function OmanDateTimePicker({
           aria-label={tCommon("openCalendarFor", { label })}
           aria-expanded={open}
           onClick={() => setOpen((prev) => !prev)}
-          className="absolute inset-y-0 end-0 grid w-11 place-items-center text-white hover:text-[var(--accent)] focus-visible:text-[var(--accent)]"
+          className="absolute inset-y-0 end-0 grid w-11 place-items-center text-[var(--ink)] hover:text-[var(--accent-ink)] focus-visible:text-[var(--accent-ink)]"
         >
           <svg
             aria-hidden="true"
@@ -234,8 +234,8 @@ export function OmanDateTimePicker({
                     isSelected
                       ? "bg-[var(--accent)] font-semibold text-black"
                       : isToday
-                        ? "border border-[var(--accent)] text-[var(--accent)] hover:bg-white/10"
-                        : "hover:bg-white/10"
+                        ? "border border-[var(--accent)] text-[var(--accent-ink)] hover:bg-[#EDE8DE]"
+                        : "hover:bg-[#EDE8DE]"
                   } disabled:cursor-not-allowed disabled:opacity-30`}
                 >
                   {day}
@@ -277,7 +277,7 @@ export function OmanDateTimePicker({
             <button
               type="button"
               onClick={pickNowOman}
-              className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-xs text-[var(--muted)] hover:text-white"
+              className="min-h-9 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--ink)] hover:border-[#9A7B4F]"
             >
               {tCommon("nowOman")}
             </button>

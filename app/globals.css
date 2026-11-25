@@ -1,47 +1,129 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #e9e7e2;
-  --muted: #96928a;
-  --surface: #121211;
-  --raised: #1a1a18;
-  --edge: #302f2b;
-  --accent: #d7fb63;
+  color-scheme: light;
+  --canvas: #f4f1ea;
+  --ink: #161513;
+  --muted: #6e685f;
+  --surface: #ffffff;
+  --raised: #f8f5ef;
+  --edge: #e5e0d6;
+  --accent: #cfa968;
+  --accent-ink: #8a6830;
 }
+
+[data-dark-surface] {
+  color-scheme: dark;
+  --canvas: #0d0c0b;
+  --ink: #f6f3ec;
+  --muted: #9c968b;
+  --surface: #141210;
+  --raised: #1c1916;
+  --edge: rgba(255, 255, 255, 0.12);
+  --accent: #cfa968;
+  --accent-ink: #e3c27a;
+}
+
 * {
   box-sizing: border-box;
 }
+
 html {
-  background: #0b0b0a;
+  background: var(--canvas);
   color: var(--ink);
   min-width: 320px;
 }
+
 body {
   min-height: 100vh;
-  background: radial-gradient(circle at 85% -10%, #29311a 0, transparent 30rem), #0b0b0a;
-  font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Noto Sans Arabic", Tahoma,
+    Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
   margin: 0;
 }
+
 img,
 svg,
 video {
   max-width: 100%;
 }
+
 input,
 select,
 textarea,
 button {
   max-width: 100%;
 }
-/* Native date controls keep their platform picker and keyboard behavior.  Reserve a
-   touch-sized logical-end target so the indicator remains visible in both LTR and RTL. */
+
+/* Reusable luxury form & button classes used across finance, transfers, invoices, and service */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.15rem;
+  border-radius: 9999px;
+  border: 1px solid #161513;
+  background: #161513;
+  color: #faf8f5;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: #292623;
+  box-shadow: 0 6px 18px rgba(22, 21, 19, 0.14);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.input {
+  min-height: 2.75rem;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--ink);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.875rem;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.input:focus {
+  border-color: var(--accent-ink);
+  background: var(--surface);
+}
+
+/* Native date/time inputs — light contrast on Warm Ivory gallery, dark inside Obsidian rail */
 input[type="date"],
 input[type="datetime-local"],
 input[type="time"] {
-  color-scheme: dark;
+  color-scheme: light;
   min-height: 2.75rem;
   padding-inline-end: 3.25rem;
 }
+
+[data-dark-surface] input[type="date"],
+[data-dark-surface] input[type="datetime-local"],
+[data-dark-surface] input[type="time"] {
+  color-scheme: dark;
+}
+
 input.calendar-input[type="date"]::-webkit-calendar-picker-indicator,
 input.calendar-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   /* biome-ignore lint/complexity/noImportantStyles: suppress only the duplicate native icon */
@@ -49,70 +131,172 @@ input.calendar-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   /* biome-ignore lint/complexity/noImportantStyles: suppress only the duplicate native icon */
   pointer-events: none !important;
 }
+
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.4rem;
+  height: 1.4rem;
   margin-inline-start: 0.5rem;
   cursor: pointer;
+  opacity: 0.75;
+}
+
+[data-dark-surface] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-dark-surface] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+[data-dark-surface] input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 1;
-  /* Chromium renders this internal control with an inline black SVG; important is
-     required to override the UA style and invert it to a visible white glyph. */
-  /* biome-ignore lint/complexity/noImportantStyles: native Chromium UA icon needs this override */
+  /* biome-ignore lint/complexity/noImportantStyles: native Chromium UA icon needs inversion on dark surfaces */
   filter: invert(1) brightness(2) !important;
-  /* biome-ignore lint/complexity/noImportantStyles: native Chromium UA icon needs this override */
-  background-color: transparent !important;
 }
-input[type="date"]:hover::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator,
-input[type="time"]:hover::-webkit-calendar-picker-indicator,
-input[type="date"]:focus-visible::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]:focus-visible::-webkit-calendar-picker-indicator,
-input[type="time"]:focus-visible::-webkit-calendar-picker-indicator {
-  filter: invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(105%) contrast(105%);
-}
-input[type="date"][aria-invalid="true"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"][aria-invalid="true"]::-webkit-calendar-picker-indicator,
-input[type="time"][aria-invalid="true"]::-webkit-calendar-picker-indicator {
-  filter: invert(52%) sepia(86%) saturate(781%) hue-rotate(322deg) brightness(100%) contrast(94%);
-}
-input[type="date"]:disabled::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]:disabled::-webkit-calendar-picker-indicator,
-input[type="time"]:disabled::-webkit-calendar-picker-indicator,
-input[type="date"][readonly]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"][readonly]::-webkit-calendar-picker-indicator,
-input[type="time"][readonly]::-webkit-calendar-picker-indicator {
-  cursor: default;
-  opacity: 0.45;
-  filter: grayscale(1) brightness(1.4);
-}
+
 input[type="date"]:-webkit-autofill,
 input[type="datetime-local"]:-webkit-autofill,
 input[type="time"]:-webkit-autofill {
   -webkit-text-fill-color: var(--ink);
   box-shadow: 0 0 0 1000px var(--surface) inset;
 }
-[aria-invalid="true"] {
-  border-color: #f87171;
+
+/* Warm Ivory contrast adaptation for existing subpages so every view maintains AA+ legibility */
+[data-ivory-canvas] select option {
+  background-color: #ffffff;
+  color: #161513;
 }
+
+[data-dark-surface] select option {
+  background-color: #141210;
+  color: #f6f3ec;
+}
+
+[data-ivory-canvas] .bg-black\/10,
+[data-ivory-canvas] .bg-black\/15,
+[data-ivory-canvas] .bg-black\/20,
+[data-ivory-canvas] .bg-black\/25,
+[data-ivory-canvas] .bg-black\/30,
+[data-ivory-canvas] .bg-black\/40 {
+  background-color: #f4f1ea;
+}
+
+[data-ivory-canvas] .bg-white\/10,
+[data-ivory-canvas] .bg-white\/5 {
+  background-color: #ede8de;
+}
+
+[data-ivory-canvas] .hover\:bg-white\/5:hover {
+  background-color: #f4f1ea;
+}
+
+[data-ivory-canvas] .hover\:bg-white\/10:hover {
+  background-color: #ede8de;
+}
+
+[data-ivory-canvas] .hover\:border-white\/30:hover {
+  border-color: #9a7b4f;
+}
+
+[data-ivory-canvas] .text-white:not([data-keep-light-text]),
+[data-ivory-canvas] .hover\:text-white:hover:not([data-keep-light-text]),
+[data-ivory-canvas] .focus-visible\:text-white:focus-visible:not([data-keep-light-text]),
+[data-ivory-canvas] .active\:text-white:active:not([data-keep-light-text]) {
+  color: #161513;
+}
+
+[data-ivory-canvas] .text-\[var\(--accent\)\]:not([data-keep-gold]) {
+  color: var(--accent-ink);
+}
+
+[data-ivory-canvas] .text-red-100,
+[data-ivory-canvas] .text-red-200,
+[data-ivory-canvas] .text-red-300,
+[data-ivory-canvas] .text-red-400 {
+  color: #b91c1c;
+}
+
+[data-ivory-canvas] .bg-red-950\/40,
+[data-ivory-canvas] .bg-red-500\/10,
+[data-ivory-canvas] .bg-red-500\/15,
+[data-ivory-canvas] .bg-red-500\/20,
+[data-ivory-canvas] .bg-red-400\/15,
+[data-ivory-canvas] .bg-red-400\/20 {
+  background-color: #fef2f2;
+}
+
+[data-ivory-canvas] .text-emerald-200,
+[data-ivory-canvas] .text-emerald-300 {
+  color: #047857;
+}
+
+[data-ivory-canvas] .bg-emerald-400\/15,
+[data-ivory-canvas] .bg-emerald-500\/15 {
+  background-color: #ecfdf5;
+}
+
+[data-ivory-canvas] .text-amber-100,
+[data-ivory-canvas] .text-amber-200,
+[data-ivory-canvas] .text-amber-300 {
+  color: #b45309;
+}
+
+[data-ivory-canvas] .bg-amber-400\/10,
+[data-ivory-canvas] .bg-amber-400\/20,
+[data-ivory-canvas] .bg-amber-500\/15 {
+  background-color: #fffbeb;
+}
+
+[data-ivory-canvas] .text-sky-200,
+[data-ivory-canvas] .text-sky-300 {
+  color: #0369a1;
+}
+
+[data-ivory-canvas] .bg-sky-500\/15 {
+  background-color: #f0f9ff;
+}
+
+[data-ivory-canvas] .text-violet-200 {
+  color: #6d28d9;
+}
+
+[data-ivory-canvas] .bg-violet-500\/15 {
+  background-color: #f5f3ff;
+}
+
+/* Soft luxury card elevation on Warm Ivory showroom canvas */
+[data-ivory-canvas] section.bg-\[var\(--surface\)\],
+[data-ivory-canvas] article.bg-\[var\(--surface\)\] {
+  box-shadow: 0 6px 24px rgba(22, 21, 19, 0.04);
+}
+
+[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
 button,
 a,
 input,
 select {
   outline-offset: 3px;
 }
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
+  outline: 2px solid var(--accent-ink);
+}
+
+[data-dark-surface] button:focus-visible,
+[data-dark-surface] a:focus-visible,
+[data-dark-surface] input:focus-visible,
+[data-dark-surface] select:focus-visible {
   outline: 2px solid var(--accent);
 }
-@media (max-width: 767px) {
+
+@media (max-width: 1023px) {
   body {
-    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 }
+
 @media print {
   body {
     background: white;
@@ -120,7 +304,9 @@ select:focus-visible {
     padding: 0;
   }
   header,
-  nav {
+  nav,
+  aside,
+  [data-concierge-rail] {
     /* biome-ignore lint/complexity/noImportantStyles: override navigation utility styles in printed records. */
     display: none !important;
   }
@@ -355,10 +541,12 @@ select:focus-visible {
     display: none;
   }
   [data-app-shell] {
+    display: block;
     width: 100%;
     max-width: none;
     padding: 0;
     min-height: 0;
+    background: #fff;
   }
   .document-controls {
     display: none;

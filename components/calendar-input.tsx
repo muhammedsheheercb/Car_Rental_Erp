@@ -57,14 +57,14 @@ export function CalendarInput({
         min={min}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`calendar-input min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3 pe-12 ${className}`}
+        className={`calendar-input min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 pe-12 text-[var(--ink)] ${className}`}
       />
       <button
         type="button"
         aria-label={tCommon("openCalendarFor", { label: tCommon("date") })}
         disabled={disabled || readOnly}
         onClick={openPicker}
-        className="absolute inset-y-0 end-0 grid w-11 place-items-center text-white opacity-100 hover:text-white focus-visible:text-white active:text-white disabled:opacity-45"
+        className="absolute inset-y-0 end-0 grid w-11 place-items-center text-[var(--ink)] opacity-100 hover:text-[var(--accent-ink)] focus-visible:text-[var(--accent-ink)] active:text-[var(--accent-ink)] disabled:opacity-45"
         tabIndex={disabled || readOnly ? -1 : 0}
       >
         <svg

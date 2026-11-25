@@ -156,12 +156,24 @@ export default async function FinancePage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{moduleTitle}</h1>
-      <nav className="flex flex-wrap gap-4 print:hidden">
-        {Object.entries(financeModules).map(([key, c]) => (
-          <Link key={key} href={`/${locale}/finance/${key}`}>
-            {translateSafe(tFinance, `modules.${key}`, c.title)}
-          </Link>
-        ))}
+      <nav className="flex flex-wrap gap-2 print:hidden">
+        {Object.entries(financeModules).map(([key, c]) => {
+          const active = key === module;
+          return (
+            <Link
+              key={key}
+              href={`/${locale}/finance/${key}`}
+              aria-current={active ? "page" : undefined}
+              className={`inline-flex min-h-10 items-center rounded-full border px-4 text-xs font-semibold transition-colors sm:text-sm ${
+                active
+                  ? "border-[#161513] bg-[#161513] text-[#FAF8F5]"
+                  : "border-[var(--edge)] bg-[var(--surface)] text-[#4A4741] hover:border-[#9A7B4F] hover:text-[#161513]"
+              }`}
+            >
+              {translateSafe(tFinance, `modules.${key}`, c.title)}
+            </Link>
+          );
+        })}
       </nav>
       {fine && (
         <p>

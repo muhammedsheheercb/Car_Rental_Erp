@@ -14,7 +14,7 @@ export default function ChangePasswordPage() {
         action={action}
         className="w-full max-w-sm rounded-3xl border border-[var(--edge)] bg-[var(--surface)] p-7"
       >
-        <p className="text-xs font-semibold tracking-[.2em] text-[var(--accent)]">
+        <p className="text-xs font-semibold tracking-[.2em] text-[var(--accent-ink)]">
           {tAuth("securityRequired")}
         </p>
         <h1 className="mt-4 text-3xl font-semibold">{tAuth("setPasswordTitle")}</h1>
@@ -39,7 +39,7 @@ export default function ChangePasswordPage() {
           />
         </label>
         {state.error && (
-          <p role="alert" className="mt-4 text-sm text-red-300">
+          <p role="alert" className="mt-4 text-sm text-red-700">
             {translateValidation(t, state.error)}
           </p>
         )}
