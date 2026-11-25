@@ -1,7 +1,14 @@
-const CACHE_NAME = "muscat-cars-static-v2";
+const CACHE_NAME = "muscat-cars-static-v3";
+const OFFLINE_URL = "/offline.html";
 
-self.addEventListener("install", () => {
-  // Updates wait for an explicit user decision; a new installation activates normally.
+self.addEventListener("install", (event) => {
+  // Precache the static offline fallback; updates still wait for explicit user approval.
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.add(OFFLINE_URL))
+      .catch(() => undefined),
+  );
 });
 self.addEventListener("activate", (event) =>
   event.waitUntil(
@@ -23,21 +30,34 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
-  // Never cache local dev traffic, navigations, RSC payloads, API responses or session requests.
   if (
     url.hostname === "localhost" ||
     url.hostname === "127.0.0.1" ||
     request.method !== "GET" ||
-    request.headers.get("cookie") ||
     url.origin !== self.location.origin ||
-    request.mode === "navigate" ||
     url.pathname.startsWith("/api/") ||
     url.pathname.includes("_rsc")
   )
     return;
+
+  // Never cache authenticated navigations; serve the static offline fallback only if network fails.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const offline = await caches.match(OFFLINE_URL);
+        if (offline) return offline;
+        return new Response("Offline", { status: 503, statusText: "Offline" });
+      }),
+    );
+    return;
+  }
+
+  if (request.headers.get("cookie")) return;
+
   const staticAsset =
     ["style", "script", "image", "font"].includes(request.destination) ||
-    url.pathname.startsWith("/_next/static/");
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname === OFFLINE_URL;
   if (!staticAsset) return;
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {

@@ -5,10 +5,11 @@ import { BranchCodePreview } from "@/components/branch-code-preview";
 import { TrimmedForm } from "@/components/trimmed-form";
 import { db } from "@/db/client";
 import { branches } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 import { createBranchAction } from "../actions";
-export default async function BranchesPage() {
-  const actor = await requirePermission("branches", "read");
+export default async function BranchesPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "branches", "read");
   const [tAdmin, tCommon, tStatus, records] = await Promise.all([
     getTranslations("admin"),
     getTranslations("common"),

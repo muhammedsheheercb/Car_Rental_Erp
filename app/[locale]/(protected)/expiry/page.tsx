@@ -6,7 +6,7 @@ import { branches, vehicleInsurance, vehicleRegistrations, vehicles } from "@/db
 import { expiryStatus } from "@/features/maintenance/calculations";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
@@ -27,9 +27,9 @@ export default async function ExpiryPage({
     page?: string;
   }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
-  const [{ locale }, query, tExpiry, tFleet, tCommon, tStatus] = await Promise.all([
-    params,
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "read");
+  const [query, tExpiry, tFleet, tCommon, tStatus] = await Promise.all([
     searchParams,
     getTranslations("fleet.expiry"),
     getTranslations("fleet"),

@@ -1,6 +1,7 @@
 import { createTranslator } from "next-intl";
 import { describe, expect, it } from "vitest";
 import { ACTIVITY_CATEGORIES, ACTIVITY_EVENT_META } from "@/features/daily-activity/calculations";
+import { getVehicleContextualActions } from "@/features/fleet/vehicle-actions";
 import { REPORT_SLUGS } from "@/features/reports/definitions";
 import {
   buildSwitchLocaleHref,
@@ -136,6 +137,30 @@ describe("Section 7: Bilingual message catalogs (en.json & ar.json)", () => {
     for (const event of Object.keys(ACTIVITY_EVENT_META)) {
       expect(enMap.has(`activity.events.${event}`)).toBe(true);
       expect(arMap.has(`activity.events.${event}`)).toBe(true);
+    }
+  });
+
+  it("covers every Vehicle Action Modal key in fleet.modalActions for both en and ar", () => {
+    const actions = getVehicleContextualActions({
+      locale: "en",
+      vehicleId: "00000000-0000-4000-8000-000000000001",
+      registration: "OM-1234",
+      status: "AVAILABLE",
+      activeRentalId: "00000000-0000-4000-8000-000000000002",
+      activeAgreementNumber: "OMR-20261125-0001",
+      permissions: {
+        canCreateRental: true,
+        canUpdateRental: true,
+        canApproveRental: true,
+        canReadFinance: true,
+        canCreateFinance: true,
+        canManageService: true,
+      },
+    });
+    expect(actions.length).toBe(15);
+    for (const action of actions) {
+      expect(enMap.has(`fleet.modalActions.${action.key}`)).toBe(true);
+      expect(arMap.has(`fleet.modalActions.${action.key}`)).toBe(true);
     }
   });
 });

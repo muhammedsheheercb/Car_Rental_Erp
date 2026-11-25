@@ -10,16 +10,16 @@ import { totals } from "@/features/finance/service";
 import { omrInput } from "@/features/invoices/calculations";
 import { invoiceBooking } from "@/features/invoices/queries";
 import { calculateExcessKm, formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateFieldLabel, translateStatus } from "@/lib/i18n-helpers";
 export default async function InvoicePage({
   params,
 }: {
   params: Promise<{ id: string; locale: string }>;
 }) {
-  const [actor, { id, locale }, tInvoices, tCommon, tStatus, tFields] = await Promise.all([
-    requirePermission("finance", "read"),
-    params,
+  const { id, locale } = await params;
+  const [actor, tInvoices, tCommon, tStatus, tFields] = await Promise.all([
+    requirePagePermission(locale, "finance", "read"),
     getTranslations("invoices"),
     getTranslations("common"),
     getTranslations("status"),

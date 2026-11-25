@@ -9,7 +9,7 @@ import { bookingOption, bookingRows, financeModules } from "@/features/finance/q
 import { totals } from "@/features/finance/service";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateSafe, translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
@@ -26,7 +26,7 @@ export default async function FinancePage({
   const config = financeModules[module];
   if (!config) notFound();
   const [actor, query, tFinance, tCommon, tStatus, tRentals] = await Promise.all([
-    requirePermission("finance", "read"),
+    requirePagePermission(locale, "finance", "read"),
     searchParams,
     getTranslations("finance"),
     getTranslations("common"),
@@ -207,7 +207,9 @@ export default async function FinancePage({
             previous={previous.map((p) => ({
               id: p.id,
               vehicleId: p.vehicleId,
-              text: `${formatOmanDateTime(p.dateFrom)} · ${formatOMR(p.amountBaisa)} · ${p.details}`,
+              date: formatOmanDateTime(p.dateFrom).replace("T", " "),
+              amount: formatOMR(p.amountBaisa),
+              details: p.details,
             }))}
           />
         ) : (

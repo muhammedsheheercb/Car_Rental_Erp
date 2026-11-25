@@ -138,3 +138,47 @@ it("does not query invalid document kinds or identifiers", async () => {
   expect(await loadDocument("unknown", id, actor)).toBeNull();
   expect(await loadDocument("agreement", "invalid", actor)).toBeNull();
 });
+it("blocks return documents until the rental has been returned", async () => {
+  fixture.reads = [[row], [{ id: creator, name: "Booking Staff" }]];
+  expect(await loadDocument("return", id, actor)).toBeNull();
+});
+it("builds a Vehicle Return Document with mileage, late charges, and three signatures", async () => {
+  fixture.reads = [
+    [
+      {
+        ...row,
+        r: {
+          ...row.r,
+          status: "RETURNED",
+          pickupOdometerKm: 1000,
+          returnOdometerKm: 1320,
+          openKm: false,
+          actualReturnAt: new Date("2026-10-03T10:00Z"),
+          returnedBy: receiver,
+        },
+      },
+    ],
+    [
+      { id: receiver, name: "Return Staff" },
+      { id: creator, name: "Booking Staff" },
+    ],
+    [
+      {
+        id: "ch1",
+        component: "LATE_FEE",
+        description: "Hourly late fee",
+        amountBaisa: 2500,
+      },
+    ],
+    [],
+  ];
+  fixture.signatures.set(receiver, { id: "returnSig", src: "data:image/png;base64,RETURN" });
+  const document = await loadDocument("return", id, actor);
+  expect(document?.title).toBe("Vehicle Return Document");
+  expect(document?.returned).toBe(true);
+  expect(document?.signatures).toHaveLength(3);
+  expect(document?.fields).toContainEqual(["Return Odometer (KM)", "1320"]);
+  expect(document?.fields).toContainEqual(["Distance Driven (KM)", "320"]);
+  expect(document?.fields).toContainEqual(["Excess KM", "70"]);
+  expect(document?.fields).toContainEqual(["Late / Overdue Charges (OMR)", "2.500"]);
+});

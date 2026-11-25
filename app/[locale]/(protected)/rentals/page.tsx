@@ -1,4 +1,19 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, not, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { BookingRowActions } from "@/components/booking-row-actions";
@@ -8,6 +23,7 @@ import { RentalBookingForm } from "@/components/rental-booking-form";
 import { db } from "@/db/client";
 import {
   branches,
+  customerBlacklist,
   customers,
   rentals,
   vehicleBrands,
@@ -18,9 +34,9 @@ import {
   vehicles,
 } from "@/db/schema";
 import { operationalBlocking } from "@/features/rentals/availability";
-import { parseOmanDateTime } from "@/features/rentals/booking-calculations";
+import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
@@ -44,7 +60,7 @@ export default async function RentalsPage({
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   const [identity, t, tRentals, tCommon, tStatus] = await Promise.all([
-    requirePermission("rentals", "read"),
+    requirePagePermission(locale, "rentals", "read"),
     getTranslations(),
     getTranslations("rentals"),
     getTranslations("common"),
@@ -88,10 +104,13 @@ export default async function RentalsPage({
       : undefined,
   );
 
+  const today = formatOmanDateTime(new Date()).slice(0, 10);
+
   const [
     vehicleRows,
     customerRows,
     preselectedCustomer,
+    activeBlacklistRows,
     pricingRows,
     branchRows,
     recent,
@@ -174,6 +193,19 @@ export default async function RentalsPage({
       : Promise.resolve([]),
     db
       .select({
+        customerId: customerBlacklist.customerId,
+        reason: customerBlacklist.reason,
+      })
+      .from(customerBlacklist)
+      .where(
+        and(
+          eq(customerBlacklist.isActive, true),
+          or(isNull(customerBlacklist.startsAt), lte(customerBlacklist.startsAt, today)),
+          or(isNull(customerBlacklist.endsAt), gte(customerBlacklist.endsAt, today)),
+        ),
+      ),
+    db
+      .select({
         vehicleId: vehiclePricing.vehicleId,
         period: vehiclePricing.period,
         listRentBaisa: vehiclePricing.listRentBaisa,
@@ -243,10 +275,21 @@ export default async function RentalsPage({
       .where(and(inArray(rentals.status, ["RESERVED", "ACTIVE"]), scoped)),
   ]);
 
-  const mergedCustomers =
+  const blacklistByCustomer = new Map<string, string>();
+  for (const row of activeBlacklistRows) {
+    if (!blacklistByCustomer.has(row.customerId)) {
+      blacklistByCustomer.set(row.customerId, row.reason);
+    }
+  }
+
+  const mergedCustomers = (
     preselectedCustomer[0] && !customerRows.some((c) => c.id === preselectedCustomer[0].id)
       ? [preselectedCustomer[0], ...customerRows]
-      : customerRows;
+      : customerRows
+  ).map((c) => ({
+    ...c,
+    blacklistReason: blacklistByCustomer.get(c.id) ?? null,
+  }));
 
   const canCreate = can(identity, "rentals", "create");
   const defaultBranch = branchRows[0]?.id ?? "";

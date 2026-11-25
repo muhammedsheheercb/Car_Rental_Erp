@@ -1,7 +1,8 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { invoiceAction } from "@/app/[locale]/(protected)/invoices/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { parseOMR } from "@/features/finance/calculations";
 import { invoiceCalculation, omrInput } from "@/features/invoices/calculations";
 import { translateFieldLabel, translateStatus, translateValidation } from "@/lib/i18n-helpers";
@@ -206,9 +207,12 @@ export function InvoiceForm({
 export function VoidInvoiceForm({ invoiceId }: { invoiceId: string }) {
   const tRoot = useTranslations();
   const tInvoices = useTranslations("invoices");
+  const tCommon = useTranslations("common");
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(invoiceAction, { error: "", message: "" });
   return (
     <form
+      ref={formRef}
       action={action}
       className="grid gap-3 rounded-xl border border-[var(--edge)] p-4 print:hidden"
     >
@@ -221,9 +225,30 @@ export function VoidInvoiceForm({ invoiceId }: { invoiceId: string }) {
       <p>{tInvoices("voidNote")}</p>
       {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
       {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
-      <button type="submit" disabled={pending || !!state.message} className="btn">
-        {tInvoices("voidInvoice")}
-      </button>
+      <ConfirmDialog
+        title={tInvoices("voidConfirmTitle")}
+        description={tInvoices("voidConfirmDesc")}
+        confirmLabel={tInvoices("voidInvoice")}
+        pending={pending}
+        processingLabel={tCommon("saving")}
+        onConfirm={() => {
+          formRef.current?.requestSubmit();
+        }}
+        trigger={
+          <button
+            type="button"
+            disabled={pending || !!state.message}
+            onClick={(event) => {
+              if (formRef.current && !formRef.current.reportValidity()) {
+                event.preventDefault();
+              }
+            }}
+            className="btn"
+          >
+            {tInvoices("voidInvoice")}
+          </button>
+        }
+      />
     </form>
   );
 }

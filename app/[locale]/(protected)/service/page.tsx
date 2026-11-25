@@ -16,7 +16,7 @@ import {
 } from "@/db/schema";
 import { omrInput } from "@/features/invoices/calculations";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 export default async function ServicePage({
   params,
@@ -25,9 +25,9 @@ export default async function ServicePage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; status?: string; branch?: string; page?: string }>;
 }) {
-  const [actor, { locale }, query, tService, tNav, tCommon, tStatus] = await Promise.all([
-    requirePermission("fleet", "read"),
-    params,
+  const { locale } = await params;
+  const [actor, query, tService, tNav, tCommon, tStatus] = await Promise.all([
+    requirePagePermission(locale, "fleet", "read"),
     searchParams,
     getTranslations("service"),
     getTranslations("nav"),

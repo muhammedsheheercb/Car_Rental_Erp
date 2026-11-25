@@ -5,7 +5,7 @@ import { db } from "@/db/client";
 import { branches, vehicleServiceSettings, vehicles } from "@/db/schema";
 import { serviceDue } from "@/features/maintenance/calculations";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
@@ -18,9 +18,9 @@ export default async function NearServicePage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; branch?: string; page?: string }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
-  const [{ locale }, query, tNear, tExpiry, tCommon, tStatus] = await Promise.all([
-    params,
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "read");
+  const [query, tNear, tExpiry, tCommon, tStatus] = await Promise.all([
     searchParams,
     getTranslations("fleet.nearService"),
     getTranslations("fleet.expiry"),

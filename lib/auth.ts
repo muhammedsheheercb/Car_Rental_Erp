@@ -162,6 +162,18 @@ export async function requirePermission(module: string, action: string, branchId
   if (!can(identity, module, action, branchId)) throw new Error("FORBIDDEN");
   return identity;
 }
+export async function requirePagePermission(
+  locale: string,
+  module: string,
+  action: string,
+  branchId?: string,
+) {
+  const identity = await requireIdentity();
+  if (!can(identity, module, action, branchId)) {
+    redirect(`/${locale === "ar" ? "ar" : "en"}/forbidden`);
+  }
+  return identity;
+}
 export async function changePassword(
   identity: Identity,
   currentPassword: string,

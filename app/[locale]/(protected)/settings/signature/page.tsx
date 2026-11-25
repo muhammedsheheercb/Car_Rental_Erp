@@ -5,15 +5,18 @@ import { SignatureForm } from "@/components/settings-forms";
 import { db } from "@/db/client";
 import { userSignatures } from "@/db/schema";
 import { canManageOtherSignatures, signatureUsers } from "@/features/signatures/service";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 
 export default async function SignatureSettingsPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  const actor = await requirePermission("settings", "read");
-  const [{ locale }, tSettings] = await Promise.all([params, getTranslations("settings")]);
+  const { locale } = await params;
+  const [actor, tSettings] = await Promise.all([
+    requirePagePermission(locale, "settings", "read"),
+    getTranslations("settings"),
+  ]);
   const options = await signatureUsers(actor);
   const optionIds = options.map((u) => u.id);
 

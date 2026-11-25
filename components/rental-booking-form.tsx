@@ -51,6 +51,7 @@ type Customer = {
   visaNumber: string | null;
   visaExpiry: string | null;
   sponsorDetails: string | null;
+  blacklistReason?: string | null;
 };
 type Branch = { id: string; name: string; code: string };
 
@@ -187,6 +188,7 @@ export function RentalBookingForm({
             {customers.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.mobile}
+                {item.blacklistReason ? ` [${tStatus("BLACKLISTED")}]` : ""}
               </option>
             ))}
           </select>
@@ -216,6 +218,14 @@ export function RentalBookingForm({
             ))}
           </select>
         </label>
+        {customer?.blacklistReason && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-500/50 bg-red-950/40 p-3 text-sm font-medium text-red-200 md:col-span-2 xl:col-span-3"
+          >
+            {tRentals("blacklistedCustomerAlert", { reason: customer.blacklistReason })}
+          </div>
+        )}
         {vehicle && (
           <div className="grid gap-2 rounded-xl border border-[var(--edge)] bg-black/20 p-3 text-xs sm:grid-cols-2 md:col-span-2 xl:col-span-3 xl:grid-cols-4">
             <div>
@@ -445,8 +455,14 @@ export function RentalBookingForm({
         <div className="flex items-end">
           <button
             type="submit"
-            disabled={pending || !price || !expectedReturn || !selectedAvailable}
-            className="min-h-11 w-full bg-[var(--accent)] px-4 font-semibold text-black"
+            disabled={
+              pending ||
+              !price ||
+              !expectedReturn ||
+              !selectedAvailable ||
+              Boolean(customer?.blacklistReason)
+            }
+            className="min-h-11 w-full bg-[var(--accent)] px-4 font-semibold text-black disabled:opacity-50"
           >
             {pending ? tRentals("savingReservation") : tRentals("createReservation")}
           </button>

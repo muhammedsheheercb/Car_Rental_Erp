@@ -10,7 +10,7 @@ import { bookingOption, bookingRows, financeModules } from "@/features/finance/q
 import { totals } from "@/features/finance/service";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateFieldLabel, translateSafe, translateStatus } from "@/lib/i18n-helpers";
 export default async function RecordPage({
   params,
@@ -21,7 +21,7 @@ export default async function RecordPage({
   const config = financeModules[module];
   if (!config || !/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [actor, tFinance, tCommon, tStatus, tRentals, tFields] = await Promise.all([
-    requirePermission("finance", "read"),
+    requirePagePermission(locale, "finance", "read"),
     getTranslations("finance"),
     getTranslations("common"),
     getTranslations("status"),

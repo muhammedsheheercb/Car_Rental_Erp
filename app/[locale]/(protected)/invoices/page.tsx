@@ -8,7 +8,7 @@ import { bookingRows } from "@/features/finance/queries";
 import { omrInput } from "@/features/invoices/calculations";
 import { invoiceBooking } from "@/features/invoices/queries";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 export default async function InvoicesPage({
   params,
@@ -25,9 +25,9 @@ export default async function InvoicesPage({
     new?: string;
   }>;
 }) {
-  const [actor, { locale }, query, tInvoices, tCommon, tStatus] = await Promise.all([
-    requirePermission("finance", "read"),
-    params,
+  const { locale } = await params;
+  const [actor, query, tInvoices, tCommon, tStatus] = await Promise.all([
+    requirePagePermission(locale, "finance", "read"),
     searchParams,
     getTranslations("invoices"),
     getTranslations("common"),

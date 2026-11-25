@@ -7,7 +7,7 @@ import { UserPermissionsGrid } from "@/components/user-permissions-grid";
 import { db } from "@/db/client";
 import { branches, roles, userBranches, userPermissions, userRoles, users } from "@/db/schema";
 import { allowedRolesForActor, canManageUserTarget, type UserRole } from "@/features/admin/users";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 import { createUserAction } from "../actions";
 
@@ -20,9 +20,9 @@ export default async function UsersPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; role?: string; status?: string; page?: string }>;
 }) {
-  const actor = await requirePermission("users", "read");
-  const [{ locale }, query, tAdmin, tCommon, tStatus, tAuth] = await Promise.all([
-    params,
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "users", "read");
+  const [query, tAdmin, tCommon, tStatus, tAuth] = await Promise.all([
     searchParams,
     getTranslations("admin"),
     getTranslations("common"),

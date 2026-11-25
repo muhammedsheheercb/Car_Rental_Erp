@@ -1,5 +1,4 @@
 export type RentalPeriod = "DAILY" | "WEEKLY" | "MONTHLY";
-export const OMAN_TIMEZONE = "Asia/Muscat";
 const OMAN_OFFSET_MS = 4 * 60 * 60 * 1000;
 const integer = (value: number, name: string) => {
   if (!Number.isSafeInteger(value) || value < 0)

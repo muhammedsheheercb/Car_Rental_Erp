@@ -5,7 +5,7 @@ import { CustomerActions } from "@/components/customer-actions";
 import { MasterSearch } from "@/components/master-search";
 import { db } from "@/db/client";
 import { customerBlacklist, customers } from "@/db/schema";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 
 const PAGE_SIZE = 15;
 
@@ -16,16 +16,15 @@ export default async function CustomersPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
   params: Promise<{ locale: string }>;
 }) {
-  const actor = await requirePermission("customers", "read");
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "customers", "read");
   const canViewLedger = can(actor, "finance", "read");
-  const [{ q = "", status = "all", page = "1" }, { locale }, tCust, tCommon, tStatus] =
-    await Promise.all([
-      searchParams,
-      params,
-      getTranslations("customers"),
-      getTranslations("common"),
-      getTranslations("status"),
-    ]);
+  const [{ q = "", status = "all", page = "1" }, tCust, tCommon, tStatus] = await Promise.all([
+    searchParams,
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const currentPage = Math.max(1, Number.parseInt(page, 10) || 1);
   const statusFilter = ["all", "active", "inactive", "blacklisted"].includes(status)
     ? status

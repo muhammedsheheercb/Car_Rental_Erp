@@ -1,13 +1,15 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { transferAction } from "@/app/[locale]/(protected)/transfers/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { parseOMR } from "@/features/finance/calculations";
 import { omrInput } from "@/features/invoices/calculations";
 import { transferBalance, transferMileage } from "@/features/transfers/calculations";
 import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
-export type ReplacementOption = {
+
+type ReplacementOption = {
   id: string;
   name: string;
   details: Record<string, string | number | null>;
@@ -35,6 +37,7 @@ export function TransferForm({
   const tCommon = useTranslations("common");
   const tStatus = useTranslations("status");
   const tFields = useTranslations("fieldLabels");
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(transferAction, { error: "", message: "" });
   const [requestId] = useState(() => crypto.randomUUID());
   const [vehicleId, setVehicleId] = useState("");
@@ -76,7 +79,11 @@ export function TransferForm({
     received: tTransfers("receivedOmr"),
   } as const;
   return (
-    <form action={action} className="grid gap-4 rounded-xl border border-[var(--edge)] p-4">
+    <form
+      ref={formRef}
+      action={action}
+      className="grid gap-4 rounded-xl border border-[var(--edge)] p-4"
+    >
       <input type="hidden" name="rentalId" value={rental.id} />
       <input type="hidden" name="requestId" value={requestId} />
       <SearchableCombobox
@@ -182,13 +189,30 @@ export function TransferForm({
         </p>
       )}
       {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
-      <button
-        type="submit"
-        className="btn"
-        disabled={pending || !selected || !!error || !!state.message}
-      >
-        {pending ? tTransfers("transferring") : tTransfers("submit")}
-      </button>
+      <ConfirmDialog
+        title={tTransfers("confirmTitle")}
+        description={tTransfers("confirmDesc")}
+        confirmLabel={tTransfers("submit")}
+        pending={pending}
+        processingLabel={tTransfers("transferring")}
+        onConfirm={() => {
+          formRef.current?.requestSubmit();
+        }}
+        trigger={
+          <button
+            type="button"
+            className="btn"
+            disabled={pending || !selected || !!error || !!state.message}
+            onClick={(event) => {
+              if (formRef.current && !formRef.current.reportValidity()) {
+                event.preventDefault();
+              }
+            }}
+          >
+            {pending ? tTransfers("transferring") : tTransfers("submit")}
+          </button>
+        }
+      />
     </form>
   );
 }

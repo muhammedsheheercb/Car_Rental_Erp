@@ -7,7 +7,7 @@ import { BlacklistRowActions } from "@/components/blacklist-row-actions";
 import { db } from "@/db/client";
 import { customerBlacklist, customers, users } from "@/db/schema";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 
 const PAGE_SIZE = 15;
 
@@ -18,9 +18,9 @@ export default async function BlacklistPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
-  const actor = await requirePermission("customers", "read");
-  const [{ locale }, query, tBl, tCust, tCommon, tStatus] = await Promise.all([
-    params,
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "customers", "read");
+  const [query, tBl, tCust, tCommon, tStatus] = await Promise.all([
     searchParams,
     getTranslations("customers.blacklistPage"),
     getTranslations("customers"),

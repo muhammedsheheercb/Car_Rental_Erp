@@ -20,7 +20,7 @@ import {
 import { totals } from "@/features/finance/service";
 import { formatOMR } from "@/features/rentals/calculations";
 import { cancellationPolicy } from "@/features/rentals/late-charges";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const date = (value: Date) =>
@@ -34,9 +34,9 @@ export default async function AgreementPage({
 }: {
   params: Promise<{ id: string; locale: string }>;
 }) {
-  const actor = await requirePermission("rentals", "read");
-  const [{ id, locale }, tRentals, tCust, tCommon, tStatus, tOps, tFinance] = await Promise.all([
-    params,
+  const { id, locale } = await params;
+  const [actor, tRentals, tCust, tCommon, tStatus, tOps, tFinance] = await Promise.all([
+    requirePagePermission(locale, "rentals", "read"),
     getTranslations("rentals"),
     getTranslations("customers"),
     getTranslations("common"),
@@ -110,6 +110,11 @@ export default async function AgreementPage({
         {can(actor, "rentals", "print", rental.branchId) && (
           <Link className="btn" href={`/${locale}/documents/agreement/${id}` as never}>
             {tRentals("printAgreementA4")}
+          </Link>
+        )}
+        {rental.status === "RETURNED" && can(actor, "rentals", "print", rental.branchId) && (
+          <Link className="btn" href={`/${locale}/documents/return/${id}` as never}>
+            {tRentals("printReturnA4")}
           </Link>
         )}
         {rental.status === "ACTIVE" && canUpdate && (
@@ -241,16 +246,18 @@ export default async function AgreementPage({
           </p>
         ))}
       </section>
-      {(["BEFORE_RENTAL", "AFTER_RETURN"] as const).map((phase) => (
+      {(["BEFORE_RENTAL", "DURING_RENTAL", "AFTER_RETURN"] as const).map((phase) => (
         <section
           key={phase}
-          id={phase === "BEFORE_RENTAL" && rental.status === "ACTIVE" ? "damage" : undefined}
+          id={!canUpdate && phase === "DURING_RENTAL" ? "damage" : undefined}
           className="rounded-xl border border-[var(--edge)] p-4"
         >
           <h2 className="text-lg font-semibold">
             {phase === "BEFORE_RENTAL"
               ? tRentals("beforeRentalEvidence")
-              : tRentals("afterReturnEvidence")}
+              : phase === "DURING_RENTAL"
+                ? tRentals("duringRentalEvidence")
+                : tRentals("afterReturnEvidence")}
           </h2>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {evidence

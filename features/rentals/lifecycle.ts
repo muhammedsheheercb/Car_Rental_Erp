@@ -219,6 +219,8 @@ export async function recordDamage(raw: unknown, file: File, actor: Identity) {
     const { rental } = await lockRental(tx, input.rentalId, actor);
     if (input.phase === "BEFORE_RENTAL" && rental.status !== "RESERVED")
       throw new Error("Before-rental evidence must be recorded before checkout.");
+    if (input.phase === "DURING_RENTAL" && rental.status !== "ACTIVE")
+      throw new Error("During-rental evidence requires an active rental.");
     if (input.phase === "AFTER_RETURN" && rental.status !== "RETURNED")
       throw new Error("After-return evidence requires a returned rental.");
     const key = `damage/${rental.vehicleId}/${rental.id}/${input.phase.toLowerCase()}/${crypto.randomUUID()}`;

@@ -792,7 +792,7 @@ export const vehicleDamageEvidence = pgTable(
     customerId: uuid("customer_id")
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),
-    phase: text("phase").$type<"BEFORE_RENTAL" | "AFTER_RETURN">().notNull(),
+    phase: text("phase").$type<"BEFORE_RENTAL" | "DURING_RENTAL" | "AFTER_RETURN">().notNull(),
     location: text("location").notNull(),
     description: text("description").notNull(),
     remarks: text("remarks"),

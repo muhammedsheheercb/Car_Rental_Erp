@@ -28,7 +28,7 @@ import {
   vehicleCommitmentStatus,
 } from "@/features/rentals/availability";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
@@ -80,17 +80,16 @@ export default async function FleetPage({
   }>;
   params: Promise<{ locale: string }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "read");
   const [
     { q = "", branch, brand, model, registration, page = "1", filter = "all" },
-    { locale },
     tFleet,
     tNav,
     tCommon,
     tStatus,
   ] = await Promise.all([
     searchParams,
-    params,
     getTranslations("fleet"),
     getTranslations("nav"),
     getTranslations("common"),

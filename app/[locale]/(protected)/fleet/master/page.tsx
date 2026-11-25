@@ -7,7 +7,7 @@ import { MasterSearch } from "@/components/master-search";
 import { TrimmedForm } from "@/components/trimmed-form";
 import { db } from "@/db/client";
 import { vehicleBrands, vehicleModels } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 import { createBrandAction } from "../actions";
 export default async function VehicleMaster({
   params,
@@ -16,17 +16,15 @@ export default async function VehicleMaster({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  await requirePermission("fleet", "read");
-  const [{ locale }, { q = "", page = "1" }, tMaster, tFleet, tCommon, tStatus] = await Promise.all(
-    [
-      params,
-      searchParams,
-      getTranslations("fleet.master"),
-      getTranslations("fleet"),
-      getTranslations("common"),
-      getTranslations("status"),
-    ],
-  );
+  const { locale } = await params;
+  await requirePagePermission(locale, "fleet", "read");
+  const [{ q = "", page = "1" }, tMaster, tFleet, tCommon, tStatus] = await Promise.all([
+    searchParams,
+    getTranslations("fleet.master"),
+    getTranslations("fleet"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const offset = Math.max(0, (Number(page) - 1) * 15);
   const filter = q
     ? or(ilike(vehicleBrands.name, `%${q}%`), ilike(vehicleModels.name, `%${q}%`))

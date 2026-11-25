@@ -1,7 +1,8 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { rentalLifecycleAction } from "@/app/[locale]/(protected)/rentals/lifecycle-actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { RentalPeriod } from "@/features/rentals/booking-calculations";
 import {
   calculateExpectedReturn,
@@ -18,6 +19,7 @@ function ActionForm({
   title,
   children,
   blocked = false,
+  confirmDescription,
 }: {
   id: string;
   anchorId?: string;
@@ -25,15 +27,18 @@ function ActionForm({
   title: string;
   children: React.ReactNode;
   blocked?: boolean;
+  confirmDescription?: string;
 }) {
   const t = useTranslations();
   const tCommon = useTranslations("common");
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(rentalLifecycleAction, {
     error: "",
     message: "",
   });
   return (
     <form
+      ref={formRef}
       id={anchorId}
       action={action}
       className="grid min-w-0 gap-3 rounded-xl border border-[var(--edge)] p-4"
@@ -42,13 +47,40 @@ function ActionForm({
       <input type="hidden" name="rentalId" value={id} />
       <input type="hidden" name="operation" value={operation} />
       {children}
-      <button
-        disabled={pending || blocked}
-        className="min-h-11 rounded bg-[var(--accent)] px-4 text-black"
-        type="submit"
-      >
-        {pending ? tCommon("saving") : title}
-      </button>
+      {confirmDescription ? (
+        <ConfirmDialog
+          title={title}
+          description={confirmDescription}
+          confirmLabel={title}
+          pending={pending}
+          processingLabel={tCommon("saving")}
+          onConfirm={() => {
+            formRef.current?.requestSubmit();
+          }}
+          trigger={
+            <button
+              disabled={pending || blocked}
+              onClick={(event) => {
+                if (formRef.current && !formRef.current.reportValidity()) {
+                  event.preventDefault();
+                }
+              }}
+              className="min-h-11 rounded bg-[var(--accent)] px-4 text-black disabled:opacity-50"
+              type="button"
+            >
+              {pending ? tCommon("saving") : title}
+            </button>
+          }
+        />
+      ) : (
+        <button
+          disabled={pending || blocked}
+          className="min-h-11 rounded bg-[var(--accent)] px-4 text-black disabled:opacity-50"
+          type="submit"
+        >
+          {pending ? tCommon("saving") : title}
+        </button>
+      )}
       {state.error && (
         <p role="alert" className="text-sm text-red-300">
           {translateValidation(t, state.error)}
@@ -229,6 +261,7 @@ export function RentalLifecycleForms({
           operation="cancel"
           title={tRentals("cancelAgreement")}
           blocked={!canCancel}
+          confirmDescription={tRentals("cancelConfirmDesc")}
         >
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             {Object.entries(cancellationDetails).map(([label, value]) => (
@@ -267,7 +300,7 @@ export function RentalLifecycleForms({
           </label>
         </ActionForm>
       )}
-      {["RESERVED", "RETURNED"].includes(status) && (
+      {["RESERVED", "ACTIVE", "RETURNED"].includes(status) && (
         <ActionForm
           id={id}
           anchorId="damage"
@@ -278,12 +311,20 @@ export function RentalLifecycleForms({
           <input
             name="phase"
             type="hidden"
-            value={status === "RESERVED" ? "BEFORE_RENTAL" : "AFTER_RETURN"}
+            value={
+              status === "RESERVED"
+                ? "BEFORE_RENTAL"
+                : status === "ACTIVE"
+                  ? "DURING_RENTAL"
+                  : "AFTER_RETURN"
+            }
           />
           <p className="font-medium">
             {status === "RESERVED"
               ? tRentals("beforeRentalEvidence")
-              : tRentals("afterReturnEvidence")}
+              : status === "ACTIVE"
+                ? tRentals("duringRentalEvidence")
+                : tRentals("afterReturnEvidence")}
           </p>
           <label>
             {tRentals("damageLocation")}

@@ -21,7 +21,7 @@ import { invoicePayments } from "@/features/invoices/service";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import { documentSignature } from "@/features/signatures/service";
 import { can, type Identity } from "@/lib/auth";
-export const DOCUMENT_KINDS = ["agreement", "invoice", "legal-fine", "receipt"] as const;
+export const DOCUMENT_KINDS = ["agreement", "return", "invoice", "legal-fine", "receipt"] as const;
 export async function loadDocument(
   kind: string,
   id: string,
@@ -32,7 +32,7 @@ export async function loadDocument(
     !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)
   )
     return null;
-  const module = kind === "agreement" ? "rentals" : "finance";
+  const module = kind === "agreement" || kind === "return" ? "rentals" : "finance";
   if (!can(actor, module, "read") || !can(actor, module, "print")) return null;
   const [record] =
     kind === "invoice"
@@ -45,7 +45,7 @@ export async function loadDocument(
         : kind === "receipt"
           ? await db.select().from(payments).where(eq(payments.id, id))
           : [];
-  const rentalId = kind === "agreement" ? id : record?.rentalId;
+  const rentalId = kind === "agreement" || kind === "return" ? id : record?.rentalId;
   if (!rentalId) return null;
   const [row] = await db
     .select({ r: rentals, c: customers, v: vehicles, brand: vehicleBrands.name, b: branches })
@@ -79,6 +79,7 @@ export async function loadDocument(
     .where(inArray(users.id, [creator, ...(r.returnedBy ? [r.returnedBy] : [])]));
   const name = (id: string | null) => names.find((u) => u.id === id)?.name ?? "";
   const returned = r.status === "RETURNED" || r.actualReturnAt !== null;
+  if (kind === "return" && !returned) return null;
   const [printerSignature, creatorSignature, returnSignature] = await Promise.all([
     documentSignature(actor.id),
     creator === actor.id ? Promise.resolve(null) : documentSignature(creator),
@@ -143,7 +144,7 @@ export async function loadDocument(
     returned,
     signatures,
   };
-  if (kind === "agreement") {
+  if (kind === "agreement" || kind === "return") {
     const [charges, financial, paid, swaps] = await Promise.all([
       db
         .select()
@@ -158,6 +159,37 @@ export async function loadDocument(
         .where(eq(rentalVehicleSwaps.rentalId, r.id))
         .orderBy(asc(rentalVehicleSwaps.transferredAt)),
     ]);
+    if (kind === "return") {
+      d.title = "Vehicle Return Document";
+      d.issuedAt = at(r.actualReturnAt ?? r.updatedAt);
+      const startKm = r.pickupOdometerKm ?? 0;
+      const returnKm = r.returnOdometerKm ?? startKm;
+      const distanceDriven = Math.max(0, returnKm - startKm);
+      const allowanceKm = r.openKm ? null : r.includedKm + r.freeKm;
+      const excessKm = allowanceKm === null ? 0 : Math.max(0, distanceDriven - allowanceKm);
+      const lateChargesBaisa = charges
+        .filter((ch) => ch.component === "LATE_FEE" || ch.component === "OVERDUE_FINE")
+        .reduce((sum, ch) => sum + ch.amountBaisa, 0);
+      d.fields = [
+        ["Booking Number", r.agreementNumber],
+        ["Customer Name", c.name],
+        ["Mobile", c.mobile],
+        ["Address", c.address],
+        ["Civil Number", c.civilIdNumber ?? "—"],
+        ["Licence Number", c.drivingLicenceNumber],
+        ["Vehicle / Brand", `${v.vehicleNumber} / ${row.brand}`],
+        ["Registration Number", v.registrationNumber],
+        ["Booking Date / Time", at(r.startsAt)],
+        ["Expected Return", at(r.expectedReturnAt)],
+        ["Actual Return", at(r.actualReturnAt)],
+        ["Starting KM", String(r.pickupOdometerKm ?? "—")],
+        ["Return Odometer (KM)", String(r.returnOdometerKm ?? "—")],
+        ["Distance Driven (KM)", String(distanceDriven)],
+        ["KM Maximum / Free KM", r.openKm ? "OPEN" : `${r.includedKm} / ${r.freeKm}`],
+        ["Excess KM", String(excessKm)],
+        ["Late / Overdue Charges (OMR)", omrInput(lateChargesBaisa)],
+      ];
+    }
     d.charges = charges.map((ch) => ({
       id: ch.id,
       label: `${ch.component.replaceAll("_", " ")} — ${ch.description}`,

@@ -1,4 +1,5 @@
-import { and, count, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { OperationsLinks } from "@/components/operations-links";
 import { db } from "@/db/client";
@@ -20,10 +21,22 @@ import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/bookin
 import { formatOMR } from "@/features/rentals/calculations";
 import { requireIdentity } from "@/lib/auth";
 
-export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  const user = await requireIdentity();
-  const [t, tCommon] = await Promise.all([getTranslations("dashboard"), getTranslations("common")]);
+const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+export default async function Dashboard({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ branch?: string }>;
+}) {
+  const [{ locale }, query, user, t, tCommon] = await Promise.all([
+    params,
+    searchParams,
+    requireIdentity(),
+    getTranslations("dashboard"),
+    getTranslations("common"),
+  ]);
   const now = new Date();
   const day = formatOmanDateTime(now).slice(0, 10);
   const todayStart = parseOmanDateTime(`${day}T00:00`);
@@ -32,14 +45,62 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   const expiryLimitDate = new Date(now);
   expiryLimitDate.setTime(expiryLimitDate.getTime() + policy.expirySoonDays * 86_400_000);
   const expiryLimit = formatOmanDateTime(expiryLimitDate).slice(0, 10);
-  const vehicleScope =
-    user.role === "SUPER_ADMIN" ? undefined : inArray(vehicles.branchId, user.branchIds);
-  const rentalScope =
-    user.role === "SUPER_ADMIN" ? undefined : inArray(rentals.branchId, user.branchIds);
-  const paymentScope =
-    user.role === "SUPER_ADMIN" ? undefined : inArray(payments.branchId, user.branchIds);
-  const branchScope =
+  const permittedBranchScope =
     user.role === "SUPER_ADMIN" ? undefined : inArray(branches.id, user.branchIds);
+  const permittedBranches = await db
+    .select({ id: branches.id, name: branches.name, code: branches.code })
+    .from(branches)
+    .where(and(eq(branches.isActive, true), permittedBranchScope))
+    .orderBy(asc(branches.name));
+
+  const rawBranch = query.branch?.trim() ?? "";
+  let selectedBranchIds: string[] | undefined;
+  let selectedBranchId = "";
+  if (rawBranch) {
+    if (UUID_RE.test(rawBranch)) {
+      const match = permittedBranches.find((b) => b.id === rawBranch);
+      if (match) {
+        selectedBranchId = match.id;
+        selectedBranchIds = [match.id];
+      }
+    } else {
+      const matched = await db
+        .select({ id: branches.id })
+        .from(branches)
+        .where(
+          and(
+            permittedBranchScope,
+            or(ilike(branches.name, `%${rawBranch}%`), ilike(branches.code, `%${rawBranch}%`)),
+          ),
+        );
+      selectedBranchIds = matched.map((b) => b.id);
+      if (matched.length === 1) selectedBranchId = matched[0].id;
+    }
+  }
+
+  const effectiveBranchIds =
+    selectedBranchIds ?? (user.role === "SUPER_ADMIN" ? undefined : user.branchIds);
+  const noBranchMatch = effectiveBranchIds !== undefined && effectiveBranchIds.length === 0;
+  const vehicleScope = noBranchMatch
+    ? sql`false`
+    : effectiveBranchIds
+      ? inArray(vehicles.branchId, effectiveBranchIds)
+      : undefined;
+  const rentalScope = noBranchMatch
+    ? sql`false`
+    : effectiveBranchIds
+      ? inArray(rentals.branchId, effectiveBranchIds)
+      : undefined;
+  const paymentScope = noBranchMatch
+    ? sql`false`
+    : effectiveBranchIds
+      ? inArray(payments.branchId, effectiveBranchIds)
+      : undefined;
+  const branchScope = noBranchMatch
+    ? sql`false`
+    : effectiveBranchIds
+      ? inArray(branches.id, effectiveBranchIds)
+      : undefined;
   const [
     totalVehicles,
     availableVehicles,
@@ -101,7 +162,7 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
         and(
           vehicleScope,
           eq(vehicles.isActive, true),
-          sql`${vehicles.currentOdometerKm} + 500 >= ${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
+          sql`${vehicles.currentOdometerKm} + ${policy.nearServiceKm} >= ${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
         ),
       ),
     db
@@ -197,14 +258,49 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   ];
   return (
     <div className="space-y-8">
-      <div>
-        <p className="text-sm text-[var(--accent)]">{t("eyebrow")}</p>
-        <h1 className="mt-2 text-3xl font-semibold">{t("greeting", { name: user.displayName })}</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          {user.role === "SUPER_ADMIN"
-            ? t("scopeAll")
-            : t("scopeAssigned", { count: user.branchIds.length })}
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-[var(--accent)]">{t("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">
+            {t("greeting", { name: user.displayName })}
+          </h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            {user.role === "SUPER_ADMIN"
+              ? t("scopeAll")
+              : t("scopeAssigned", { count: user.branchIds.length })}
+          </p>
+        </div>
+        {permittedBranches.length > 1 && (
+          <form className="flex flex-wrap items-center gap-2">
+            <select
+              name="branch"
+              defaultValue={selectedBranchId}
+              aria-label={tCommon("branch")}
+              className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
+            >
+              <option value="">{tCommon("allPermittedBranches")}</option>
+              {permittedBranches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name} · {branch.code}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
+            >
+              {tCommon("filter")}
+            </button>
+            {rawBranch && (
+              <Link
+                href={`/${locale}/dashboard` as never}
+                className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
+              >
+                {tCommon("clear")}
+              </Link>
+            )}
+          </form>
+        )}
       </div>
       <OperationsLinks locale={locale} />
       <section className="grid gap-px overflow-hidden border border-[var(--edge)] bg-[var(--edge)] sm:grid-cols-2 lg:grid-cols-4">

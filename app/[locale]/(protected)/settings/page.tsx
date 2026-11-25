@@ -7,13 +7,13 @@ import { AlertSettingsForm } from "@/components/settings-forms";
 import { db } from "@/db/client";
 import { branches, userSignatures } from "@/db/schema";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 import { userPreferencesSchema } from "@/lib/validation";
 
 export default async function SettingsPage({ params }: { params: Promise<{ locale: string }> }) {
-  const actor = await requirePermission("settings", "read");
   const { locale } = await params;
+  const actor = await requirePagePermission(locale, "settings", "read");
 
   const [
     policy,

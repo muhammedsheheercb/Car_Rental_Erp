@@ -280,6 +280,25 @@ describe("contract lifecycle transactions", () => {
     await recordDamage({ ...input, phase: "AFTER_RETURN" }, photo, actor);
     expect(state.writes.filter((write) => write.table === vehicleDamageEvidence)).toHaveLength(2);
   });
+  it("records DURING_RENTAL scratch evidence on active rentals and blocks wrong phases", async () => {
+    const photo = new File([new Uint8Array([255, 216, 255, 0])], "during.jpg", {
+      type: "image/jpeg",
+    });
+    const duringInput = {
+      rentalId: id,
+      phase: "DURING_RENTAL",
+      location: "Rear bumper",
+      description: "Mid-rental scuff",
+    };
+    await recordDamage(duringInput, photo, actor);
+    expect(
+      state.writes.find((write) => write.table === vehicleDamageEvidence)?.value,
+    ).toMatchObject({ phase: "DURING_RENTAL", vehicleId: id, customerId: id, recordedBy: id });
+    prepare({ ...rental, status: "RESERVED" });
+    await expect(recordDamage(duringInput, photo, actor)).rejects.toThrow("active rental");
+    prepare({ ...rental, status: "RETURNED" });
+    await expect(recordDamage(duringInput, photo, actor)).rejects.toThrow("active rental");
+  });
   it("rejects an image MIME spoof", async () => {
     const file = new File(["not an image"], "spoof.jpg", { type: "image/jpeg" });
     await expect(

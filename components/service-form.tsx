@@ -4,7 +4,8 @@ import { useActionState, useState } from "react";
 import { serviceAction } from "@/app/[locale]/(protected)/service/actions";
 import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
-export type ServiceVehicle = {
+
+type ServiceVehicle = {
   id: string;
   name: string;
   brand: string;

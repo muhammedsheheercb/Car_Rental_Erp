@@ -9,7 +9,7 @@ import {
 } from "@/features/ledger/calculations";
 import { loadCustomerLedger, searchLedgerCustomers } from "@/features/ledger/service";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 function typeBadgeClass(type: Exclude<LedgerFilterType, "ALL">): string {
@@ -63,18 +63,17 @@ export default async function CustomerLedgerPage({
     page?: string;
   }>;
 }) {
-  const [actor, { locale }, query, tLedger, tCust, tCommon, tStatus, tNav, tReports] =
-    await Promise.all([
-      requirePermission("customers", "read"),
-      params,
-      searchParams,
-      getTranslations("ledger"),
-      getTranslations("customers"),
-      getTranslations("common"),
-      getTranslations("status"),
-      getTranslations("nav"),
-      getTranslations("reports"),
-    ]);
+  const { locale } = await params;
+  const [actor, query, tLedger, tCust, tCommon, tStatus, tNav, tReports] = await Promise.all([
+    requirePagePermission(locale, "customers", "read"),
+    searchParams,
+    getTranslations("ledger"),
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("nav"),
+    getTranslations("reports"),
+  ]);
   if (!can(actor, "finance", "read")) redirect(`/${locale}/forbidden`);
   const q = query.q?.trim() ?? "";
   const selectedId = query.customerId?.trim() ?? "";
