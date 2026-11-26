@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { LanguageSwitcher } from "./language-switcher";
 import { LogoutButton } from "./logout-button";
 import { OperationalFilters } from "./operational-filters";
@@ -64,12 +65,46 @@ function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function HamburgerIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      className="h-5 w-5"
+    >
+      <line x1="3.5" y1="5.5" x2="16.5" y2="5.5" />
+      <line x1="3.5" y1="10" x2="16.5" y2="10" />
+      <line x1="3.5" y1="14.5" x2="16.5" y2="14.5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      className="h-4 w-4"
+    >
+      <line x1="5" y1="5" x2="15" y2="15" />
+      <line x1="15" y1="5" x2="5" y2="15" />
+    </svg>
+  );
+}
+
 export function CollapsibleAppShell({
   initialCollapsed,
   locale,
   sidebarBody,
   sidebarIdentity,
-  mobileHeader,
   mobileNav,
   children,
 }: {
@@ -77,12 +112,34 @@ export function CollapsibleAppShell({
   locale: string;
   sidebarBody: ReactNode;
   sidebarIdentity: ReactNode;
-  mobileHeader: ReactNode;
   mobileNav: ReactNode;
   children: ReactNode;
 }) {
   const t = useTranslations("nav");
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile/tablet drawer automatically after navigating to another route.
+  useEffect(() => {
+    void pathname;
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Support Escape key and prevent background scroll while the mobile/tablet drawer is open.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOpen]);
 
   function setSidebarCollapsed(next: boolean) {
     setCollapsed(next);
@@ -145,11 +202,97 @@ export function CollapsibleAppShell({
         </aside>
       )}
 
-      {/* Right Column: Mobile Header, Collapsed Desktop Top Bar, and Warm Ivory Canvas */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {mobileHeader}
+      {/* Mobile & Tablet Slide-Out Obsidian Sidebar Drawer (< 1024px) */}
+      {mobileOpen && (
+        <div
+          data-app-ui
+          className="fixed inset-0 z-50 flex lg:hidden print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("menu")}
+        >
+          <aside
+            id="mobile-concierge-drawer"
+            data-concierge-rail
+            data-dark-surface
+            className="relative z-10 flex h-dvh w-[min(86vw,310px)] flex-col border-e border-white/10 bg-gradient-to-b from-[#0D0C0B] via-[#100F0D] to-[#141210] text-[#F6F3EC] shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-4">
+              <Link
+                href={`/${locale}/dashboard` as never}
+                onClick={() => setMobileOpen(false)}
+                className="shrink-0 text-sm font-bold tracking-[0.18em] text-[#F6F3EC]"
+              >
+                MUSCAT <span className="text-[#CFA968]">CARS</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label={t("hideSidebar")}
+                title={t("hideSidebar")}
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-white/[0.05] text-[#D7D1C7] transition-colors hover:border-[#CFA968]/50 hover:bg-[#CFA968]/15 hover:text-[#CFA968]"
+              >
+                <CloseIcon />
+              </button>
+            </div>
 
-        {/* Slim Warm Ivory Desktop Bar — shown ONLY when left sidebar is hidden */}
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
+              {sidebarBody}
+            </div>
+
+            <div className="border-t border-white/10 px-4 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+              <div className="flex items-center justify-between gap-2">
+                {sidebarIdentity}
+                <LanguageSwitcher className="shrink-0 rounded-full border border-[#CFA968]/40 px-2.5 py-1 text-xs font-medium text-[#CFA968] transition-colors hover:bg-[#CFA968]/15" />
+              </div>
+            </div>
+          </aside>
+
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t("hideSidebar")}
+            onClick={() => setMobileOpen(false)}
+            className="flex-1 bg-black/65 backdrop-blur-[2px]"
+          />
+        </div>
+      )}
+
+      {/* Right Column: Mobile/Tablet Header, Collapsed Desktop Top Bar, and Warm Ivory Canvas */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile & Tablet Obsidian Header (< 1024px) */}
+        <header
+          data-app-ui
+          data-dark-surface
+          className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-white/10 bg-[#0D0C0B]/95 px-3 text-[#F6F3EC] backdrop-blur sm:px-4 lg:hidden print:hidden"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-concierge-drawer"
+              aria-label={t("showSidebar")}
+              title={t("showSidebar")}
+              className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-white/[0.05] text-[#F6F3EC] transition-colors hover:border-[#CFA968]/60 hover:bg-[#CFA968]/15 hover:text-[#CFA968]"
+            >
+              <HamburgerIcon />
+            </button>
+            <Link
+              href={`/${locale}/dashboard` as never}
+              className="truncate text-xs font-bold tracking-[0.14em] text-[#F6F3EC] sm:text-sm sm:tracking-[0.18em]"
+            >
+              MUSCAT <span className="text-[#CFA968]">CARS</span>
+            </Link>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+            <OperationalFilters direction="down" />
+            <LanguageSwitcher className="rounded-full border border-[#CFA968]/40 px-2.5 py-1 text-xs font-medium text-[#CFA968] transition-colors hover:bg-[#CFA968]/15" />
+            <LogoutButton />
+          </div>
+        </header>
+
+        {/* Slim Warm Ivory Desktop Bar — shown ONLY when desktop left sidebar is hidden */}
         {collapsed && (
           <header
             data-app-ui

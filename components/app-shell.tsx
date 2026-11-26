@@ -8,9 +8,6 @@ import { can, getIdentity } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 import { CollapsibleAppShell } from "./collapsible-shell";
 import { ConciergeMobileNav, type ConciergeNavItem, ConciergeSidebarNav } from "./concierge-nav";
-import { LanguageSwitcher } from "./language-switcher";
-import { LogoutButton } from "./logout-button";
-import { OperationalFilters } from "./operational-filters";
 
 const SIDEBAR_COOKIE_NAME = "mc_sidebar_collapsed";
 
@@ -207,33 +204,12 @@ export async function AppShell({
     </div>
   );
 
-  const mobileHeader = (
-    <header
-      data-app-ui
-      data-dark-surface
-      className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-white/10 bg-[#0D0C0B]/95 px-4 text-[#F6F3EC] backdrop-blur lg:hidden print:hidden"
-    >
-      <Link
-        href={`/${locale}/dashboard` as never}
-        className="shrink-0 text-sm font-bold tracking-[0.18em] text-[#F6F3EC]"
-      >
-        MUSCAT <span className="text-[#CFA968]">CARS</span>
-      </Link>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <OperationalFilters direction="down" />
-        <LanguageSwitcher className="rounded-full border border-[#CFA968]/40 px-2.5 py-1 text-xs font-medium text-[#CFA968]" />
-        <LogoutButton />
-      </div>
-    </header>
-  );
-
   return (
     <CollapsibleAppShell
       initialCollapsed={initialCollapsed}
       locale={locale}
       sidebarBody={sidebarBody}
       sidebarIdentity={sidebarIdentity}
-      mobileHeader={mobileHeader}
       mobileNav={<ConciergeMobileNav locale={locale} items={items} />}
     >
       {children}
