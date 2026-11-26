@@ -1,12 +1,14 @@
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { TrimmedForm } from "@/components/trimmed-form";
 import { UserActions } from "@/components/user-actions";
 import { UserPermissionsGrid } from "@/components/user-permissions-grid";
 import { db } from "@/db/client";
 import { branches, roles, userBranches, userPermissions, userRoles, users } from "@/db/schema";
 import { allowedRolesForActor, canManageUserTarget, type UserRole } from "@/features/admin/users";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 import { createUserAction } from "../actions";
 
 const PAGE_SIZE = 15;
@@ -18,8 +20,15 @@ export default async function UsersPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; role?: string; status?: string; page?: string }>;
 }) {
-  const actor = await requirePermission("users", "read");
-  const [{ locale }, query] = await Promise.all([params, searchParams]);
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "users", "read");
+  const [query, tAdmin, tCommon, tStatus, tAuth] = await Promise.all([
+    searchParams,
+    getTranslations("admin"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("auth"),
+  ]);
   const q = query.q?.trim() ?? "";
   const roleFilter = ["SUPER_ADMIN", "ADMIN", "USER"].includes(query.role ?? "")
     ? (query.role as UserRole)
@@ -137,66 +146,64 @@ export default async function UsersPage({
   return (
     <div className={`grid min-w-0 gap-8 ${canCreate ? "xl:grid-cols-[minmax(0,1fr)_28rem]" : ""}`}>
       <section className="min-w-0">
-        <p className="text-sm text-[var(--accent)]">ADMINISTRATION</p>
-        <h1 className="mt-2 text-3xl font-semibold">Users & access</h1>
+        <p className="text-sm text-[var(--accent)]">{tAdmin("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{tAdmin("usersTitle")}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           {actor.role === "SUPER_ADMIN"
-            ? "Manage accounts, branch access, and module permissions across all branches."
-            : "Manage users and permissions within your assigned branches."}
+            ? tAdmin("usersSubtitleAll")
+            : tAdmin("usersSubtitleScoped")}
         </p>
 
         <form className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input
             name="q"
             defaultValue={q}
-            placeholder="Search name or username"
-            aria-label="Search users"
+            placeholder={tAdmin("searchUsersPlaceholder")}
+            aria-label={tAdmin("searchUsersPlaceholder")}
             className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
           />
           <select
             name="role"
             defaultValue={roleFilter}
-            aria-label="Filter by role"
+            aria-label={tAdmin("roleCol")}
             className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
           >
-            <option value="">All roles</option>
+            <option value="">{tCommon("allRoles")}</option>
             {assignableRoles.map((role) => (
               <option key={role} value={role}>
-                {role}
+                {translateStatus(tStatus, role)}
               </option>
             ))}
           </select>
           <select
             name="status"
             defaultValue={statusFilter}
-            aria-label="Filter by status"
+            aria-label={tCommon("status")}
             className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
           >
-            <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="">{tCommon("allStatuses")}</option>
+            <option value="active">{tStatus("ACTIVE")}</option>
+            <option value="inactive">{tStatus("INACTIVE")}</option>
           </select>
           <div className="flex gap-2">
             <button
               type="submit"
               className="min-h-11 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-4 text-sm font-medium"
             >
-              Filter
+              {tCommon("filter")}
             </button>
             {(q || roleFilter || statusFilter) && (
               <Link
                 href={`/${locale}/admin/users` as never}
                 className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
               >
-                Clear
+                {tCommon("clear")}
               </Link>
             )}
           </div>
         </form>
 
-        <p className="mt-3 text-sm text-[var(--muted)]">
-          {total} user{total === 1 ? "" : "s"}
-        </p>
+        <p className="mt-3 text-sm text-[var(--muted)]">{tAdmin("usersCount", { count: total })}</p>
 
         <div className="mt-3 max-w-full overflow-x-auto rounded-2xl border border-[var(--edge)] [overscroll-behavior-inline:contain]">
           <table className="min-w-[54rem] w-full table-fixed text-start text-sm">
@@ -214,37 +221,37 @@ export default async function UsersPage({
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  User
+                  {tCommon("user")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  Role
+                  {tAdmin("roleCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
                 >
-                  Branches
+                  {tAdmin("branchesCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
                 >
-                  Permissions
+                  {tAdmin("permissionsCol")}
                 </th>
                 <th
                   scope="col"
                   className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
                 >
-                  Status
+                  {tCommon("status")}
                 </th>
                 <th
                   scope="col"
                   className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
                 >
-                  Actions
+                  {tCommon("actions")}
                 </th>
               </tr>
             </thead>
@@ -272,10 +279,12 @@ export default async function UsersPage({
                         {user.username}
                       </p>
                     </td>
-                    <td className="break-words px-4 py-3 text-xs font-medium">{role}</td>
+                    <td className="break-words px-4 py-3 text-xs font-medium">
+                      {translateStatus(tStatus, role)}
+                    </td>
                     <td className="px-4 py-3 text-xs">
                       {role === "SUPER_ADMIN" ? (
-                        <span className="text-[var(--accent)]">All branches</span>
+                        <span className="text-[var(--accent)]">{tCommon("allBranches")}</span>
                       ) : userBranchList.length ? (
                         <div className="flex flex-wrap gap-1">
                           {userBranchList.map((b) => (
@@ -288,17 +297,17 @@ export default async function UsersPage({
                           ))}
                         </div>
                       ) : (
-                        <span className="text-[var(--muted)]">Unassigned</span>
+                        <span className="text-[var(--muted)]">{tAdmin("unassigned")}</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-[var(--muted)]">
-                      {role === "SUPER_ADMIN" ? "Full" : userPermList.length}
+                      {role === "SUPER_ADMIN" ? tAdmin("fullAccess") : userPermList.length}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs ${user.isActive ? "bg-emerald-400/15 text-emerald-200" : "bg-red-400/15 text-red-200"}`}
                       >
-                        {user.isActive ? "Active" : "Inactive"}
+                        {user.isActive ? tStatus("ACTIVE") : tStatus("INACTIVE")}
                       </span>
                     </td>
                     <td className="px-2 py-2 text-center">
@@ -326,28 +335,31 @@ export default async function UsersPage({
               })}
             </tbody>
           </table>
-          {!records.length && <p className="p-8 text-[var(--muted)]">No matching users found.</p>}
+          {!records.length && <p className="p-8 text-[var(--muted)]">{tAdmin("noUsers")}</p>}
         </div>
 
         {total > PAGE_SIZE && (
-          <nav aria-label="User pages" className="mt-4 flex items-center justify-end gap-3 text-sm">
+          <nav
+            aria-label={tAdmin("usersTitle")}
+            className="mt-4 flex items-center justify-end gap-3 text-sm"
+          >
             {page > 1 && (
               <Link
                 href={pageHref(page - 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Previous
+                {tCommon("previous")}
               </Link>
             )}
             <span className="text-[var(--muted)]">
-              Page {page} of {totalPages}
+              {tCommon("pageOf", { page, total: totalPages })}
             </span>
             {page < totalPages && (
               <Link
                 href={pageHref(page + 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Next
+                {tCommon("next")}
               </Link>
             )}
           </nav>
@@ -359,12 +371,10 @@ export default async function UsersPage({
           action={createUserAction}
           className="h-fit rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5"
         >
-          <h2 className="text-lg font-semibold">New user</h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Users must change their initial password on first login.
-          </p>
+          <h2 className="text-lg font-semibold">{tAdmin("newUser")}</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">{tAdmin("newUserNote")}</p>
           <label className="mt-4 block text-sm">
-            Display name
+            {tAdmin("displayName")}
             <input
               name="displayName"
               required
@@ -373,29 +383,29 @@ export default async function UsersPage({
             />
           </label>
           <label className="mt-4 block text-sm">
-            Username
+            {tAuth("username")}
             <input
               name="username"
               required
               minLength={3}
               maxLength={64}
-              placeholder="e.g. muscat.staff"
+              placeholder={tAdmin("usernamePlaceholder")}
               className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
             />
           </label>
           <label className="mt-4 block text-sm">
-            Initial password
+            {tAdmin("initialPassword")}
             <input
               name="initialPassword"
               type="password"
               minLength={12}
               required
-              placeholder="Minimum 12 characters"
+              placeholder={tAdmin("minPasswordPlaceholder")}
               className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
             />
           </label>
           <label className="mt-4 block text-sm">
-            Role
+            {tAdmin("roleCol")}
             <select
               name="role"
               defaultValue={assignableRoles.includes("USER") ? "USER" : assignableRoles[0]}
@@ -403,14 +413,15 @@ export default async function UsersPage({
             >
               {assignableRoles.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {translateStatus(tStatus, role)}
                 </option>
               ))}
             </select>
           </label>
           <fieldset className="mt-5">
             <legend className="text-sm font-medium">
-              Branch access{actor.role !== "SUPER_ADMIN" ? " *" : ""}
+              {tAdmin("branchAccess")}
+              {actor.role !== "SUPER_ADMIN" ? " *" : ""}
             </legend>
             {branchRows.map((branch) => (
               <label key={branch.id} className="mt-2 flex min-h-11 items-center gap-2 text-sm">
@@ -419,7 +430,7 @@ export default async function UsersPage({
               </label>
             ))}
             {!branchRows.length && (
-              <p className="mt-2 text-xs text-[var(--muted)]">No active branches assigned.</p>
+              <p className="mt-2 text-xs text-[var(--muted)]">{tAdmin("noActiveBranches")}</p>
             )}
           </fieldset>
           <UserPermissionsGrid
@@ -430,7 +441,7 @@ export default async function UsersPage({
             type="submit"
             className="mt-6 min-h-11 w-full rounded-lg bg-[var(--accent)] font-semibold text-black"
           >
-            Create user
+            {tAdmin("createUser")}
           </button>
         </TrimmedForm>
       )}

@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, ilike, inArray, lt, not, or, sql } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { FleetControls } from "@/components/fleet-controls";
 import { VehicleActionModalTrigger } from "@/components/vehicle-action-modal";
 import { VehicleActions } from "@/components/vehicle-actions";
@@ -27,39 +28,40 @@ import {
   vehicleCommitmentStatus,
 } from "@/features/rentals/availability";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 const ROW_STYLES: Record<VehicleOperationalStatus, string> = {
-  ON_RENT: "bg-red-500/15 text-red-50 hover:bg-red-500/20",
-  AVAILABLE: "bg-white/[0.06] text-white hover:bg-white/[0.11]",
-  RESERVED: "bg-amber-400/10 text-amber-50 hover:bg-amber-400/15",
-  SERVICE_OR_TRANSFER: "bg-zinc-500/10 text-zinc-200 hover:bg-zinc-500/15",
-  INACTIVE: "bg-black/30 text-[var(--muted)] hover:bg-white/5",
+  ON_RENT: "bg-red-50/70 text-[#161513] hover:bg-red-50",
+  AVAILABLE: "bg-white text-[#161513] hover:bg-[#FAF8F4]",
+  RESERVED: "bg-amber-50/60 text-[#161513] hover:bg-amber-50",
+  SERVICE_OR_TRANSFER: "bg-stone-100/70 text-[#44403C] hover:bg-stone-100",
+  INACTIVE: "bg-[#F4F1EA]/80 text-[var(--muted)] hover:bg-[#EFECE4]",
 };
 
 const BADGE_STYLES: Record<VehicleOperationalStatus, { label: string; className: string }> = {
   ON_RENT: {
     label: "ON RENT",
-    className: "border border-red-400/50 bg-red-500/30 text-red-100",
+    className: "border border-red-200 bg-red-50 text-red-700 font-medium",
   },
   AVAILABLE: {
     label: "AVAILABLE",
-    className: "border border-white/80 bg-white text-black font-semibold",
+    className: "border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold",
   },
   RESERVED: {
     label: "RESERVED",
-    className: "border border-amber-400/40 bg-amber-400/20 text-amber-100",
+    className: "border border-amber-200 bg-amber-50 text-amber-800 font-medium",
   },
   SERVICE_OR_TRANSFER: {
     label: "SERVICE / TRANSFER",
-    className: "border border-zinc-500/40 bg-zinc-500/20 text-zinc-200",
+    className: "border border-stone-300 bg-stone-100 text-stone-700 font-medium",
   },
   INACTIVE: {
     label: "INACTIVE",
-    className: "border border-zinc-600/40 bg-zinc-700/30 text-zinc-300",
+    className: "border border-stone-200 bg-stone-100 text-stone-500",
   },
 };
 
@@ -78,9 +80,21 @@ export default async function FleetPage({
   }>;
   params: Promise<{ locale: string }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
-  const [{ q = "", branch, brand, model, registration, page = "1", filter = "all" }, { locale }] =
-    await Promise.all([searchParams, params]);
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "read");
+  const [
+    { q = "", branch, brand, model, registration, page = "1", filter = "all" },
+    tFleet,
+    tNav,
+    tCommon,
+    tStatus,
+  ] = await Promise.all([
+    searchParams,
+    getTranslations("fleet"),
+    getTranslations("nav"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const currentPage = Math.max(1, Number(page) || 1);
   const today = formatOmanDateTime(new Date()).slice(0, 10);
 
@@ -262,23 +276,21 @@ export default async function FleetPage({
     <>
       <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--accent)]">FLEET OVERVIEW</p>
-          <h1 className="mt-2 text-3xl font-semibold">Vehicles</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Click any vehicle to open contextual booking, rental, fine, service, and detail actions.
-          </p>
+          <p className="text-sm text-[var(--accent)]">{tFleet("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tFleet("title")}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">{tFleet("subtitle")}</p>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
             <Link href={`/${locale}/service` as never} className="hover:text-[var(--accent)]">
-              Service
+              {tNav("service")}
             </Link>
             <Link
               href={`/${locale}/near-to-service` as never}
               className="hover:text-[var(--accent)]"
             >
-              Near To Service
+              {tNav("nearToService")}
             </Link>
             <Link href={`/${locale}/expiry` as never} className="hover:text-[var(--accent)]">
-              Expiry
+              {tNav("expiry")}
             </Link>
           </div>
         </div>
@@ -287,14 +299,14 @@ export default async function FleetPage({
             href={`/${locale}/fleet/master`}
             className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-center text-sm sm:px-4"
           >
-            Vehicle master
+            {tFleet("vehicleMaster")}
           </Link>
           {can(actor, "fleet", "create") && (
             <Link
               href={`/${locale}/fleet/new`}
               className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-3 text-center text-sm font-semibold text-black sm:px-4"
             >
-              Create vehicle
+              {tFleet("createVehicle")}
             </Link>
           )}
         </div>
@@ -326,46 +338,46 @@ export default async function FleetPage({
                 scope="col"
                 className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
               >
-                SI No.
+                {tFleet("siNo")}
               </th>
               <th
                 scope="col"
                 className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wide"
               >
-                Vehicle / Branch
+                {tFleet("vehicleBranch")}
               </th>
               <th
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
               >
-                Registration
+                {tCommon("registration")}
               </th>
               <th
                 scope="col"
                 className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide"
               >
-                Status
+                {tCommon("status")}
               </th>
               <th
                 scope="col"
                 className="px-4 py-3 text-end text-xs font-medium uppercase tracking-wide"
               >
-                KM
+                {tCommon("km")}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
-                Mulkiya
+                {tFleet("mulkiya")}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
-                Insurance
+                {tFleet("insurance")}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
-                Next Service KM
+                {tFleet("nextServiceKm")}
               </th>
               <th
                 scope="col"
                 className="px-2 py-3 text-center text-xs font-medium uppercase tracking-wide"
               >
-                Manage
+                {tFleet("manage")}
               </th>
             </tr>
           </thead>
@@ -428,7 +440,7 @@ export default async function FleetPage({
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs ${badge.className}`}
                     >
-                      {badge.label}
+                      {translateStatus(tStatus, operationalStatus)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-end font-mono">
@@ -446,7 +458,7 @@ export default async function FleetPage({
                     }`}
                   >
                     {vehicle.nextServiceKm
-                      ? `${vehicle.nextServiceKm.toLocaleString()} · ${serviceState}`
+                      ? `${vehicle.nextServiceKm.toLocaleString()} · ${translateStatus(tStatus, serviceState)}`
                       : "—"}
                   </td>
                   <td className="px-2 py-2 align-middle">
@@ -462,12 +474,12 @@ export default async function FleetPage({
             })}
           </tbody>
         </table>
-        {!records.length && <p className="p-8 text-[var(--muted)]">No vehicles found.</p>}
+        {!records.length && <p className="p-8 text-[var(--muted)]">{tFleet("noVehicles")}</p>}
       </div>
 
       {total > PAGE_SIZE && (
         <nav
-          aria-label="Vehicle pages"
+          aria-label={tFleet("title")}
           className="mt-4 flex items-center justify-end gap-3 text-sm"
         >
           {currentPage > 1 && (
@@ -475,18 +487,18 @@ export default async function FleetPage({
               href={pageHref(currentPage - 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="px-2 text-[var(--muted)]">
-            Page {currentPage} of {totalPages}
+            {tCommon("pageOf", { page: currentPage, total: totalPages })}
           </span>
           {currentPage < totalPages && (
             <Link
               href={pageHref(currentPage + 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

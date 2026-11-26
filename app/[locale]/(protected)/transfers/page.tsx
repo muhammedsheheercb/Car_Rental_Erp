@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { TransferForm } from "@/components/transfer-form";
 import { db } from "@/db/client";
 import {
@@ -15,7 +16,8 @@ import { omrInput } from "@/features/invoices/calculations";
 import { invoicePayments } from "@/features/invoices/service";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import { transferCandidates } from "@/features/transfers/service";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateFieldLabel, translateStatus } from "@/lib/i18n-helpers";
 export default async function TransfersPage({
   params,
   searchParams,
@@ -23,9 +25,16 @@ export default async function TransfersPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ booking?: string; q?: string }>;
 }) {
-  const actor = await requirePermission("rentals", "read");
   const { locale } = await params;
-  const query = await searchParams;
+  const [actor, query, tTransfers, tCommon, tStatus, tRentals, tFields] = await Promise.all([
+    requirePagePermission(locale, "rentals", "read"),
+    searchParams,
+    getTranslations("transfers"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("rentals"),
+    getTranslations("fieldLabels"),
+  ]);
   const rows = await bookingRows(actor);
   const selected = rows.find((row) => row.rental.id === query.booking);
   const filtered = rows.filter(
@@ -38,17 +47,17 @@ export default async function TransfersPage({
   if (!selected)
     return (
       <div className="space-y-4">
-        <h1 className="text-3xl font-semibold">Vehicle Transfer</h1>
+        <h1 className="text-3xl font-semibold">{tTransfers("title")}</h1>
         <form className="flex gap-2">
           <input
             name="q"
-            aria-label="Search booking, customer or registration"
+            aria-label={tTransfers("searchPlaceholder")}
             className="input"
             defaultValue={query.q}
-            placeholder="Booking Number / Customer / Registration"
+            placeholder={tTransfers("searchPlaceholder")}
           />
           <button type="submit" className="btn">
-            Search
+            {tCommon("search")}
           </button>
         </form>
         <div className="grid gap-3">
@@ -61,7 +70,7 @@ export default async function TransfersPage({
               {row.rental.agreementNumber} · {row.customer.name} · {row.vehicle.registrationNumber}
             </Link>
           ))}
-          {!filtered.length && <p>No active rentals found.</p>}
+          {!filtered.length && <p>{tTransfers("noActiveRentals")}</p>}
         </div>
       </div>
     );
@@ -106,7 +115,7 @@ export default async function TransfersPage({
     Brand: brand[0]?.name ?? null,
     "Registration Number": v.registrationNumber,
     "Booking Date / Time (Oman)": formatOmanDateTime(r.startsAt),
-    "Rental Type": r.pricingPeriod,
+    "Rental Type": translateStatus(tStatus, r.pricingPeriod),
     "Hire Duration": r.rentDuration,
     "Number of Days": Math.ceil((r.expectedReturnAt.getTime() - r.startsAt.getTime()) / 86400000),
     "Remaining Days": remainingDays,
@@ -120,7 +129,7 @@ export default async function TransfersPage({
     "Starting KM": r.pickupOdometerKm,
     "Current KM Maximum": r.includedKm,
     "Current Free KM": r.freeKm,
-    "Open KM": r.openKm ? "Yes" : "No",
+    "Open KM": r.openKm ? tCommon("yes") : tCommon("no"),
     "Extra KM Charge (OMR)": omrInput(sum("EXCESS_KM")),
     "Damage (OMR)": omrInput(sum("DAMAGE")),
     "Washing (OMR)": omrInput(sum("WASHING")),
@@ -137,15 +146,14 @@ export default async function TransfersPage({
   };
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">Vehicle Transfer · {r.agreementNumber}</h1>
-      <p>
-        Unused KM allowance, contracted rent and expected return are preserved. Replacement
-        configuration is shown for reference.
-      </p>
+      <h1 className="text-3xl font-semibold">
+        {tTransfers("title")} · {r.agreementNumber}
+      </h1>
+      <p>{tTransfers("preserveNote")}</p>
       <dl className="grid gap-3 rounded-xl border border-[var(--edge)] p-4 sm:grid-cols-2 lg:grid-cols-3">
         {Object.entries(fields).map(([k, value]) => (
           <div key={k}>
-            <dt className="text-sm text-[var(--muted)]">{k}</dt>
+            <dt className="text-sm text-[var(--muted)]">{translateFieldLabel(tFields, k)}</dt>
             <dd>{value ?? "—"}</dd>
           </div>
         ))}
@@ -177,7 +185,7 @@ export default async function TransfersPage({
                 ? o.service.lastGearOilChangeKm + o.service.gearOilIntervalKm
                 : null,
               "Remaining Days": remainingDays,
-              "Rental Type": r.pricingPeriod,
+              "Rental Type": translateStatus(tStatus, r.pricingPeriod),
               "Configured Rent (OMR)": omrInput(o.pricing.listRentBaisa),
               "Contract Rent (OMR)": omrInput(r.dailyRateBaisa),
               "Configured KM Maximum": o.pricing.includedKm,
@@ -189,41 +197,70 @@ export default async function TransfersPage({
         />
       )}
       <Link className="btn inline-block" href={`/${locale}/invoices?booking=${r.id}` as never}>
-        Invoice
+        {tRentals("invoice")}
       </Link>
       {invoiceRows.map((i) => (
         <p key={i.id}>
           <Link href={`/${locale}/invoices/${i.id}` as never}>
-            {i.invoiceNumber} · {i.status}
+            {i.invoiceNumber} · {translateStatus(tStatus, i.status)}
           </Link>
         </p>
       ))}
-      <h2 className="text-xl font-semibold">Transfer History</h2>
-      {history.map((h) => {
-        const snap = h.snapshot as {
-          previousVehicle?: { registrationNumber: string };
-          newVehicle?: { registrationNumber: string };
-          user?: string;
-        };
-        return (
-          <div key={h.id} className="rounded-xl border border-[var(--edge)] p-4">
-            <p>
-              {formatOmanDateTime(h.transferredAt)} Oman ·{" "}
-              {snap.previousVehicle?.registrationNumber} → {snap.newVehicle?.registrationNumber}
-            </p>
-            <p>
-              KM {h.startingKm} → {h.endingKm}; replacement starts {h.newStartingKm}. Remaining
-              allowance {h.remainingMaximumKm} + free {h.remainingFreeKm} KM.
-            </p>
-            <p>
-              Charges OMR {omrInput(h.chargesBaisa)} · Received OMR {omrInput(h.receivedBaisa)} ·
-              Balance OMR {omrInput(h.balanceBaisa)} · {snap.user}
-            </p>
-            <p>{h.remarks}</p>
-          </div>
-        );
-      })}
-      {!history.length && <p>No transfers yet.</p>}
+      <h2 className="text-xl font-semibold">{tTransfers("transferHistory")}</h2>
+      {history.length ? (
+        <div className="overflow-x-auto rounded-2xl border border-[var(--edge)] bg-[var(--surface)]">
+          <table className="w-full text-start text-sm">
+            <thead className="border-b border-[var(--edge)] text-xs text-[var(--muted)]">
+              <tr>
+                <th className="px-4 py-3 text-start">{tCommon("date")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("vehiclesCol")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("kmCol")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("remainingAllowanceCol")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("chargesCol")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("receivedCol")}</th>
+                <th className="px-4 py-3 text-start">{tTransfers("balanceCol")}</th>
+                <th className="px-4 py-3 text-start">{tCommon("user")}</th>
+                <th className="px-4 py-3 text-start">{tCommon("remarks")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--edge)]">
+              {history.map((h) => {
+                const snap = h.snapshot as {
+                  previousVehicle?: { registrationNumber: string };
+                  newVehicle?: { registrationNumber: string };
+                  user?: string;
+                };
+                return (
+                  <tr key={h.id}>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
+                      {formatOmanDateTime(h.transferredAt).replace("T", " ")} {tCommon("omanTime")}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono">
+                      {snap.previousVehicle?.registrationNumber ?? "—"} →{" "}
+                      {snap.newVehicle?.registrationNumber ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {h.startingKm} → {h.endingKm} ({h.newStartingKm})
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {h.remainingMaximumKm} / {h.remainingFreeKm} {tCommon("km")}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">{omrInput(h.chargesBaisa)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{omrInput(h.receivedBaisa)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-[var(--accent)]">
+                      {omrInput(h.balanceBaisa)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">{snap.user ?? "—"}</td>
+                    <td className="break-words px-4 py-3 text-[var(--muted)]">{h.remarks}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p>{tTransfers("noTransfers")}</p>
+      )}
     </div>
   );
 }

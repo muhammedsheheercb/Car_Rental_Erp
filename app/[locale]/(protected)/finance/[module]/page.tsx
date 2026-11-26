@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { FinanceForm } from "@/components/finance-form";
 import { db } from "@/db/client";
 import { branches, customers, financeFines, payments, rentals, users, vehicles } from "@/db/schema";
@@ -8,7 +9,8 @@ import { bookingOption, bookingRows, financeModules } from "@/features/finance/q
 import { totals } from "@/features/finance/service";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateSafe, translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -23,8 +25,15 @@ export default async function FinancePage({
   const { locale, module } = await params;
   const config = financeModules[module];
   if (!config) notFound();
-  const actor = await requirePermission("finance", "read");
-  const query = await searchParams;
+  const [actor, query, tFinance, tCommon, tStatus, tRentals] = await Promise.all([
+    requirePagePermission(locale, "finance", "read"),
+    searchParams,
+    getTranslations("finance"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("rentals"),
+  ]);
+  const moduleTitle = translateSafe(tFinance, `modules.${module}`, config.title);
   const page = Math.min(100000, Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1));
   const fine = ["NORMAL", "LEGAL"].includes(config.kind);
   const rows = await bookingRows(actor);
@@ -146,24 +155,34 @@ export default async function FinancePage({
     })}`;
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">{config.title}</h1>
-      <nav className="flex flex-wrap gap-4 print:hidden">
-        {Object.entries(financeModules).map(([key, c]) => (
-          <Link key={key} href={`/${locale}/finance/${key}`}>
-            {c.title}
-          </Link>
-        ))}
+      <h1 className="text-2xl font-semibold">{moduleTitle}</h1>
+      <nav className="flex flex-wrap gap-2 print:hidden">
+        {Object.entries(financeModules).map(([key, c]) => {
+          const active = key === module;
+          return (
+            <Link
+              key={key}
+              href={`/${locale}/finance/${key}`}
+              aria-current={active ? "page" : undefined}
+              className={`inline-flex min-h-10 items-center rounded-full border px-4 text-xs font-semibold transition-colors sm:text-sm ${
+                active
+                  ? "border-[#161513] bg-[#161513] text-[#FAF8F5]"
+                  : "border-[var(--edge)] bg-[var(--surface)] text-[#4A4741] hover:border-[#9A7B4F] hover:text-[#161513]"
+              }`}
+            >
+              {translateSafe(tFinance, `modules.${key}`, c.title)}
+            </Link>
+          );
+        })}
       </nav>
       {fine && (
         <p>
-          {config.kind === "LEGAL"
-            ? "Legal fine records do not change rental totals or invoice balances."
-            : "Select the vehicle's booking from rental history. Its customer is filled automatically; fine dates must match that booking."}
+          {config.kind === "LEGAL" ? tFinance("legalFineNotice") : tFinance("normalFineNotice")}
         </p>
       )}
       {module === "payback" && (
         <section className="space-y-3">
-          <h2 className="text-xl">Payback balances</h2>
+          <h2 className="text-xl">{tFinance("paybackBalances")}</h2>
           {payableRows
             .filter((p) => p.summary.approvedBaisa || p.summary.balance < 0)
             .map(({ row, summary: s }) => (
@@ -172,15 +191,15 @@ export default async function FinancePage({
                   {row.rental.agreementNumber} · {row.customer.name}
                 </p>
                 <p>
-                  Amount due back: {formatOMR(s.approvedBaisa)} · Already returned:{" "}
-                  {formatOMR(s.returnedBaisa)}
+                  {tFinance("amountDueBack")}: {formatOMR(s.approvedBaisa)} ·{" "}
+                  {tFinance("alreadyReturned")}: {formatOMR(s.returnedBaisa)}
                 </p>
                 <p className="text-xl font-semibold text-[var(--accent)]">
-                  Remaining: {formatOMR(s.remainingBaisa)}
+                  {tFinance("remaining")}: {formatOMR(s.remainingBaisa)}
                 </p>
                 <p>
-                  Available to pay: {formatOMR(s.payableBaisa)} · Invoice balance:{" "}
-                  {formatOMR(s.balance)}
+                  {tFinance("availableToPay")}: {formatOMR(s.payableBaisa)} ·{" "}
+                  {tRentals("invoiceBalance")}: {formatOMR(s.balance)}
                 </p>
               </article>
             ))}
@@ -189,8 +208,8 @@ export default async function FinancePage({
       <details className="print:hidden">
         <summary className="cursor-pointer text-lg">
           {fine
-            ? `Add ${config.title}`
-            : `New ${config.title === "Receipts" ? "Receipt" : config.title} Payment`}
+            ? tFinance("addFine", { title: moduleTitle })
+            : tFinance("newPayment", { title: moduleTitle })}
         </summary>
         {options.length ? (
           <FinanceForm
@@ -200,20 +219,19 @@ export default async function FinancePage({
             previous={previous.map((p) => ({
               id: p.id,
               vehicleId: p.vehicleId,
-              text: `${formatOmanDateTime(p.dateFrom)} · ${formatOMR(p.amountBaisa)} · ${p.details}`,
+              date: formatOmanDateTime(p.dateFrom).replace("T", " "),
+              amount: formatOMR(p.amountBaisa),
+              details: p.details,
             }))}
           />
         ) : (
-          <p>No permitted bookings available.</p>
+          <p>{tFinance("noPermittedBookings")}</p>
         )}
       </details>
       {module === "payback" && can(actor, "finance", "approve") && (
         <details>
-          <summary>Approve refund entitlement / adjustment</summary>
-          <p>
-            Approval may post a credit adjustment. Enter the additional approved refund, with a
-            reason.
-          </p>
+          <summary>{tFinance("approveRefundSummary")}</summary>
+          <p>{tFinance("approveRefundNote")}</p>
           <FinanceForm
             operation="refund"
             bookings={rows
@@ -224,22 +242,22 @@ export default async function FinancePage({
       )}
       <form className="grid gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:grid-cols-2 lg:grid-cols-6 print:hidden">
         <label className="text-xs text-[var(--muted)]">
-          Search
+          {tCommon("search")}
           <input
             name="q"
             defaultValue={query.q}
-            placeholder="Booking / customer / reg / receipt"
+            placeholder={tFinance("searchPlaceholder")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Branch
+          {tCommon("branch")}
           <select
             name="branch"
             defaultValue={branchFilter ?? ""}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All branches</option>
+            <option value="">{tCommon("allBranches")}</option>
             {branchOptions.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name} · {b.code}
@@ -249,23 +267,23 @@ export default async function FinancePage({
         </label>
         {!fine && (
           <label className="text-xs text-[var(--muted)]">
-            Payment Mode
+            {tCommon("paymentMode")}
             <select
               name="method"
               defaultValue={methodFilter ?? ""}
               className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
             >
-              <option value="">All modes</option>
+              <option value="">{tCommon("allModes")}</option>
               {METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {m.replaceAll("_", " ")}
+                  {translateStatus(tStatus, m)}
                 </option>
               ))}
             </select>
           </label>
         )}
         <label className="text-xs text-[var(--muted)]">
-          From
+          {tFinance("fromLabel")}
           <input
             type="date"
             name="from"
@@ -274,7 +292,7 @@ export default async function FinancePage({
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          To
+          {tFinance("toLabel")}
           <input
             type="date"
             name="to"
@@ -287,36 +305,36 @@ export default async function FinancePage({
             type="submit"
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
           >
-            Search
+            {tCommon("search")}
           </button>
           {(query.q || query.from || query.to || branchFilter || methodFilter) && (
             <Link
               href={`/${locale}/finance/${module}` as never}
               className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
             >
-              Clear
+              {tCommon("clear")}
             </Link>
           )}
         </div>
       </form>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-start text-sm">
           <thead>
             <tr>
               {[
-                "Booking Number",
-                "Customer",
-                "Vehicle",
-                "Registration",
-                "Amount",
-                "Date (Oman)",
-                "Payment Mode",
-                "User",
-                "Branch",
-                "Record",
+                { id: "booking", label: tFinance("bookingNumber") },
+                { id: "customer", label: tCommon("customer") },
+                { id: "vehicle", label: tCommon("vehicle") },
+                { id: "registration", label: tCommon("registration") },
+                { id: "amount", label: tCommon("amount") },
+                { id: "date", label: tCommon("dateTimeOman") },
+                { id: "method", label: tCommon("paymentMode") },
+                { id: "user", label: tCommon("user") },
+                { id: "branch", label: tCommon("branch") },
+                { id: "record", label: tFinance("recordCol") },
               ].map((h) => (
-                <th key={h} className="p-3">
-                  {h}
+                <th key={h.id} className="p-3 text-start">
+                  {h.label}
                 </th>
               ))}
             </tr>
@@ -331,7 +349,7 @@ export default async function FinancePage({
                   p.registration,
                   formatOMR(p.amount),
                   formatOmanDateTime(p.date),
-                  p.method,
+                  p.method === "—" ? "—" : translateStatus(tStatus, p.method),
                   p.user,
                   p.branch,
                 ].map((v, i) => (
@@ -355,13 +373,15 @@ export default async function FinancePage({
                   </td>
                 ))}
                 <td className="p-3">
-                  <Link href={`/${locale}/finance/${module}/${p.id}`}>View · {p.kind}</Link>
+                  <Link href={`/${locale}/finance/${module}/${p.id}`}>
+                    {tCommon("view")} · {translateStatus(tStatus, p.kind)}
+                  </Link>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!list.length && <p className="p-4">No records found.</p>}
+        {!list.length && <p className="p-4">{tCommon("noRecords")}</p>}
       </div>
       <nav className="flex items-center justify-end gap-3 text-sm print:hidden">
         {page > 1 && (
@@ -369,16 +389,16 @@ export default async function FinancePage({
             href={href(page - 1)}
             className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
           >
-            Previous
+            {tCommon("previous")}
           </Link>
         )}
-        <span className="text-[var(--muted)]">Page {page}</span>
+        <span className="text-[var(--muted)]">{tCommon("pageNumber", { page })}</span>
         {list.length > PAGE_SIZE && (
           <Link
             href={href(page + 1)}
             className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
           >
-            Next
+            {tCommon("next")}
           </Link>
         )}
       </nav>

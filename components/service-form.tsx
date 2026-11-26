@@ -1,8 +1,11 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 import { serviceAction } from "@/app/[locale]/(protected)/service/actions";
+import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
-export type ServiceVehicle = {
+
+type ServiceVehicle = {
   id: string;
   name: string;
   brand: string;
@@ -21,6 +24,11 @@ export function ServiceForm({
   actorId: string;
   now: string;
 }) {
+  const tRoot = useTranslations();
+  const tService = useTranslations("service");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tFields = useTranslations("fieldLabels");
   const [state, action, pending] = useActionState(serviceAction, { error: "", message: "" });
   const [vehicleId, setVehicleId] = useState("");
   const [rentalId, setRentalId] = useState("");
@@ -31,11 +39,11 @@ export function ServiceForm({
   const r = v?.bookings.find((r) => r.id === rentalId);
   return (
     <form action={action} className="grid gap-4 rounded-xl border border-[var(--edge)] p-4">
-      <h2 className="text-xl font-semibold">New Service</h2>
+      <h2 className="text-xl font-semibold">{tService("newService")}</h2>
       <input type="hidden" name="requestId" value={requestId} />
       <input type="hidden" name="operation" value="create" />
       <SearchableCombobox
-        label="Vehicle Name / Registration"
+        label={tService("vehiclePickerLabel")}
         options={vehicles}
         value={vehicleId}
         onChange={(id) => {
@@ -55,20 +63,20 @@ export function ServiceForm({
               "KM Reading": v.km,
             }).map(([k, value]) => (
               <div key={k}>
-                <dt className="text-sm text-[var(--muted)]">{k}</dt>
+                <dt className="text-sm text-[var(--muted)]">{translateFieldLabel(tFields, k)}</dt>
                 <dd>{value}</dd>
               </div>
             ))}
           </dl>
           <label>
-            Customer / Booking if applicable
+            {tService("customerBookingLabel")}
             <select
               name="rentalId"
               value={rentalId}
               onChange={(e) => setRentalId(e.target.value)}
               className="input mt-1"
             >
-              <option value="">Company vehicle — no customer</option>
+              <option value="">{tService("companyVehicleNoCustomer")}</option>
               {v.bookings.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -78,15 +86,18 @@ export function ServiceForm({
           </label>
           {r && (
             <p>
-              Customer Name: {r.customer} · Rental Out Date: {r.out.slice(0, 10)} · Out Time (Oman):{" "}
-              {r.out.slice(11)}
+              {tService("rentalOutSummary", {
+                customer: r.customer,
+                date: r.out.slice(0, 10),
+                time: r.out.slice(11),
+              })}
             </p>
           )}
         </>
       )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label>
-          Service By
+          {tService("serviceBy")}
           <select
             name="serviceBy"
             className="input mt-1"
@@ -96,39 +107,39 @@ export function ServiceForm({
               if (e.target.value === "CUSTOMER") setStatus("COMPLETED");
             }}
           >
-            <option value="COMPANY">Company Service</option>
-            <option value="CUSTOMER">Service By Customer</option>
+            <option value="COMPANY">{tService("companyService")}</option>
+            <option value="CUSTOMER">{tService("customerService")}</option>
           </select>
         </label>
         <label>
-          Status
+          {tCommon("status")}
           <select
             name="status"
             className="input mt-1"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="COMPLETED">Completed</option>
+            <option value="COMPLETED">{tStatus("COMPLETED")}</option>
             {serviceBy === "COMPANY" && (
               <>
-                <option value="SCHEDULED">Scheduled</option>
-                <option value="IN_PROGRESS">In Progress</option>
+                <option value="SCHEDULED">{tStatus("SCHEDULED")}</option>
+                <option value="IN_PROGRESS">{tStatus("IN_PROGRESS")}</option>
               </>
             )}
           </select>
         </label>
         <label>
-          Service Type
+          {tService("serviceType")}
           <select name="type" className="input mt-1">
-            <option value="ENGINE">Engine Service</option>
-            <option value="GEAR_OIL">Gear Oil</option>
-            <option value="OTHER">Other</option>
+            <option value="ENGINE">{tStatus("ENGINE")}</option>
+            <option value="GEAR_OIL">{tStatus("GEAR_OIL")}</option>
+            <option value="OTHER">{tStatus("OTHER")}</option>
           </select>
         </label>
         {v && (
           <>
             <label>
-              Staff
+              {tService("staff")}
               <select
                 key={v.id}
                 name="staffId"
@@ -144,7 +155,7 @@ export function ServiceForm({
               </select>
             </label>
             <label>
-              KM Reading
+              {tService("kmReading")}
               <input
                 key={`${v.id}-km`}
                 name="kmReading"
@@ -156,7 +167,7 @@ export function ServiceForm({
               />
             </label>
             <label>
-              Service KM Reading
+              {tService("serviceKmReading")}
               <input
                 key={`${v.id}-service`}
                 name="serviceOdometerKm"
@@ -170,7 +181,7 @@ export function ServiceForm({
           </>
         )}
         <label>
-          Service Out Date / Time (Oman)
+          {tService("serviceOutDateTime")}
           <input
             name="outAt"
             type="datetime-local"
@@ -181,7 +192,7 @@ export function ServiceForm({
         </label>
         {status === "COMPLETED" && (
           <label>
-            Completed Date / Time (Oman)
+            {tService("completedDateTime")}
             <input
               name="completedAt"
               type="datetime-local"
@@ -194,11 +205,11 @@ export function ServiceForm({
         {status === "SCHEDULED" && (
           <>
             <label>
-              Due Date (Oman)
+              {tService("dueDate")}
               <input name="dueDate" type="date" className="input mt-1" />
             </label>
             <label>
-              Due KM
+              {tService("dueKm")}
               <input
                 name="dueOdometerKm"
                 inputMode="numeric"
@@ -209,7 +220,7 @@ export function ServiceForm({
           </>
         )}
         <label>
-          Expense Amount (OMR)
+          {tService("expenseAmount")}
           <input
             key={status}
             name="cost"
@@ -221,22 +232,22 @@ export function ServiceForm({
           />
         </label>
         <label>
-          Payment Mode
+          {tCommon("paymentMode")}
           <select name="paymentMode" className="input mt-1">
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank</option>
+            <option value="CASH">{tStatus("CASH")}</option>
+            <option value="CARD">{tStatus("CARD")}</option>
+            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
           </select>
         </label>
       </div>
       <label>
-        Remarks
+        {tCommon("remarks")}
         <textarea name="remarks" required maxLength={2000} className="input mt-1" />
       </label>
-      {state.error && <p role="alert">{state.error}</p>}
-      {state.message && <p role="status">{state.message}</p>}
+      {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button type="submit" className="btn" disabled={pending || !v || !!state.message}>
-        Save Service
+        {tService("saveService")}
       </button>
     </form>
   );
@@ -252,22 +263,28 @@ export function ServiceStatusForm({
   now: string;
   status: string;
 }) {
+  const tRoot = useTranslations();
+  const tService = useTranslations("service");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [state, action, pending] = useActionState(serviceAction, { error: "", message: "" });
   return (
     <form action={action} className="mt-3 grid gap-3 rounded-lg border border-[var(--edge)] p-3">
       <input type="hidden" name="operation" value="update" />
       <input type="hidden" name="serviceId" value={serviceId} />
       <label>
-        Next Status
+        {tService("nextStatus")}
         <select name="status" className="input mt-1">
-          <option value="COMPLETED">Complete Service</option>
-          {status === "SCHEDULED" && <option value="IN_PROGRESS">Start Service</option>}
-          <option value="CANCELLED">Cancel Scheduled / In-progress Service</option>
+          <option value="COMPLETED">{tService("completeService")}</option>
+          {status === "SCHEDULED" && (
+            <option value="IN_PROGRESS">{tService("startService")}</option>
+          )}
+          <option value="CANCELLED">{tService("cancelService")}</option>
         </select>
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
-          Service KM Reading
+          {tService("serviceKmReading")}
           <input
             name="serviceOdometerKm"
             inputMode="numeric"
@@ -278,7 +295,7 @@ export function ServiceStatusForm({
           />
         </label>
         <label>
-          Completed Date / Time (Oman)
+          {tService("completedDateTime")}
           <input
             name="completedAt"
             type="datetime-local"
@@ -288,26 +305,26 @@ export function ServiceStatusForm({
           />
         </label>
         <label>
-          Expense Amount (OMR)
+          {tService("expenseAmount")}
           <input name="cost" inputMode="decimal" defaultValue="0" required className="input mt-1" />
         </label>
         <label>
-          Payment Mode
+          {tCommon("paymentMode")}
           <select name="paymentMode" className="input mt-1">
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank</option>
+            <option value="CASH">{tStatus("CASH")}</option>
+            <option value="CARD">{tStatus("CARD")}</option>
+            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
           </select>
         </label>
       </div>
       <label>
-        Remarks / Reason
+        {tService("remarksReason")}
         <textarea name="remarks" required className="input mt-1" maxLength={2000} />
       </label>
-      {state.error && <p role="alert">{state.error}</p>}
-      {state.message && <p role="status">{state.message}</p>}
+      {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button type="submit" className="btn" disabled={pending || !!state.message}>
-        Update Service
+        {tService("updateService")}
       </button>
     </form>
   );

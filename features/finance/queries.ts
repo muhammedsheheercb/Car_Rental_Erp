@@ -26,6 +26,7 @@ export function bookingOption(row: Awaited<ReturnType<typeof bookingRows>>[numbe
     id: r.id,
     name: `${r.agreementNumber} · ${c.name} · ${v.vehicleNumber} · ${v.registrationNumber}`,
     vehicleId: v.id,
+    registration: v.registrationNumber,
     from: formatOmanDateTime(r.startsAt),
     to: formatOmanDateTime(r.actualReturnAt ?? r.expectedReturnAt),
     snapshot: {

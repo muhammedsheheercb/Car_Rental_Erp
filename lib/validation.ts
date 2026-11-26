@@ -262,7 +262,7 @@ export const cancellationSchema = z
   });
 export const damageSchema = z.object({
   rentalId: z.string().uuid(),
-  phase: z.enum(["BEFORE_RENTAL", "AFTER_RETURN"]),
+  phase: z.enum(["BEFORE_RENTAL", "DURING_RENTAL", "AFTER_RETURN"]),
   location: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(1000),
   remarks: z.string().trim().max(1000).optional(),

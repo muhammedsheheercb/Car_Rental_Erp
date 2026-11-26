@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { settingsAction } from "@/app/[locale]/(protected)/settings/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 
 export function ChangePasswordForm() {
+  const t = useTranslations();
+  const tSettings = useTranslations("settings");
+  const tAuth = useTranslations("auth");
+  const tAdmin = useTranslations("admin");
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
   const [showPasswords, setShowPasswords] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -24,22 +30,20 @@ export function ChangePasswordForm() {
       <input type="hidden" name="operation" value="password" />
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Change Password</h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Use at least 12 characters. Password changes are recorded in the security audit log.
-          </p>
+          <h2 className="text-lg font-semibold">{tSettings("changePasswordTitle")}</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">{tSettings("changePasswordNote")}</p>
         </div>
         <button
           type="button"
           onClick={() => setShowPasswords((v) => !v)}
           className="min-h-9 rounded-lg border border-[var(--edge)] px-3 text-xs text-[var(--muted)]"
         >
-          {showPasswords ? "Hide passwords" : "Show passwords"}
+          {showPasswords ? tSettings("hidePasswords") : tSettings("showPasswords")}
         </button>
       </div>
 
       <label className="block text-sm">
-        Current password
+        {tAuth("currentPassword")}
         <input
           name="currentPassword"
           type={showPasswords ? "text" : "password"}
@@ -51,7 +55,7 @@ export function ChangePasswordForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          New password
+          {tAuth("newPassword")}
           <input
             name="newPassword"
             type={showPasswords ? "text" : "password"}
@@ -59,12 +63,12 @@ export function ChangePasswordForm() {
             minLength={12}
             maxLength={128}
             required
-            placeholder="Minimum 12 characters"
+            placeholder={tAdmin("minPasswordPlaceholder")}
             className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
           />
         </label>
         <label className="block text-sm">
-          Confirm new password
+          {tAuth("confirmPassword")}
           <input
             name="confirmPassword"
             type={showPasswords ? "text" : "password"}
@@ -72,7 +76,7 @@ export function ChangePasswordForm() {
             minLength={12}
             maxLength={128}
             required
-            placeholder="Repeat new password"
+            placeholder={tSettings("repeatPasswordPlaceholder")}
             className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
           />
         </label>
@@ -80,12 +84,12 @@ export function ChangePasswordForm() {
 
       {state.error && (
         <p role="alert" className="text-sm text-red-300">
-          {state.error}
+          {translateValidation(t, state.error)}
         </p>
       )}
       {state.message && (
         <p role="status" className="text-sm text-[var(--accent)]">
-          {state.message}
+          {translateValidation(t, state.message)}
         </p>
       )}
 
@@ -94,7 +98,7 @@ export function ChangePasswordForm() {
         disabled={pending}
         className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-50"
       >
-        {pending ? "Updating password…" : "Update Password"}
+        {pending ? tSettings("updatingPassword") : tSettings("updatePassword")}
       </button>
     </form>
   );
@@ -110,20 +114,20 @@ export function PreferencesForm({
     dateFormat: "DMY" | "YMD";
   };
 }) {
+  const t = useTranslations();
+  const tSettings = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const [state, action, pending] = useActionState(settingsAction, { error: "", message: "" });
 
   return (
     <section className="grid gap-5 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5">
       <div>
-        <h2 className="text-lg font-semibold">Language & Preferences</h2>
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          Choose your interface language (with automatic RTL support for Arabic) and display
-          preferences.
-        </p>
+        <h2 className="text-lg font-semibold">{tSettings("languagePrefsTitle")}</h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">{tSettings("languagePrefsSubtitle")}</p>
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Interface language</p>
+        <p className="text-sm font-medium">{tSettings("interfaceLanguage")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
             href={"/en/settings" as never}
@@ -131,7 +135,7 @@ export function PreferencesForm({
             className={`min-h-11 rounded-xl border p-3 text-sm ${locale === "en" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-white" : "border-[var(--edge)] text-[var(--muted)] hover:text-white"}`}
           >
             <p className="font-semibold">English</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">Left-to-right (LTR)</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{tSettings("ltrLabel")}</p>
           </Link>
           <Link
             href={"/ar/settings" as never}
@@ -139,7 +143,7 @@ export function PreferencesForm({
             className={`min-h-11 rounded-xl border p-3 text-sm ${locale === "ar" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-white" : "border-[var(--edge)] text-[var(--muted)] hover:text-white"}`}
           >
             <p className="font-semibold">العربية</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">Right-to-left (RTL)</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{tSettings("rtlLabel")}</p>
           </Link>
         </div>
       </div>
@@ -148,40 +152,37 @@ export function PreferencesForm({
         <input type="hidden" name="operation" value="preferences" />
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">
-            Table density
+            {tSettings("tableDensity")}
             <select
               name="tableDensity"
               defaultValue={initialPreferences.tableDensity}
               className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
             >
-              <option value="comfortable">Comfortable</option>
-              <option value="compact">Compact</option>
+              <option value="comfortable">{tSettings("comfortable")}</option>
+              <option value="compact">{tSettings("compact")}</option>
             </select>
           </label>
           <label className="block text-sm">
-            Preferred date display
+            {tSettings("dateDisplay")}
             <select
               name="dateFormat"
               defaultValue={initialPreferences.dateFormat}
               className="mt-2 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-black/20 px-3"
             >
-              <option value="DMY">DD/MM/YYYY (Oman standard)</option>
-              <option value="YMD">YYYY-MM-DD (ISO)</option>
+              <option value="DMY">{tSettings("dmyLabel")}</option>
+              <option value="YMD">{tSettings("ymdLabel")}</option>
             </select>
           </label>
         </div>
-        <p className="text-xs text-[var(--muted)]">
-          Business timezone: <span className="text-[var(--ink)]">Asia/Muscat (UTC+04:00)</span> ·
-          Currency: <span className="text-[var(--ink)]">OMR (Omani Rial)</span>
-        </p>
+        <p className="text-xs text-[var(--muted)]">{tSettings("timezoneCurrencyNote")}</p>
         {state.error && (
           <p role="alert" className="text-sm text-red-300">
-            {state.error}
+            {translateValidation(t, state.error)}
           </p>
         )}
         {state.message && (
           <p role="status" className="text-sm text-[var(--accent)]">
-            {state.message}
+            {translateValidation(t, state.message)}
           </p>
         )}
         <button
@@ -189,7 +190,7 @@ export function PreferencesForm({
           disabled={pending}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-4 text-sm font-medium hover:border-[var(--accent)] disabled:opacity-50"
         >
-          {pending ? "Saving…" : "Save Preferences"}
+          {pending ? tCommon("saving") : tSettings("savePreferences")}
         </button>
       </form>
     </section>

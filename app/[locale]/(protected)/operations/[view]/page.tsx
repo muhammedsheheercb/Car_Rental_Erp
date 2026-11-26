@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, ilike, inArray, lt } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { OperationsBoard, type OperationsRow } from "@/components/operations-board";
 import { OperationsLinks, operationViews } from "@/components/operations-links";
 import { db } from "@/db/client";
@@ -14,7 +15,7 @@ import {
 } from "@/db/schema";
 import { availableFleet } from "@/features/rentals/availability";
 import { omanDayBounds } from "@/features/rentals/operations-time";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 export default async function OperationsPage({
   params,
   searchParams,
@@ -30,8 +31,13 @@ export default async function OperationsPage({
 }) {
   const { locale, view } = await params;
   if (!Object.hasOwn(operationViews, view)) notFound();
-  const title = operationViews[view as keyof typeof operationViews];
-  const actor = await requirePermission(view === "available" ? "fleet" : "rentals", "read");
+  const tOps = await getTranslations("operations");
+  const title = tOps(view as keyof typeof operationViews);
+  const actor = await requirePagePermission(
+    locale,
+    view === "available" ? "fleet" : "rentals",
+    "read",
+  );
   const filters = await searchParams;
   const now = new Date();
   const { start, end } = omanDayBounds(now);
@@ -112,9 +118,7 @@ export default async function OperationsPage({
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">{title}</h1>
       <OperationsLinks locale={locale} />
-      <p className="text-sm text-[var(--muted)]">
-        Times use Oman time (Asia/Muscat). Availability refreshes every minute.
-      </p>
+      <p className="text-sm text-[var(--muted)]">{tOps("refreshNote")}</p>
       <OperationsBoard view={view} rows={rows} initialNow={now.toISOString()} />
     </div>
   );

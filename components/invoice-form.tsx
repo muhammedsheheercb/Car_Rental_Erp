@@ -1,8 +1,11 @@
 "use client";
-import { useActionState, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useActionState, useRef, useState } from "react";
 import { invoiceAction } from "@/app/[locale]/(protected)/invoices/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { parseOMR } from "@/features/finance/calculations";
 import { invoiceCalculation, omrInput } from "@/features/invoices/calculations";
+import { translateFieldLabel, translateStatus, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
 export type InvoiceBooking = {
   id: string;
@@ -26,6 +29,11 @@ export function InvoiceForm({
   initialBooking?: string;
   record?: { id: string; washing: string; petrol: string; discount: string; remarks: string };
 }) {
+  const tRoot = useTranslations();
+  const tInvoices = useTranslations("invoices");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
+  const tFields = useTranslations("fieldLabels");
   const [state, action, pending] = useActionState(invoiceAction, { error: "", message: "" });
   const [requestId] = useState(() => crypto.randomUUID());
   const [bookingId, setBookingId] = useState(initialBooking ?? "");
@@ -65,6 +73,12 @@ export function InvoiceForm({
     } catch (e) {
       error = e instanceof Error ? e.message : "Invalid amounts.";
     }
+  const inputLabels = {
+    washing: tInvoices("washingOmr"),
+    petrol: tInvoices("petrolOmr"),
+    discount: tInvoices("discountOmr"),
+    received: tInvoices("receivedAmountOmr"),
+  } as const;
   return (
     <form
       action={action}
@@ -73,10 +87,10 @@ export function InvoiceForm({
       <input type="hidden" name="requestId" value={requestId} />
       {record && <input type="hidden" name="invoiceId" value={record.id} />}
       {record ? (
-        <p>Booking: {booking?.name}</p>
+        <p>{tInvoices("bookingLabel", { name: booking?.name ?? "" })}</p>
       ) : (
         <SearchableCombobox
-          label="Bill / Booking Number"
+          label={tInvoices("billBookingNumber")}
           options={bookings}
           value={bookingId}
           onChange={setBookingId}
@@ -88,21 +102,26 @@ export function InvoiceForm({
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Object.entries(booking.snapshot).map(([k, v]) => (
               <div key={k}>
-                <dt className="text-sm text-[var(--muted)]">{k}</dt>
-                <dd>{v ?? "—"}</dd>
+                <dt className="text-sm text-[var(--muted)]">{translateFieldLabel(tFields, k)}</dt>
+                <dd>
+                  {v == null
+                    ? "—"
+                    : k === "Status" || k === "Rental Type"
+                      ? translateStatus(tStatus, String(v))
+                      : v}
+                </dd>
               </div>
             ))}
           </dl>
           <p>
-            Transfer Vehicle Balance (OMR): {omrInput(booking.transferBalance)} — already carried in
-            this booking’s ledger.
+            {tInvoices("transferBalanceCarried", { amount: omrInput(booking.transferBalance) })}
           </p>
         </>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         {(["washing", "petrol", "discount", "received"] as const).map((k) => (
           <label key={k}>
-            {k === "received" ? "Received Amount" : k} (OMR)
+            {inputLabels[k]}
             <input
               name={k}
               inputMode="decimal"
@@ -114,18 +133,18 @@ export function InvoiceForm({
           </label>
         ))}
         <label>
-          Payment Mode
+          {tCommon("paymentMode")}
           <select name="method" className="input mt-1">
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank</option>
+            <option value="CASH">{tStatus("CASH")}</option>
+            <option value="CARD">{tStatus("CARD")}</option>
+            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
           </select>
         </label>
         <label>
-          Status
+          {tCommon("status")}
           <select name="status" className="input mt-1">
-            <option value="DRAFT">Draft</option>
-            {booking?.canFinalize && <option value="FINALIZED">Finalize</option>}
+            <option value="DRAFT">{tStatus("DRAFT")}</option>
+            {booking?.canFinalize && <option value="FINALIZED">{tInvoices("finalize")}</option>}
           </select>
         </label>
       </div>
@@ -154,17 +173,14 @@ export function InvoiceForm({
               parseOMR(values.received),
           }).map(([k, v]) => (
             <div key={k}>
-              {k}: <strong>{omrInput(v)}</strong>
+              {translateFieldLabel(tFields, k)}: <strong>{omrInput(v)}</strong>
             </div>
           ))}
         </dl>
       )}
-      <p className="text-sm text-[var(--muted)]">
-        Drafts do not post charges or payments. Finalize after return or cancellation. Security
-        deposits are held separately from invoice charges.
-      </p>
+      <p className="text-sm text-[var(--muted)]">{tInvoices("draftNote")}</p>
       <label>
-        Remarks
+        {tCommon("remarks")}
         <textarea
           name="remarks"
           className="input mt-1"
@@ -174,39 +190,65 @@ export function InvoiceForm({
       </label>
       {(error || state.error) && (
         <p role="alert" className="text-red-400">
-          {state.error || error}
+          {translateValidation(tRoot, state.error || error)}
         </p>
       )}
-      {state.message && <p role="status">{state.message}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button
         type="submit"
         className="btn"
         disabled={pending || !booking || !!error || !!state.message}
       >
-        {pending ? "Saving…" : "Save Invoice"}
+        {pending ? tCommon("saving") : tInvoices("saveInvoice")}
       </button>
     </form>
   );
 }
 export function VoidInvoiceForm({ invoiceId }: { invoiceId: string }) {
+  const tRoot = useTranslations();
+  const tInvoices = useTranslations("invoices");
+  const tCommon = useTranslations("common");
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(invoiceAction, { error: "", message: "" });
   return (
     <form
+      ref={formRef}
       action={action}
       className="grid gap-3 rounded-xl border border-[var(--edge)] p-4 print:hidden"
     >
       <input type="hidden" name="operation" value="void" />
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <label>
-        Reason for void / reversal
+        {tInvoices("voidReason")}
         <textarea name="reason" className="input mt-1" required maxLength={1000} />
       </label>
-      <p>Retains the invoice and payments; reverses only charges added by this invoice.</p>
-      {state.error && <p role="alert">{state.error}</p>}
-      {state.message && <p role="status">{state.message}</p>}
-      <button type="submit" disabled={pending || !!state.message} className="btn">
-        Void Invoice
-      </button>
+      <p>{tInvoices("voidNote")}</p>
+      {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
+      {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
+      <ConfirmDialog
+        title={tInvoices("voidConfirmTitle")}
+        description={tInvoices("voidConfirmDesc")}
+        confirmLabel={tInvoices("voidInvoice")}
+        pending={pending}
+        processingLabel={tCommon("saving")}
+        onConfirm={() => {
+          formRef.current?.requestSubmit();
+        }}
+        trigger={
+          <button
+            type="button"
+            disabled={pending || !!state.message}
+            onClick={(event) => {
+              if (formRef.current && !formRef.current.reportValidity()) {
+                event.preventDefault();
+              }
+            }}
+            className="btn"
+          >
+            {tInvoices("voidInvoice")}
+          </button>
+        }
+      />
     </form>
   );
 }

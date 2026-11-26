@@ -1,11 +1,13 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/db/client";
 import { branches, vehicleInsurance, vehicleRegistrations, vehicles } from "@/db/schema";
 import { expiryStatus } from "@/features/maintenance/calculations";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -25,8 +27,15 @@ export default async function ExpiryPage({
     page?: string;
   }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
-  const [{ locale }, query] = await Promise.all([params, searchParams]);
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "read");
+  const [query, tExpiry, tFleet, tCommon, tStatus] = await Promise.all([
+    searchParams,
+    getTranslations("fleet.expiry"),
+    getTranslations("fleet"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const q = query.q?.trim() ?? "";
   const status = query.status ?? "";
   const branchFilter = query.branch && UUID_RE.test(query.branch) ? query.branch : "";
@@ -127,34 +136,36 @@ export default async function ExpiryPage({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-[var(--accent)]">FLEET COMPLIANCE</p>
-        <h1 className="mt-2 text-3xl font-semibold">Expiry</h1>
+        <p className="text-sm text-[var(--accent)]">{tExpiry("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{tExpiry("title")}</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Today in Oman: {formatOmanDateTime(now).slice(0, 10)} · Expiring Soon threshold:{" "}
-          {policy.expirySoonDays} days. Documents remain valid through their expiry date.
+          {tExpiry("subtitle", {
+            today: formatOmanDateTime(now).slice(0, 10),
+            days: policy.expirySoonDays,
+          })}
         </p>
       </div>
 
       <form className="grid gap-3 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-xs text-[var(--muted)]">
-          Search
+          {tCommon("search")}
           <input
             name="q"
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
             defaultValue={q}
-            placeholder="Vehicle / Registration / Branch"
-            aria-label="Search expiry"
+            placeholder={tExpiry("searchPlaceholder")}
+            aria-label={tCommon("search")}
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Branch
+          {tCommon("branch")}
           <select
             name="branch"
             defaultValue={branchFilter}
-            aria-label="Filter by branch"
+            aria-label={tCommon("branch")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All branches</option>
+            <option value="">{tCommon("allBranches")}</option>
             {branchOptions.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name} · {b.code}
@@ -163,36 +174,36 @@ export default async function ExpiryPage({
           </select>
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Document type
+          {tExpiry("documentType")}
           <select
             name="docType"
             defaultValue={docType}
-            aria-label="Document type"
+            aria-label={tExpiry("documentType")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="all">All documents</option>
-            <option value="mulkiya">Mulkiya</option>
-            <option value="insurance">Insurance</option>
+            <option value="all">{tCommon("allDocuments")}</option>
+            <option value="mulkiya">{tFleet("mulkiya")}</option>
+            <option value="insurance">{tFleet("insurance")}</option>
           </select>
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Expiry status
+          {tExpiry("expiryStatus")}
           <select
             name="status"
             defaultValue={status}
-            aria-label="Expiry status"
+            aria-label={tExpiry("expiryStatus")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All statuses</option>
+            <option value="">{tCommon("allStatuses")}</option>
             {["Expired", "Expiring Soon", "Valid", "Not configured"].map((s) => (
               <option key={s} value={s}>
-                {s}
+                {translateStatus(tStatus, s)}
               </option>
             ))}
           </select>
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Expiry from
+          {tExpiry("expiryFrom")}
           <input
             type="date"
             name="from"
@@ -201,7 +212,7 @@ export default async function ExpiryPage({
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Expiry to
+          {tExpiry("expiryTo")}
           <input
             type="date"
             name="to"
@@ -214,35 +225,33 @@ export default async function ExpiryPage({
             type="submit"
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
           >
-            Search / Filter
+            {tCommon("searchFilter")}
           </button>
           {(q || status || branchFilter || docType !== "all" || from || to) && (
             <Link
               href={`/${locale}/expiry` as never}
               className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
             >
-              Clear
+              {tCommon("clear")}
             </Link>
           )}
         </div>
       </form>
 
-      <p className="text-sm text-[var(--muted)]">
-        {total} matching document record{total === 1 ? "" : "s"}
-      </p>
+      <p className="text-sm text-[var(--muted)]">{tExpiry("recordsCount", { count: total })}</p>
 
       <div className="overflow-x-auto rounded-2xl border border-[var(--edge)] bg-[var(--surface)]">
         <table className="w-full min-w-[48rem] text-start text-sm">
           <thead className="bg-[var(--raised)] text-[var(--muted)]">
             <tr>
               {[
-                "Vehicle",
-                "Registration",
-                "Document",
-                "Expiry Date",
-                "Days Remaining",
-                "Branch",
-                "Status",
+                tCommon("vehicle"),
+                tCommon("registration"),
+                tExpiry("documentCol"),
+                tExpiry("expiryDateCol"),
+                tExpiry("daysRemainingCol"),
+                tCommon("branch"),
+                tCommon("status"),
               ].map((h) => (
                 <th className="p-3 text-start text-xs font-medium uppercase tracking-wide" key={h}>
                   {h}
@@ -255,7 +264,9 @@ export default async function ExpiryPage({
               <tr key={r.key} className="border-t border-[var(--edge)] hover:bg-white/5">
                 <td className="p-3 font-medium">{r.vehicleNumber}</td>
                 <td className="p-3 font-mono text-xs">{r.registrationNumber}</td>
-                <td className="p-3">{r.documentLabel}</td>
+                <td className="p-3">
+                  {r.documentLabel === "Mulkiya" ? tFleet("mulkiya") : tFleet("insurance")}
+                </td>
                 <td className="p-3">{r.expiryDate ?? "—"}</td>
                 <td className="p-3 font-semibold">{r.daysRemaining ?? "—"}</td>
                 <td className="p-3">{r.branch}</td>
@@ -269,35 +280,37 @@ export default async function ExpiryPage({
                           : "bg-white/10 text-[var(--ink)]"
                     }`}
                   >
-                    {r.status}
+                    {translateStatus(tStatus, r.status)}
                   </span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!shown.length && <p className="p-6 text-sm text-[var(--muted)]">No matching vehicles.</p>}
+        {!shown.length && (
+          <p className="p-6 text-sm text-[var(--muted)]">{tExpiry("noMatching")}</p>
+        )}
       </div>
 
       {total > PAGE_SIZE && (
-        <nav aria-label="Expiry pages" className="flex items-center justify-end gap-3 text-sm">
+        <nav aria-label={tExpiry("title")} className="flex items-center justify-end gap-3 text-sm">
           {safePage > 1 && (
             <Link
               href={pageHref(safePage - 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="text-[var(--muted)]">
-            Page {safePage} of {totalPages}
+            {tCommon("pageOf", { page: safePage, total: totalPages })}
           </span>
           {safePage < totalPages && (
             <Link
               href={pageHref(safePage + 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

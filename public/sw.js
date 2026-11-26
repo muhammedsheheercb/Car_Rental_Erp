@@ -1,36 +1,75 @@
-self.addEventListener("install", () => {
-  // Updates wait for an explicit user decision; a new installation activates normally.
+const CACHE_NAME = "muscat-cars-static-v3";
+const OFFLINE_URL = "/offline.html";
+
+self.addEventListener("install", (event) => {
+  // Precache the static offline fallback; updates still wait for explicit user approval.
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.add(OFFLINE_URL))
+      .catch(() => undefined),
+  );
 });
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("muscat-cars-") && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  ),
+);
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
-  // Never cache navigations, RSC payloads, API responses or requests carrying a session.
-  // They can contain personal data, permissions or an expiring authenticated state.
   if (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
     request.method !== "GET" ||
-    request.headers.get("cookie") ||
     url.origin !== self.location.origin ||
-    request.mode === "navigate" ||
     url.pathname.startsWith("/api/") ||
     url.pathname.includes("_rsc")
   )
     return;
+
+  // Never cache authenticated navigations; serve the static offline fallback only if network fails.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const offline = await caches.match(OFFLINE_URL);
+        if (offline) return offline;
+        return new Response("Offline", { status: 503, statusText: "Offline" });
+      }),
+    );
+    return;
+  }
+
+  if (request.headers.get("cookie")) return;
+
   const staticAsset =
     ["style", "script", "image", "font"].includes(request.destination) ||
-    url.pathname.startsWith("/_next/static/");
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname === OFFLINE_URL;
   if (!staticAsset) return;
   event.respondWith(
-    caches.open("muscat-cars-static-v1").then(async (cache) => {
-      const cached = await cache.match(request);
-      const network = fetch(request).then((response) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      try {
+        const response = await fetch(request);
         if (response.ok && response.type === "basic") cache.put(request, response.clone());
         return response;
-      });
-      return cached ?? network;
+      } catch {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        throw new Error("Offline and asset not cached");
+      }
     }),
   );
 });

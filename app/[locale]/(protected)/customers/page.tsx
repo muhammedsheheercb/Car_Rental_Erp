@@ -1,10 +1,11 @@
 import { and, count, desc, eq, ilike, isNotNull, or } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { CustomerActions } from "@/components/customer-actions";
 import { MasterSearch } from "@/components/master-search";
 import { db } from "@/db/client";
 import { customerBlacklist, customers } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 
 const PAGE_SIZE = 15;
 
@@ -15,10 +16,14 @@ export default async function CustomersPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
   params: Promise<{ locale: string }>;
 }) {
-  await requirePermission("customers", "read");
-  const [{ q = "", status = "all", page = "1" }, { locale }] = await Promise.all([
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "customers", "read");
+  const canViewLedger = can(actor, "finance", "read");
+  const [{ q = "", status = "all", page = "1" }, tCust, tCommon, tStatus] = await Promise.all([
     searchParams,
-    params,
+    getTranslations("customers"),
+    getTranslations("common"),
+    getTranslations("status"),
   ]);
   const currentPage = Math.max(1, Number.parseInt(page, 10) || 1);
   const statusFilter = ["all", "active", "inactive", "blacklisted"].includes(status)
@@ -89,39 +94,44 @@ export default async function CustomersPage({
     <>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">CUSTOMERS</p>
-          <h1 className="mt-2 text-3xl font-semibold">Customers</h1>
+          <p className="text-sm text-[var(--accent)]">{tCust("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tCust("title")}</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canViewLedger && (
+            <Link
+              href={`/${locale}/ledger` as never}
+              className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-sm"
+            >
+              {tCust("customerLedger")}
+            </Link>
+          )}
           <Link
             href={`/${locale}/customers/blacklist`}
             className="min-h-11 rounded-lg border border-[var(--edge)] px-3 py-3 text-sm"
           >
-            Blacklist
+            {tCust("blacklist")}
           </Link>
           <Link
             href={`/${locale}/customers/new`}
             className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-black"
           >
-            New customer
+            {tCust("newCustomer")}
           </Link>
         </div>
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1">
-          <MasterSearch
-            initialValue={q}
-            placeholder="Search customer, number, mobile, or driving licence"
-          />
+          <MasterSearch initialValue={q} placeholder={tCust("searchPlaceholder")} />
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           {(
             [
-              ["all", "All"],
-              ["active", "Active"],
-              ["inactive", "Inactive"],
-              ["blacklisted", "Blacklisted"],
+              ["all", tCommon("all")],
+              ["active", tStatus("ACTIVE")],
+              ["inactive", tStatus("INACTIVE")],
+              ["blacklisted", tStatus("BLACKLISTED")],
             ] as const
           ).map(([value, label]) => (
             <Link
@@ -140,17 +150,17 @@ export default async function CustomersPage({
       </div>
 
       <p className="mt-3 text-sm text-[var(--muted)]">
-        {total} customer{total === 1 ? "" : "s"}
+        {tCust("customersCount", { count: total })}
       </p>
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-[var(--edge)]">
         <table className="min-w-[68rem] w-full table-fixed text-sm">
           <thead className="bg-[var(--raised)] text-[var(--muted)]">
             <tr>
-              <th className="w-[35%] px-4 py-3 text-start">Customer</th>
-              <th className="px-4 py-3 text-start">Mobile</th>
-              <th className="px-4 py-3 text-center">Status</th>
-              <th className="w-[29rem] px-4 py-3 text-center">Actions</th>
+              <th className="w-[35%] px-4 py-3 text-start">{tCommon("customer")}</th>
+              <th className="px-4 py-3 text-start">{tCust("mobileCol")}</th>
+              <th className="px-4 py-3 text-center">{tCommon("status")}</th>
+              <th className="w-[33rem] px-4 py-3 text-center">{tCommon("actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -166,15 +176,17 @@ export default async function CustomersPage({
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs ${customer.blacklistId ? "bg-red-400/15 text-red-200" : "bg-[var(--surface)]"}`}
                   >
                     {customer.blacklistId
-                      ? "Blacklisted"
+                      ? tStatus("BLACKLISTED")
                       : customer.isActive
-                        ? "Active"
-                        : "Inactive"}
+                        ? tStatus("ACTIVE")
+                        : tStatus("INACTIVE")}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <CustomerActions
                     id={customer.id}
+                    locale={locale}
+                    canViewLedger={canViewLedger}
                     name={customer.name}
                     number={customer.customerNumber}
                     active={customer.isActive}
@@ -187,12 +199,12 @@ export default async function CustomersPage({
             ))}
           </tbody>
         </table>
-        {!rows.length && <p className="p-8 text-[var(--muted)]">No customers found.</p>}
+        {!rows.length && <p className="p-8 text-[var(--muted)]">{tCust("noCustomers")}</p>}
       </div>
 
       {total > PAGE_SIZE && (
         <nav
-          aria-label="Customer pages"
+          aria-label={tCust("title")}
           className="mt-4 flex items-center justify-end gap-3 text-sm"
         >
           {currentPage > 1 && (
@@ -200,18 +212,18 @@ export default async function CustomersPage({
               href={hrefWith({ page: currentPage - 1 }) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="text-[var(--muted)]">
-            Page {currentPage} of {totalPages}
+            {tCommon("pageOf", { page: currentPage, total: totalPages })}
           </span>
           {currentPage < totalPages && (
             <Link
               href={hrefWith({ page: currentPage + 1 }) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

@@ -1,15 +1,18 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 export function MasterSearch({
   initialValue,
-  placeholder = "Search brand or model",
+  placeholder,
 }: {
   initialValue: string;
   placeholder?: string;
 }) {
+  const tCommon = useTranslations("common");
+  const tMaster = useTranslations("fleet.master");
   const [value, setValue] = useState(initialValue);
   const router = useRouter();
   const pathname = usePathname();
@@ -38,7 +41,7 @@ export function MasterSearch({
       <input
         value={value}
         onChange={(event) => update(event.target.value)}
-        placeholder={placeholder}
+        placeholder={placeholder ?? tMaster("searchPlaceholder")}
         className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3"
       />
       {value && (
@@ -47,10 +50,12 @@ export function MasterSearch({
           onClick={() => update("")}
           className="min-h-11 shrink-0 rounded-lg border border-[var(--edge)] px-4"
         >
-          Clear
+          {tCommon("clear")}
         </button>
       )}
-      {pending && <span className="self-center text-xs text-[var(--muted)]">Searching…</span>}
+      {pending && (
+        <span className="self-center text-xs text-[var(--muted)]">{tCommon("searching")}</span>
+      )}
     </div>
   );
 }

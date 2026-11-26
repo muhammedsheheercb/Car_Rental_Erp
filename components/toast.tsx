@@ -1,6 +1,8 @@
 "use client";
 import * as Toast from "@radix-ui/react-toast";
+import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { translateValidation } from "@/lib/i18n-helpers";
 
 type Tone = "success" | "error" | "warning" | "info" | "loading";
 type Notice = { text: string; tone: Tone };
@@ -15,22 +17,31 @@ const ToastContext = createContext<Notifications>({
   complete: () => undefined,
 });
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations();
   const [notice, setNotice] = useState<Notice | null>(null);
   const currentKey = useRef("");
-  const show = useCallback((text: string, tone: Tone = "success", key = text) => {
-    if (currentKey.current === key) return;
-    currentKey.current = key;
-    setNotice({ text, tone });
-  }, []);
-  const loading = useCallback((text: string, key: string) => {
-    currentKey.current = key;
-    setNotice({ text, tone: "loading" });
-  }, []);
+  const show = useCallback(
+    (text: string, tone: Tone = "success", key = text) => {
+      if (currentKey.current === key) return;
+      currentKey.current = key;
+      setNotice({ text: translateValidation(t, text), tone });
+    },
+    [t],
+  );
+  const loading = useCallback(
+    (text: string, key: string) => {
+      currentKey.current = key;
+      setNotice({ text: translateValidation(t, text), tone: "loading" });
+    },
+    [t],
+  );
   const complete = useCallback(
     (key: string, text: string, tone: Exclude<Tone, "loading"> = "success") => {
-      if (currentKey.current === key) setNotice({ text, tone });
+      if (currentKey.current === key) {
+        setNotice({ text: translateValidation(t, text), tone });
+      }
     },
-    [],
+    [t],
   );
   const icon =
     notice?.tone === "success"
@@ -46,6 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {children}
         <Toast.Root
           data-app-ui
+          data-dark-surface
           open={Boolean(notice)}
           duration={notice?.tone === "loading" ? Infinity : 4500}
           onOpenChange={(open) => {
@@ -54,15 +66,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               currentKey.current = "";
             }
           }}
-          className={`fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[70] flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl sm:inset-x-auto sm:right-4 sm:max-w-md md:bottom-4 ${notice?.tone === "error" ? "border-red-400/40 bg-red-950 text-red-100" : notice?.tone === "warning" ? "border-amber-300/40 bg-amber-950 text-amber-100" : "border-[var(--accent)]/40 bg-[var(--raised)]"}`}
+          className={`fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[70] flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl sm:inset-x-auto sm:end-4 sm:max-w-md md:bottom-4 ${notice?.tone === "error" ? "border-red-400/40 bg-red-950 text-red-100" : notice?.tone === "warning" ? "border-amber-300/40 bg-amber-950 text-amber-100" : "border-[#CFA968]/40 bg-[#161513] text-[#FAF8F5]"}`}
         >
           <span aria-hidden="true" className="grid h-5 w-5 place-items-center font-bold">
             {icon}
           </span>
           <Toast.Title className="text-sm font-medium">{notice?.text}</Toast.Title>
           <Toast.Close
-            aria-label="Dismiss notification"
-            className="ms-auto min-h-8 px-1 text-[var(--muted)]"
+            aria-label={t("common.dismissNotification")}
+            className="ms-auto min-h-8 px-1 text-[#D7D1C7] hover:text-white"
           >
             ×
           </Toast.Close>

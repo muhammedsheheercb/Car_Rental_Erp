@@ -1,5 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
 import { login } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
 export async function loginAction(_: { error?: string }, formData: FormData) {
@@ -7,5 +8,6 @@ export async function loginAction(_: { error?: string }, formData: FormData) {
   if (!parsed.success) return { error: "Enter a valid username and password." };
   const result = await login(parsed.data.username, parsed.data.password);
   if (!result.ok) return { error: result.error };
-  redirect(result.mustChangePassword ? "/en/change-password" : "/en/dashboard");
+  const locale = (await getLocale()) === "ar" ? "ar" : "en";
+  redirect(result.mustChangePassword ? `/${locale}/change-password` : `/${locale}/dashboard`);
 }

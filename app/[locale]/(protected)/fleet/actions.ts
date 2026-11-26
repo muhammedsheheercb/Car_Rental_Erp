@@ -51,7 +51,7 @@ export async function createBrandAction(formData: FormData) {
     return { ok: false, message: "Enter a brand name and at least one model." };
   try {
     await createBrand(input, actor);
-    revalidatePath("/en/fleet/master");
+    for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/fleet/master`);
     return { ok: true, message: "Vehicle brand created successfully." };
   } catch {
     return { ok: false, message: "This brand or model already exists." };
@@ -139,7 +139,7 @@ export async function deleteVehicleAction(id: string, deactivate = false) {
   const actor = await requirePermission("fleet", deactivate ? "update" : "delete");
   try {
     const result = await deleteVehicle(id, actor, deactivate);
-    revalidatePath("/en/fleet");
+    revalidateFleetPaths();
     return {
       ok: true,
       message: result.deactivated
@@ -163,7 +163,7 @@ export async function setVehicleActiveAction(id: string, active: boolean) {
   const actor = await requirePermission("fleet", "update");
   try {
     await setVehicleActive(id, active, actor);
-    revalidatePath("/en/fleet");
+    revalidateFleetPaths();
     return {
       ok: true,
       message: active ? "Vehicle activated successfully." : "Vehicle deactivated successfully.",
@@ -184,7 +184,7 @@ export async function deleteBrandAction(id: string, deactivate = false) {
   const actor = await requirePermission("fleet", "delete");
   try {
     await deleteBrand(id, actor, deactivate);
-    revalidatePath("/en/fleet/master");
+    for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/fleet/master`);
     return {
       ok: true,
       message: deactivate
@@ -205,7 +205,7 @@ export async function updateBrandAction(id: string, input: unknown) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Enter valid brand details." };
   try {
     await updateBrand(id, parsed.data, actor);
-    revalidatePath("/en/fleet/master");
+    for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/fleet/master`);
     return { ok: true, message: "Vehicle brand updated successfully." };
   } catch {
     return { ok: false, message: "A matching brand or model already exists." };

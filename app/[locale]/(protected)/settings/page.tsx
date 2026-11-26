@@ -1,19 +1,32 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ChangePasswordForm, PreferencesForm } from "@/components/settings-account-forms";
 import { AlertSettingsForm } from "@/components/settings-forms";
 import { db } from "@/db/client";
 import { branches, userSignatures } from "@/db/schema";
 import { fleetAlertSettings } from "@/features/maintenance/settings";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 import { userPreferencesSchema } from "@/lib/validation";
 
 export default async function SettingsPage({ params }: { params: Promise<{ locale: string }> }) {
-  const actor = await requirePermission("settings", "read");
   const { locale } = await params;
+  const actor = await requirePagePermission(locale, "settings", "read");
 
-  const [policy, assignedBranches, ownSignatureRows, cookieStore] = await Promise.all([
+  const [
+    policy,
+    assignedBranches,
+    ownSignatureRows,
+    cookieStore,
+    tSettings,
+    tAdmin,
+    tAuth,
+    tCommon,
+    tStatus,
+    tNav,
+  ] = await Promise.all([
     fleetAlertSettings(),
     db
       .select({
@@ -39,6 +52,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
       .where(and(eq(userSignatures.userId, actor.id), eq(userSignatures.isCurrent, true)))
       .limit(1),
     cookies(),
+    getTranslations("settings"),
+    getTranslations("admin"),
+    getTranslations("auth"),
+    getTranslations("common"),
+    getTranslations("status"),
+    getTranslations("nav"),
   ]);
 
   let preferences: { tableDensity: "comfortable" | "compact"; dateFormat: "DMY" | "YMD" } = {
@@ -61,59 +80,54 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-[var(--accent)]">ACCOUNT & SYSTEM</p>
-          <h1 className="mt-2 text-3xl font-semibold">Settings</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Manage your profile, password, language preferences, signatures, and branch alert
-            thresholds.
-          </p>
+          <p className="text-sm text-[var(--accent)]">{tSettings("eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold">{tSettings("title")}</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">{tSettings("subtitle")}</p>
         </div>
         <Link
           href={`/${locale}/settings/signature` as never}
           className="min-h-11 content-center rounded-lg bg-[var(--accent)] px-4 text-center text-sm font-semibold text-black"
         >
-          User Signature Settings
+          {tSettings("signatureButton")}
         </Link>
       </div>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="grid gap-5 rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5">
           <div>
-            <h2 className="text-lg font-semibold">Profile & Branch Access</h2>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              Signed-in account details and permitted operating branches.
-            </p>
+            <h2 className="text-lg font-semibold">{tSettings("profileTitle")}</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">{tSettings("profileSubtitle")}</p>
           </div>
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div className="border-b border-[var(--edge)] pb-3">
-              <dt className="text-xs text-[var(--muted)]">Display name</dt>
+              <dt className="text-xs text-[var(--muted)]">{tAdmin("displayName")}</dt>
               <dd className="mt-1 font-medium">{actor.displayName}</dd>
             </div>
             <div className="border-b border-[var(--edge)] pb-3">
-              <dt className="text-xs text-[var(--muted)]">Username</dt>
+              <dt className="text-xs text-[var(--muted)]">{tAuth("username")}</dt>
               <dd className="mt-1 font-mono">{actor.username}</dd>
             </div>
             <div className="border-b border-[var(--edge)] pb-3">
-              <dt className="text-xs text-[var(--muted)]">Role</dt>
+              <dt className="text-xs text-[var(--muted)]">{tAdmin("roleCol")}</dt>
               <dd className="mt-1">
                 <span className="rounded-full bg-[var(--accent)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--accent)]">
-                  {actor.role}
+                  {translateStatus(tStatus, actor.role)}
                 </span>
               </dd>
             </div>
             <div className="border-b border-[var(--edge)] pb-3">
-              <dt className="text-xs text-[var(--muted)]">Branch scope</dt>
+              <dt className="text-xs text-[var(--muted)]">{tSettings("branchScope")}</dt>
               <dd className="mt-1">
                 {actor.role === "SUPER_ADMIN"
-                  ? `All active branches (${assignedBranches.length})`
-                  : `${assignedBranches.length} assigned branch${assignedBranches.length === 1 ? "" : "es"}`}
+                  ? tSettings("allActiveBranches", { count: assignedBranches.length })
+                  : tSettings("assignedBranches", { count: assignedBranches.length })}
               </dd>
             </div>
           </dl>
 
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-              Permitted branches
+              {tSettings("permittedBranches")}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {assignedBranches.map((branch) => (
@@ -126,18 +140,18 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
                 </span>
               ))}
               {!assignedBranches.length && (
-                <span className="text-xs text-[var(--muted)]">No branches assigned.</span>
+                <span className="text-xs text-[var(--muted)]">
+                  {tSettings("noBranchesAssigned")}
+                </span>
               )}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--edge)] bg-black/20 p-4">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Digital signature</p>
+              <p className="text-sm font-medium">{tSettings("digitalSignature")}</p>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
-                {ownSignature
-                  ? "Configured and automatically applied to your printed documents."
-                  : "Not configured yet. Add your signature for printed bills and agreements."}
+                {ownSignature ? tSettings("signatureConfigured") : tSettings("signatureMissing")}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -146,7 +160,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
                   {/* biome-ignore lint/performance/noImgElement: authenticated private signature preview */}
                   <img
                     src={`/api/user-signatures/${ownSignature.id}`}
-                    alt="Current user signature"
+                    alt={tSettings("digitalSignature")}
                     className="h-10 w-24 object-contain"
                   />
                 </div>
@@ -155,7 +169,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
                 href={`/${locale}/settings/signature` as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3 text-sm font-medium text-[var(--accent)]"
               >
-                {ownSignature ? "Manage" : "Set up"}
+                {ownSignature ? tSettings("manage") : tSettings("setUp")}
               </Link>
             </div>
           </div>
@@ -174,20 +188,22 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
           />
         ) : (
           <div className="rounded-2xl border border-[var(--edge)] bg-[var(--surface)] p-5">
-            <h2 className="text-lg font-semibold">Branch & Fleet Alert Thresholds</h2>
+            <h2 className="text-lg font-semibold">{tSettings("alertThresholdsReadonlyTitle")}</h2>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Configured by administrators for all operating branches.
+              {tSettings("alertThresholdsAdminNote")}
             </p>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--edge)] bg-black/20 p-3">
-                <dt className="text-xs text-[var(--muted)]">Near To Service</dt>
+                <dt className="text-xs text-[var(--muted)]">{tNav("nearToService")}</dt>
                 <dd className="mt-1 text-lg font-semibold">
-                  {policy.nearServiceKm.toLocaleString()} KM
+                  {policy.nearServiceKm.toLocaleString()} {tCommon("km")}
                 </dd>
               </div>
               <div className="rounded-xl border border-[var(--edge)] bg-black/20 p-3">
-                <dt className="text-xs text-[var(--muted)]">Expiring Soon</dt>
-                <dd className="mt-1 text-lg font-semibold">{policy.expirySoonDays} days</dd>
+                <dt className="text-xs text-[var(--muted)]">{tStatus("EXPIRING_SOON")}</dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {policy.expirySoonDays} {tCommon("days")}
+                </dd>
               </div>
             </dl>
           </div>

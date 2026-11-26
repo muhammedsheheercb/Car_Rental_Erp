@@ -3,6 +3,7 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
+  auditLogs,
   customers,
   rentals,
   serviceExpenses,
@@ -234,6 +235,20 @@ export async function createService(raw: unknown, actor: Identity) {
     await tx
       .insert(serviceHistory)
       .values({ serviceId: record.id, action: "CREATED", snapshot: record, actorId: actor.id });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: input.status === "COMPLETED" ? "SERVICE_COMPLETED" : "SERVICE_CREATED",
+      entityType: "service",
+      entityId: record.id,
+      branchId: v.branchId,
+      metadata: {
+        vehicleNumber: v.vehicleNumber,
+        registrationNumber: v.registrationNumber,
+        serviceType: input.type,
+        status: input.status,
+        costBaisa: input.status === "COMPLETED" ? input.cost : 0,
+      },
+    });
     return record;
   });
 }
@@ -292,6 +307,19 @@ export async function changeService(raw: unknown, actor: Identity) {
       action: input.status,
       snapshot: { before: s, after: updated, remarks: input.remarks },
       actorId: actor.id,
+    });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: input.status === "COMPLETED" ? "SERVICE_COMPLETED" : "SERVICE_UPDATED",
+      entityType: "service",
+      entityId: s.id,
+      branchId: s.branchId ?? v.branchId,
+      metadata: {
+        vehicleNumber: v.vehicleNumber,
+        registrationNumber: v.registrationNumber,
+        status: input.status,
+        remarks: input.remarks,
+      },
     });
     return updated;
   });

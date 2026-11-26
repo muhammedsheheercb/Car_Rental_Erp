@@ -32,10 +32,18 @@ export async function audit(
   entityType: string,
   entityId?: string,
   actorId?: string,
+  branchId?: string,
+  metadata?: Record<string, unknown>,
 ) {
-  await db
-    .insert(auditLogs)
-    .values({ event, entityType, entityId, actorId, ipHash: await requestIpHash() });
+  await db.insert(auditLogs).values({
+    event,
+    entityType,
+    entityId,
+    actorId,
+    branchId,
+    metadata: metadata ?? {},
+    ipHash: await requestIpHash(),
+  });
 }
 
 export async function login(username: string, password: string) {
@@ -152,6 +160,18 @@ export function can(identity: Identity, module: string, action: string, branchId
 export async function requirePermission(module: string, action: string, branchId?: string) {
   const identity = await requireIdentity();
   if (!can(identity, module, action, branchId)) throw new Error("FORBIDDEN");
+  return identity;
+}
+export async function requirePagePermission(
+  locale: string,
+  module: string,
+  action: string,
+  branchId?: string,
+) {
+  const identity = await requireIdentity();
+  if (!can(identity, module, action, branchId)) {
+    redirect(`/${locale === "ar" ? "ar" : "en"}/forbidden`);
+  }
   return identity;
 }
 export async function changePassword(

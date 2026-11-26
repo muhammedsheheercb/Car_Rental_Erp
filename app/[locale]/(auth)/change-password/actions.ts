@@ -1,5 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
 import { changePassword, requireIdentity } from "@/lib/auth";
 import { passwordSchema } from "@/lib/validation";
 export async function changePasswordAction(_: { error?: string }, formData: FormData) {
@@ -10,5 +11,6 @@ export async function changePasswordAction(_: { error?: string }, formData: Form
     return { error: "Choose a different password." };
   if (!(await changePassword(user, input.data.currentPassword, input.data.newPassword)))
     return { error: "Your current password is incorrect." };
-  redirect("/en/dashboard");
+  const locale = (await getLocale()) === "ar" ? "ar" : "en";
+  redirect(`/${locale}/dashboard`);
 }

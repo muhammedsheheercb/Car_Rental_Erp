@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import { ServiceWorker } from "@/components/service-worker";
+import { getLocale } from "next-intl/server";
+
 export const metadata: Metadata = {
   title: "MUSCAT CARS",
   description: "Oman car rental operations",
@@ -9,14 +10,17 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "MUSCAT CARS", statusBarStyle: "black-translucent" },
   icons: { icon: "/icon.svg", apple: "/icon-maskable.svg" },
 };
-export const viewport: Viewport = { themeColor: "#0b0b0a", colorScheme: "dark" };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export const viewport: Viewport = { themeColor: "#0d0c0b", colorScheme: "light dark" };
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  let locale = "en";
+  try {
+    locale = (await getLocale()) === "ar" ? "ar" : "en";
+  } catch {
+    locale = "en";
+  }
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        {children}
-        <ServiceWorker />
-      </body>
+    <html lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} suppressHydrationWarning>
+      <body>{children}</body>
     </html>
   );
 }

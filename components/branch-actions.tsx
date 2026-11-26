@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   deactivateBranchAction,
@@ -11,6 +12,8 @@ import { useToast } from "./toast";
 
 type Branch = { id: string; name: string; location: string; code: string };
 export function BranchActions({ branch }: { branch: Branch }) {
+  const tAdmin = useTranslations("admin");
+  const tCommon = useTranslations("common");
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const { show } = useToast();
@@ -32,23 +35,23 @@ export function BranchActions({ branch }: { branch: Branch }) {
         onClick={() => setEditing(true)}
         className="min-h-11 px-3 text-sm text-[var(--accent)]"
       >
-        Edit
+        {tCommon("edit")}
       </button>
       <ConfirmDialog
-        title={`Delete ${branch.name}?`}
-        description="This permanently removes the branch only when no records reference it."
-        confirmLabel={pending ? "Deleting…" : "Delete"}
+        title={tAdmin("deleteBranchTitle", { name: branch.name })}
+        description={tAdmin("deleteBranchDesc")}
+        confirmLabel={pending ? tCommon("deleting") : tCommon("delete")}
         onConfirm={() => run(() => deleteBranchAction(branch.id))}
         trigger={
           <button type="button" disabled={pending} className="min-h-11 px-3 text-sm text-red-300">
-            {pending ? "Deleting…" : "Delete"}
+            {pending ? tCommon("deleting") : tCommon("delete")}
           </button>
         }
       />
       <ConfirmDialog
-        title={`Deactivate ${branch.name}?`}
-        description="The branch remains in historical records but cannot be used for new operations."
-        confirmLabel={pending ? "Deactivating…" : "Deactivate"}
+        title={tAdmin("deactivateBranchTitle", { name: branch.name })}
+        description={tAdmin("deactivateBranchDesc")}
+        confirmLabel={pending ? tCommon("deactivating") : tCommon("deactivate")}
         onConfirm={() => run(() => deactivateBranchAction(branch.id))}
         trigger={
           <button
@@ -56,7 +59,7 @@ export function BranchActions({ branch }: { branch: Branch }) {
             disabled={pending}
             className="min-h-11 px-3 text-sm text-[var(--muted)]"
           >
-            Deactivate
+            {tCommon("deactivate")}
           </button>
         }
       />
@@ -64,11 +67,11 @@ export function BranchActions({ branch }: { branch: Branch }) {
         <div className="fixed inset-0 z-40 grid place-items-end bg-black/70 sm:place-items-center sm:p-4">
           <form
             action={(formData) => run(() => updateBranchAction(branch.id, formData))}
-            className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:p-6"
+            className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-start sm:rounded-2xl sm:p-6"
           >
-            <h2 className="text-lg font-semibold">Edit branch</h2>
+            <h2 className="text-lg font-semibold">{tAdmin("editBranch")}</h2>
             <label className="mt-4 block text-sm">
-              Name
+              {tAdmin("branchName")}
               <input
                 required
                 name="name"
@@ -77,7 +80,7 @@ export function BranchActions({ branch }: { branch: Branch }) {
               />
             </label>
             <label className="mt-4 block text-sm">
-              Location
+              {tAdmin("locationCol")}
               <input
                 required
                 name="location"
@@ -86,7 +89,7 @@ export function BranchActions({ branch }: { branch: Branch }) {
               />
             </label>
             <label className="mt-4 block text-sm">
-              Branch code
+              {tAdmin("branchCode")}
               <input
                 value={branch.code}
                 disabled
@@ -101,14 +104,14 @@ export function BranchActions({ branch }: { branch: Branch }) {
                 onClick={() => setEditing(false)}
                 className="min-h-11 px-4"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="submit"
                 disabled={pending}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 font-semibold text-black"
               >
-                {pending ? "Updating…" : "Update"}
+                {pending ? tCommon("updating") : tCommon("update")}
               </button>
             </div>
           </form>

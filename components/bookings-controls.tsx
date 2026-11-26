@@ -1,13 +1,18 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 type BranchOption = { id: string; name: string; code: string };
 
 const STATUSES = ["", "RESERVED", "ACTIVE", "RETURNED", "CANCELLED"] as const;
 
 export function BookingsControls({ total, branches }: { total: number; branches: BranchOption[] }) {
+  const tRentals = useTranslations("rentals");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -48,7 +53,7 @@ export function BookingsControls({ total, branches }: { total: number; branches:
     <div className="space-y-3 border-b border-[var(--edge)] p-4" aria-busy={pending}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-xs text-[var(--muted)]">
-          Search bookings
+          {tRentals("searchBookings")}
           <input
             value={query}
             onChange={(event) => {
@@ -57,12 +62,12 @@ export function BookingsControls({ total, branches }: { total: number; branches:
               if (timer.current) clearTimeout(timer.current);
               timer.current = setTimeout(() => updateParams({ q: value }), 300);
             }}
-            placeholder="Agreement, customer, vehicle, reg"
+            placeholder={tRentals("searchBookingsPlaceholder")}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Status
+          {tCommon("status")}
           <select
             value={status}
             onChange={(event) => updateParams({ status: event.target.value })}
@@ -70,19 +75,19 @@ export function BookingsControls({ total, branches }: { total: number; branches:
           >
             {STATUSES.map((item) => (
               <option key={item || "all"} value={item}>
-                {item || "All statuses"}
+                {item ? translateStatus(tStatus, item) : tCommon("allStatuses")}
               </option>
             ))}
           </select>
         </label>
         <label className="text-xs text-[var(--muted)]">
-          Branch
+          {tCommon("branch")}
           <select
             value={branch}
             onChange={(event) => updateParams({ branch: event.target.value })}
             className="mt-1 min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--raised)] px-3 text-sm text-[var(--ink)]"
           >
-            <option value="">All branches</option>
+            <option value="">{tCommon("allBranches")}</option>
             {branches.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.code}
@@ -91,7 +96,7 @@ export function BookingsControls({ total, branches }: { total: number; branches:
           </select>
         </label>
         <label className="text-xs text-[var(--muted)]">
-          From date (Oman)
+          {tCommon("fromDate")}
           <input
             type="date"
             value={from}
@@ -100,7 +105,7 @@ export function BookingsControls({ total, branches }: { total: number; branches:
           />
         </label>
         <label className="text-xs text-[var(--muted)]">
-          To date (Oman)
+          {tCommon("toDate")}
           <input
             type="date"
             value={to}
@@ -111,7 +116,7 @@ export function BookingsControls({ total, branches }: { total: number; branches:
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
         <p role="status">
-          {pending ? "Filtering bookings…" : `${total} booking${total === 1 ? "" : "s"}`}
+          {pending ? tRentals("filteringBookings") : tRentals("bookingsCount", { count: total })}
         </p>
         {hasFilters && (
           <button
@@ -123,7 +128,7 @@ export function BookingsControls({ total, branches }: { total: number; branches:
             }}
             className="min-h-9 px-2 text-sm text-[var(--accent)]"
           >
-            Clear filters
+            {tCommon("clearFilters")}
           </button>
         )}
       </div>

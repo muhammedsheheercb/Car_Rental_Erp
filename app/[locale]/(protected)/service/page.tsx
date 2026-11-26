@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ServiceForm, ServiceStatusForm } from "@/components/service-form";
 import { db } from "@/db/client";
 import {
@@ -15,7 +16,8 @@ import {
 } from "@/db/schema";
 import { omrInput } from "@/features/invoices/calculations";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 export default async function ServicePage({
   params,
   searchParams,
@@ -23,9 +25,15 @@ export default async function ServicePage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; status?: string; branch?: string; page?: string }>;
 }) {
-  const actor = await requirePermission("fleet", "read");
   const { locale } = await params;
-  const query = await searchParams;
+  const [actor, query, tService, tNav, tCommon, tStatus] = await Promise.all([
+    requirePagePermission(locale, "fleet", "read"),
+    searchParams,
+    getTranslations("service"),
+    getTranslations("nav"),
+    getTranslations("common"),
+    getTranslations("status"),
+  ]);
   const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
   const statusFilter = ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"].includes(
     query.status ?? "",
@@ -121,10 +129,10 @@ export default async function ServicePage({
   const now = formatOmanDateTime(new Date());
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">Service</h1>
+      <h1 className="text-3xl font-semibold">{tService("title")}</h1>
       <div className="flex flex-wrap gap-4">
-        <Link href={`/${locale}/near-to-service` as never}>Near To Service</Link>
-        <Link href={`/${locale}/expiry` as never}>Expiry</Link>
+        <Link href={`/${locale}/near-to-service` as never}>{tNav("nearToService")}</Link>
+        <Link href={`/${locale}/expiry` as never}>{tNav("expiry")}</Link>
       </div>
       {can(actor, "fleet", "create") && (
         <ServiceForm
@@ -161,29 +169,29 @@ export default async function ServicePage({
         <input
           name="q"
           defaultValue={query.q}
-          placeholder="Vehicle / Registration / Customer / Service"
-          aria-label="Search service"
+          placeholder={tService("searchPlaceholder")}
+          aria-label={tCommon("search")}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         />
         <select
           name="status"
           defaultValue={statusFilter}
-          aria-label="Filter by status"
+          aria-label={tCommon("status")}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         >
-          <option value="">All statuses</option>
-          <option value="SCHEDULED">Scheduled</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="CANCELLED">Cancelled</option>
+          <option value="">{tCommon("allStatuses")}</option>
+          <option value="SCHEDULED">{tStatus("SCHEDULED")}</option>
+          <option value="IN_PROGRESS">{tStatus("IN_PROGRESS")}</option>
+          <option value="COMPLETED">{tStatus("COMPLETED")}</option>
+          <option value="CANCELLED">{tStatus("CANCELLED")}</option>
         </select>
         <select
           name="branch"
           defaultValue={branchFilter}
-          aria-label="Filter by branch"
+          aria-label={tCommon("branch")}
           className="min-h-11 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3 text-sm"
         >
-          <option value="">All branches</option>
+          <option value="">{tCommon("allBranches")}</option>
           {branchOptions.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -195,14 +203,14 @@ export default async function ServicePage({
             type="submit"
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
           >
-            Search
+            {tCommon("search")}
           </button>
           {(query.q || statusFilter || branchFilter) && (
             <Link
               href={`/${locale}/service` as never}
               className="min-h-11 content-center rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
             >
-              Clear
+              {tCommon("clear")}
             </Link>
           )}
         </div>
@@ -211,25 +219,28 @@ export default async function ServicePage({
         {shown.map(({ s, v, branch, staff }) => (
           <article key={s.id} className="rounded-xl border border-[var(--edge)] p-4">
             <h2 className="text-lg font-semibold">
-              {v.vehicleNumber} · {v.registrationNumber} · {s.type.replaceAll("_", " ")}
+              {v.vehicleNumber} · {v.registrationNumber} · {translateStatus(tStatus, s.type)}
             </h2>
             <p>
-              {s.serviceBy} · {s.status} · {branch} · Staff: {staff ?? "—"}
+              {translateStatus(tStatus, s.serviceBy)} · {translateStatus(tStatus, s.status)} ·{" "}
+              {branch} · {tService("staff")}: {staff ?? "—"}
             </p>
             <p>
-              Out (Oman): {s.outAt ? formatOmanDateTime(s.outAt) : "—"} · Completed:{" "}
+              {tService("outLabel")}: {s.outAt ? formatOmanDateTime(s.outAt) : "—"} ·{" "}
+              {tService("completedLabel")}:{" "}
               {s.completedAt ? formatOmanDateTime(s.completedAt) : "—"}
             </p>
             <p>
-              KM: {s.kmReading ?? "—"} → {s.serviceOdometerKm ?? "—"} · Due: {s.dueDate ?? "—"} /{" "}
-              {s.dueOdometerKm ?? "—"} KM
+              {tCommon("km")}: {s.kmReading ?? "—"} → {s.serviceOdometerKm ?? "—"} ·{" "}
+              {tService("dueLabel")}: {s.dueDate ?? "—"} / {s.dueOdometerKm ?? "—"} {tCommon("km")}
             </p>
             <p>
-              Customer: {String(s.snapshot.customer ?? "—")} · Booking:{" "}
-              {String(s.snapshot.booking ?? "—")}
+              {tCommon("customer")}: {String(s.snapshot.customer ?? "—")} ·{" "}
+              {tService("bookingLabel")}: {String(s.snapshot.booking ?? "—")}
             </p>
             <p>
-              Expense: OMR {omrInput(s.costBaisa)} · {s.paymentMode ?? "—"}
+              {tService("expenseLabel")}: {tCommon("omr")} {omrInput(s.costBaisa)} ·{" "}
+              {s.paymentMode ? translateStatus(tStatus, s.paymentMode) : "—"}
             </p>
             <p>{s.note}</p>
             {!["COMPLETED", "CANCELLED"].includes(s.status) &&
@@ -242,39 +253,40 @@ export default async function ServicePage({
                 />
               )}
             <details className="mt-3">
-              <summary>Service History</summary>
+              <summary>{tService("serviceHistory")}</summary>
               {history
                 .filter((h) => h.serviceId === s.id)
                 .map((h) => (
                   <p key={h.id}>
-                    {formatOmanDateTime(h.createdAt)} Oman · {h.action} ·{" "}
-                    {String(h.snapshot.remarks ?? "")}
+                    {formatOmanDateTime(h.createdAt)} {tCommon("omanTime")} ·{" "}
+                    {translateStatus(tStatus, h.action)} · {String(h.snapshot.remarks ?? "")}
                   </p>
                 ))}
             </details>
           </article>
         ))}
-        {!shown.length && <p>No service records found.</p>}
+        {!shown.length && <p>{tService("noServices")}</p>}
       </section>
       {filtered.length > 15 && (
-        <nav aria-label="Service pages" className="flex items-center justify-end gap-3 text-sm">
+        <nav aria-label={tService("title")} className="flex items-center justify-end gap-3 text-sm">
           {safePage > 1 && (
             <Link
               href={servicePageHref(safePage - 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Previous
+              {tCommon("previous")}
             </Link>
           )}
           <span className="text-[var(--muted)]">
-            Page {safePage} of {totalPages} · {filtered.length} records
+            {tCommon("pageOf", { page: safePage, total: totalPages })} ·{" "}
+            {tCommon("recordsCount", { count: filtered.length })}
           </span>
           {safePage < totalPages && (
             <Link
               href={servicePageHref(safePage + 1) as never}
               className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
             >
-              Next
+              {tCommon("next")}
             </Link>
           )}
         </nav>

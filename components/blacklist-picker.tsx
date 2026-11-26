@@ -1,14 +1,19 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import {
   blacklistCustomerAction,
   searchCustomersAction,
 } from "@/app/[locale]/(protected)/customers/actions";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { CalendarInput } from "./calendar-input";
 import { useToast } from "./toast";
 
 export function BlacklistPicker() {
+  const t = useTranslations();
+  const tBl = useTranslations("customers.blacklistPage");
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof searchCustomersAction>>>([]);
@@ -45,11 +50,11 @@ export function BlacklistPicker() {
 
   const save = () => {
     setError("");
-    if (!selected) return setError("Search and select a customer first.");
-    if (!reason.trim()) return setError("Reason is required.");
-    if (!description.trim()) return setError("Description is required.");
+    if (!selected) return setError(translateValidation(t, "Search and select a customer first."));
+    if (!reason.trim()) return setError(translateValidation(t, "Reason is required."));
+    if (!description.trim()) return setError(translateValidation(t, "Description is required."));
     if (startsAt && endsAt && endsAt < startsAt)
-      return setError("End date cannot be before start date.");
+      return setError(translateValidation(t, "End date cannot be before start date."));
     start(async () => {
       const result = await blacklistCustomerAction({
         customerId: selected.id,
@@ -60,7 +65,7 @@ export function BlacklistPicker() {
       });
       show(result.message, result.ok ? "success" : "error");
       if (!result.ok) {
-        setError(result.message);
+        setError(translateValidation(t, result.message));
         return;
       }
       reset();
@@ -76,26 +81,26 @@ export function BlacklistPicker() {
         onClick={() => setOpen(true)}
         className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black"
       >
-        Add Blacklist Customer
+        {tBl("addBlacklistCustomer")}
       </button>
       {open && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Add customer to blacklist"
+          aria-label={tBl("addBlacklistCustomer")}
           onMouseDown={() => !pending && setOpen(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
           <section
             role="document"
             onMouseDown={(event) => event.stopPropagation()}
-            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl sm:p-6"
+            className="max-h-[calc(100dvh-.5rem)] w-full overflow-y-auto rounded-t-2xl border border-[var(--edge)] bg-[var(--raised)] p-5 text-start sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl sm:p-6"
           >
             <div className="flex items-start justify-between gap-2">
-              <h2 className="text-lg font-semibold">Add Blacklist Customer</h2>
+              <h2 className="text-lg font-semibold">{tBl("addBlacklistCustomer")}</h2>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={tCommon("close")}
                 onClick={() => setOpen(false)}
                 className="min-h-10 px-2 text-lg"
               >
@@ -106,7 +111,7 @@ export function BlacklistPicker() {
               <input
                 value={q}
                 onChange={(e) => search(e.target.value)}
-                placeholder="Search name, ID, mobile, Civil ID, passport or licence"
+                placeholder={tBl("pickerPlaceholder")}
                 className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--edge)] bg-black/20 px-3 text-sm"
               />
               {q && (
@@ -115,11 +120,11 @@ export function BlacklistPicker() {
                   onClick={() => search("")}
                   className="min-h-11 rounded-lg border border-[var(--edge)] px-3 text-sm"
                 >
-                  Clear
+                  {tCommon("clear")}
                 </button>
               )}
             </div>
-            {pending && <p className="mt-2 text-xs text-[var(--muted)]">Searching…</p>}
+            {pending && <p className="mt-2 text-xs text-[var(--muted)]">{tCommon("searching")}</p>}
             <div className="mt-2 max-h-36 overflow-auto rounded-lg">
               {rows.map((row) => (
                 <button
@@ -137,11 +142,11 @@ export function BlacklistPicker() {
             </div>
             {selected && (
               <p className="mt-2 text-sm text-[var(--accent)]">
-                Selected: {selected.name} ({selected.number})
+                {tBl("selectedCustomer", { name: selected.name, number: selected.number })}
               </p>
             )}
             <label className="mt-3 block text-sm">
-              Reason
+              {tCommon("reason")}
               <input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -150,7 +155,7 @@ export function BlacklistPicker() {
               />
             </label>
             <label className="mt-3 block text-sm">
-              Description
+              {tCommon("description")}
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -160,11 +165,11 @@ export function BlacklistPicker() {
             </label>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label htmlFor="picker-bl-start" className="text-sm">
-                Start date (optional)
+                {tBl("startDateOptional")}
                 <CalendarInput id="picker-bl-start" value={startsAt} onChange={setStartsAt} />
               </label>
               <label htmlFor="picker-bl-end" className="text-sm">
-                End date (optional)
+                {tBl("endDateOptional")}
                 <CalendarInput id="picker-bl-end" value={endsAt} onChange={setEndsAt} />
               </label>
             </div>
@@ -180,7 +185,7 @@ export function BlacklistPicker() {
                 onClick={() => setOpen(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
-                Cancel
+                {tCommon("cancel")}
               </button>
               <button
                 type="button"
@@ -188,7 +193,7 @@ export function BlacklistPicker() {
                 onClick={save}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {pending ? "Saving…" : "Save"}
+                {pending ? tCommon("saving") : tCommon("save")}
               </button>
             </div>
           </section>

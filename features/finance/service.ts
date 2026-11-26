@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  auditLogs,
   customerLedger,
   customers,
   financeFines,
@@ -85,6 +86,28 @@ async function post(
     creditBaisa: direction === "RECEIPT" ? input.amount : 0,
     description: `${input.kind} ${p.receiptNumber}`,
   });
+  if (input.kind !== "REVERSAL") {
+    const event =
+      input.kind === "ADVANCE"
+        ? "ADVANCE_RECORDED"
+        : input.kind === "PAYBACK"
+          ? "PAYBACK_RECORDED"
+          : "RECEIPT_RECORDED";
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event,
+      entityType: "payment",
+      entityId: p.id,
+      branchId: r.branchId,
+      metadata: {
+        receiptNumber: p.receiptNumber,
+        agreementNumber: r.agreementNumber,
+        amountBaisa: input.amount,
+        method: input.method,
+        kind: input.kind,
+      },
+    });
+  }
   return p;
 }
 export async function recordPayment(raw: unknown, actor: Identity) {
@@ -137,6 +160,18 @@ export async function approveRefund(raw: unknown, actor: Identity) {
         creditBaisa: credit,
         description: `Approved refund: ${input.remarks}`,
       });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "REFUND_APPROVED",
+      entityType: "refund_approval",
+      entityId: r.id,
+      branchId: r.branchId,
+      metadata: {
+        agreementNumber: r.agreementNumber,
+        amountBaisa: input.amount,
+        remarks: input.remarks,
+      },
+    });
   });
 }
 export async function correctPayment(raw: unknown, actor: Identity) {
@@ -174,6 +209,19 @@ export async function correctPayment(raw: unknown, actor: Identity) {
       replacementPaymentId: replacement?.id,
       reason: input.remarks,
       correctedBy: actor.id,
+    });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "PAYMENT_CORRECTED",
+      entityType: "payment",
+      entityId: p.id,
+      branchId: r.branchId,
+      metadata: {
+        originalReceipt: p.receiptNumber,
+        replacementReceipt: replacement?.receiptNumber ?? null,
+        agreementNumber: r.agreementNumber,
+        reason: input.remarks,
+      },
     });
   });
 }
@@ -278,6 +326,19 @@ export async function recordFine(raw: unknown, actor: Identity) {
         .set({ totalBaisa: r.totalBaisa + input.amount, updatedAt: new Date() })
         .where(eq(rentals.id, r.id));
     }
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: input.kind === "LEGAL" ? "LEGAL_FINE_RECORDED" : "FINE_RECORDED",
+      entityType: "fine",
+      entityId: fine.id,
+      branchId: r.branchId,
+      metadata: {
+        agreementNumber: r.agreementNumber,
+        kind: input.kind,
+        amountBaisa: input.amount,
+        details: input.details,
+      },
+    });
     return fine;
   });
 }
@@ -320,6 +381,14 @@ export async function changeLegalFine(raw: Record<string, unknown>, actor: Ident
       snapshot: { before: f, after: updated },
       reason,
       actorId: actor.id,
+    });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: deleting ? "LEGAL_FINE_DELETED" : "LEGAL_FINE_UPDATED",
+      entityType: "fine",
+      entityId: id,
+      branchId: f.branchId,
+      metadata: { reason, amountBaisa: updated.amountBaisa },
     });
   });
 }

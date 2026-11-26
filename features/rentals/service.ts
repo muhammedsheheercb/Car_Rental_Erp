@@ -169,7 +169,35 @@ export async function createReservation(rawInput: unknown, actor: Identity) {
         creditBaisa: downPaymentBaisa,
         description: `Booking receipt ${payment.receiptNumber}`,
       });
+      await tx.insert(auditLogs).values({
+        actorId,
+        event: "ADVANCE_RECORDED",
+        entityType: "payment",
+        entityId: payment.id,
+        branchId: input.branchId,
+        metadata: {
+          receiptNumber: payment.receiptNumber,
+          agreementNumber: rental.agreementNumber,
+          amountBaisa: downPaymentBaisa,
+          method: paymentMode,
+        },
+      });
     }
+    await tx.insert(auditLogs).values({
+      actorId,
+      event: "BOOKING_CREATED",
+      entityType: "rental",
+      entityId: rental.id,
+      branchId: input.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        customerId: input.customerId,
+        vehicleId: input.vehicleId,
+        period: input.pricingPeriod,
+        duration: input.rentDuration,
+        totalBaisa: calculation.totalBaisa,
+      },
+    });
     if (input.dailyRateBaisa !== configuredPricing.listRentBaisa)
       await tx.insert(auditLogs).values({
         actorId,
@@ -218,6 +246,17 @@ export async function activateRental(rentalId: string, pickupOdometerKm: number,
       .update(vehicles)
       .set({ status: "INACTIVE", currentOdometerKm: pickupOdometerKm, updatedAt: new Date() })
       .where(eq(vehicles.id, rental.vehicleId));
+    await tx.insert(auditLogs).values({
+      actorId,
+      event: "RENTAL_STARTED",
+      entityType: "rental",
+      entityId: rental.id,
+      branchId: rental.branchId,
+      metadata: {
+        agreementNumber: rental.agreementNumber,
+        pickupOdometerKm,
+      },
+    });
     return { ...rental, status: "ACTIVE" as const, pickupOdometerKm, actorId };
   });
 }

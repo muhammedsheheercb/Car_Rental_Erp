@@ -1,6 +1,7 @@
 import { calculateExcessKm, type RentalPeriod } from "./booking-calculations";
 import { calculateLateCharges } from "./late-charges";
-export const BAISA_PER_OMR = 1000;
+
+const BAISA_PER_OMR = 1000;
 
 export function calculateRentalCharge(input: {
   startsAt: Date;

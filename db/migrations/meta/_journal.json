@@ -92,6 +92,20 @@
       "when": 1795415000000,
       "tag": "0012_vehicle_images",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795507800000,
+      "tag": "0013_daily_activity_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0014_damage_during_rental",
+      "breakpoints": true
     }
   ]
 }

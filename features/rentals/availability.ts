@@ -4,7 +4,7 @@ import { rentals, vehicleServices, vehicles, vehicleTransfers } from "@/db/schem
 /** Fleet summaries exclude vehicles committed to any pending reservation or active rental.
  * Booking availability instead checks the requested time interval under a vehicle-row lock.
  */
-export const vehicleCommitment = sql<boolean>`exists (
+const vehicleCommitment = sql<boolean>`exists (
   select 1 from ${rentals}
   where ${rentals.vehicleId} = ${vehicles.id}
   and ${rentals.status} in ('RESERVED', 'ACTIVE')

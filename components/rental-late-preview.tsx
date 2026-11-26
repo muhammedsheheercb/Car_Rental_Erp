@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { formatOMR } from "@/features/rentals/calculations";
 import { calculateLateCharges, type LateChargePolicy } from "@/features/rentals/late-charges";
@@ -11,6 +12,8 @@ export function RentalLatePreview({
   initialNow: string;
   policy: LateChargePolicy;
 }) {
+  const tRentals = useTranslations("rentals");
+  const tStatus = useTranslations("status");
   const [now, setNow] = useState(new Date(initialNow));
   useEffect(() => {
     const anchor = performance.now();
@@ -26,16 +29,11 @@ export function RentalLatePreview({
   });
   return (
     <section className="rounded-xl border border-[var(--edge)] p-4">
-      <h2 className="text-lg font-semibold">Current overdue charge estimate</h2>
+      <h2 className="text-lg font-semibold">{tRentals("overdueEstimateTitle")}</h2>
       <p className="mt-2 text-sm">
-        Additional rental charge: {formatOMR(quote.additionalRentalBaisa)} · Late fee:{" "}
-        {formatOMR(quote.lateFeeBaisa)} · Overdue fine: {formatOMR(quote.overdueFineBaisa)}
-      </p>
-      <p className="mt-2 text-xs text-[var(--muted)]">
-        {policy.graceMinutes} minutes free per overdue day, then up to {policy.hourlyWindowHours}{" "}
-        chargeable hours at {formatOMR(policy.hourlyRateBaisa)}/hour. Above that window, one day's
-        rent replaces hourly fees. Fine: {formatOMR(policy.overdueFinePerDayBaisa)} per completed
-        overdue day. Estimates are posted only when the vehicle is returned.
+        {tRentals("additionalRent")}: {formatOMR(quote.additionalRentalBaisa)} ·{" "}
+        {tRentals("hourlyLateFee")}: {formatOMR(quote.lateFeeBaisa)} · {tStatus("OVERDUE")}:{" "}
+        {formatOMR(quote.overdueFineBaisa)}
       </p>
     </section>
   );

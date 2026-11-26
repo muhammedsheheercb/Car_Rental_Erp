@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { userBranches, userSignatures, users } from "@/db/schema";
+import { auditLogs, userBranches, userSignatures, users } from "@/db/schema";
 import { can, type Identity } from "@/lib/auth";
 import { validateEvidencePhoto } from "@/lib/image-file";
 import { getPrivateCustomerDocument, putPrivateCustomerDocument } from "@/lib/r2";
@@ -66,6 +66,13 @@ export async function saveSignature(raw: unknown, file: File, actor: Identity) {
         uploadedBy: actor.id,
       })
       .returning();
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "SIGNATURE_UPDATED",
+      entityType: "signature",
+      entityId: signature.id,
+      metadata: { targetUserId: target.id },
+    });
     return signature;
   });
 }

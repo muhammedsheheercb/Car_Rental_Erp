@@ -2,10 +2,11 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { VehicleWizard } from "@/components/vehicle-wizard";
 import { db } from "@/db/client";
 import { branches, vehicleBrands, vehicleModels } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import { requirePagePermission } from "@/lib/auth";
 
-export default async function NewVehiclePage() {
-  const actor = await requirePermission("fleet", "create");
+export default async function NewVehiclePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const actor = await requirePagePermission(locale, "fleet", "create");
   const [brands, models, availableBranches] = await Promise.all([
     db
       .select({ id: vehicleBrands.id, name: vehicleBrands.name })

@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
+  auditLogs,
   customerLedger,
   customers,
   invoiceHistory,
@@ -209,6 +210,24 @@ export async function saveInvoice(raw: unknown, actor: Identity) {
       reason: input.remarks || "Invoice saved",
       actorId: actor.id,
     });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event:
+        input.status === "FINALIZED"
+          ? "INVOICE_FINALIZED"
+          : old
+            ? "INVOICE_UPDATED"
+            : "INVOICE_CREATED",
+      entityType: "invoice",
+      entityId: invoice.id,
+      branchId: r.branchId,
+      metadata: {
+        invoiceNumber: invoice.invoiceNumber,
+        agreementNumber: r.agreementNumber,
+        status: input.status,
+        grandTotalBaisa: calc.grandTotal,
+      },
+    });
     return invoice;
   });
 }
@@ -270,6 +289,18 @@ export async function voidInvoice(raw: unknown, actor: Identity) {
       snapshot: invoice,
       reason: input.reason,
       actorId: actor.id,
+    });
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "INVOICE_VOIDED",
+      entityType: "invoice",
+      entityId: invoice.id,
+      branchId: r.branchId,
+      metadata: {
+        invoiceNumber: invoice.invoiceNumber,
+        agreementNumber: r.agreementNumber,
+        reason: input.reason,
+      },
     });
   });
 }

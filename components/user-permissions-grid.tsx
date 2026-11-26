@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useRef } from "react";
 
 const MODULES = [
@@ -34,6 +35,8 @@ export function UserPermissionsGrid({
   allowedPermissions?: string[];
   maxHeightClass?: string;
 }) {
+  const tAdmin = useTranslations("admin");
+  const tCommon = useTranslations("common");
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedSet = new Set(defaultSelected);
   const allowedSet = allowedPermissions ? new Set(allowedPermissions) : null;
@@ -52,28 +55,26 @@ export function UserPermissionsGrid({
   return (
     <fieldset className="mt-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <legend className="text-sm font-medium">Module permissions</legend>
+        <legend className="text-sm font-medium">{tAdmin("modulePermissions")}</legend>
         <div className="flex gap-2 text-xs">
           <button
             type="button"
             onClick={() => toggleAll(true)}
             className="min-h-8 rounded border border-[var(--edge)] px-2 text-[var(--accent)]"
           >
-            Select all
+            {tCommon("selectAll")}
           </button>
           <button
             type="button"
             onClick={() => toggleAll(false)}
             className="min-h-8 rounded border border-[var(--edge)] px-2 text-[var(--muted)]"
           >
-            Clear all
+            {tCommon("clearAll")}
           </button>
         </div>
       </div>
       {allowedSet && (
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          Only permissions assigned to your own account can be granted.
-        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{tAdmin("ownPermissionsOnly")}</p>
       )}
       <div
         ref={containerRef}
@@ -83,7 +84,7 @@ export function UserPermissionsGrid({
           <div key={moduleName} className="border-b border-[var(--edge)]/60 pb-2 last:border-b-0">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                {moduleName}
+                {tAdmin(`modules.${moduleName}`)}
               </p>
               <div className="flex gap-2 text-[11px]">
                 <button
@@ -91,14 +92,14 @@ export function UserPermissionsGrid({
                   onClick={() => toggleAll(true, moduleName)}
                   className="text-[var(--accent)] hover:underline"
                 >
-                  All
+                  {tCommon("all")}
                 </button>
                 <button
                   type="button"
                   onClick={() => toggleAll(false, moduleName)}
                   className="text-[var(--muted)] hover:underline"
                 >
-                  None
+                  {tCommon("none")}
                 </button>
               </div>
             </div>
@@ -119,7 +120,7 @@ export function UserPermissionsGrid({
                       disabled={disabled}
                       defaultChecked={!disabled && selectedSet.has(value)}
                     />
-                    <span>{action.replaceAll("_", " ")}</span>
+                    <span>{tAdmin(`actions.${action}`)}</span>
                   </label>
                 );
               })}

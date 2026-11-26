@@ -20,7 +20,7 @@ function revalidateCustomerPaths() {
 }
 
 export async function saveCustomerAction(input: unknown, id?: string) {
-  await requirePermission("customers", id ? "update" : "create");
+  const actor = await requirePermission("customers", id ? "update" : "create");
   const parsed = customerSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the customer details." };
@@ -35,21 +35,39 @@ export async function saveCustomerAction(input: unknown, id?: string) {
   };
   try {
     if (id) {
-      await db
-        .update(customers)
-        .set({ ...databaseValue, updatedAt: new Date() })
-        .where(eq(customers.id, id));
-      revalidatePath("/en/customers");
+      await db.transaction(async (tx) => {
+        await tx
+          .update(customers)
+          .set({ ...databaseValue, updatedAt: new Date() })
+          .where(eq(customers.id, id));
+        await tx.insert(auditLogs).values({
+          actorId: actor.id,
+          event: "CUSTOMER_UPDATED",
+          entityType: "customer",
+          entityId: id,
+          metadata: { name: value.name, mobile: value.mobile },
+        });
+      });
+      revalidateCustomerPaths();
       return { ok: true, id, message: "Customer updated successfully." };
     }
-    const [created] = await db
-      .insert(customers)
-      .values({
-        ...databaseValue,
-        customerNumber: `CU-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`,
-      })
-      .returning({ id: customers.id });
-    revalidatePath("/en/customers");
+    const customerNumber = `CU-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`;
+    const [created] = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(customers)
+        .values({ ...databaseValue, customerNumber })
+        .returning({ id: customers.id });
+      if (inserted[0])
+        await tx.insert(auditLogs).values({
+          actorId: actor.id,
+          event: "CUSTOMER_CREATED",
+          entityType: "customer",
+          entityId: inserted[0].id,
+          metadata: { name: value.name, mobile: value.mobile, customerNumber },
+        });
+      return inserted;
+    });
+    revalidateCustomerPaths();
     return {
       ok: true,
       id: created.id,
@@ -114,7 +132,7 @@ export async function uploadCustomerDocumentAction(
           updatedAt: new Date(),
         },
       });
-    revalidatePath("/en/customers");
+    revalidateCustomerPaths();
     return { ok: true, message: "Document uploaded." };
   } catch (error) {
     return {
@@ -163,7 +181,7 @@ export async function blacklistCustomerAction(input: {
     if (inserted[0])
       await tx.insert(auditLogs).values({
         actorId: actor.id,
-        event: "VEHICLE_UPDATED",
+        event: "BLACKLIST_CREATED",
         entityType: "customer_blacklist",
         entityId: inserted[0].id,
         metadata: {
@@ -217,7 +235,7 @@ export async function updateBlacklistEntryAction(input: {
       .where(eq(customerBlacklist.id, input.id));
     await tx.insert(auditLogs).values({
       actorId: actor.id,
-      event: "VEHICLE_UPDATED",
+      event: "BLACKLIST_UPDATED",
       entityType: "customer_blacklist",
       entityId: input.id,
       metadata: {
@@ -255,7 +273,7 @@ export async function unblacklistCustomerAction(id: string) {
     .where(eq(customerBlacklist.id, id));
   await db.insert(auditLogs).values({
     actorId: actor.id,
-    event: "VEHICLE_UPDATED",
+    event: "BLACKLIST_REMOVED",
     entityType: "customer_blacklist",
     entityId: id,
     metadata: { action: "BLACKLIST_REMOVED", active: false },
@@ -329,20 +347,25 @@ export async function setCustomerActiveAction(id: string, active: boolean) {
       .where(eq(customers.id, id));
     await tx.insert(auditLogs).values({
       actorId: actor.id,
-      event: "VEHICLE_UPDATED",
+      event: active ? "CUSTOMER_UPDATED" : "CUSTOMER_DEACTIVATED",
       entityType: "customer",
       entityId: id,
-      metadata: { active },
+      metadata: { active, name: customer.name, customerNumber: customer.customerNumber },
     });
   });
-  revalidatePath("/en/customers");
+  revalidateCustomerPaths();
   return {
     ok: true,
     message: active ? "Customer activated successfully." : "Customer deactivated successfully.",
   };
 }
 export async function deleteCustomerAction(id: string) {
-  await requirePermission("customers", "delete");
+  const actor = await requirePermission("customers", "delete");
+  const [customerRow] = await db
+    .select({ name: customers.name, customerNumber: customers.customerNumber })
+    .from(customers)
+    .where(eq(customers.id, id))
+    .limit(1);
   const [documentCounts, blacklistCounts] = await Promise.all([
     db
       .select({ documents: count() })
@@ -359,8 +382,17 @@ export async function deleteCustomerAction(id: string) {
       message:
         "This customer has documents or blacklist history and cannot be deleted. Deactivate the customer instead.",
     };
-  await db.delete(customers).where(eq(customers.id, id));
-  revalidatePath("/en/customers");
+  await db.transaction(async (tx) => {
+    await tx.delete(customers).where(eq(customers.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "CUSTOMER_DELETED",
+      entityType: "customer",
+      entityId: id,
+      metadata: { name: customerRow?.name, customerNumber: customerRow?.customerNumber },
+    });
+  });
+  revalidateCustomerPaths();
   return { ok: true, message: "Customer deleted successfully." };
 }
 export async function searchCustomersAction(q: string) {

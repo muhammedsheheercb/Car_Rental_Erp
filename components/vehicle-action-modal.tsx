@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { getVehicleDetailsAction } from "@/app/[locale]/(protected)/fleet/actions";
 import {
@@ -9,29 +10,30 @@ import {
   type VehicleOperationalStatus,
 } from "@/features/fleet/vehicle-actions";
 import { formatOMR } from "@/features/rentals/calculations";
+import { translateSafe, translateStatus, translateValidation } from "@/lib/i18n-helpers";
 
 type Details = Awaited<ReturnType<typeof getVehicleDetailsAction>>;
 
 const STATUS_BADGE: Record<VehicleOperationalStatus, { label: string; className: string }> = {
   ON_RENT: {
     label: "ON RENT",
-    className: "border border-red-400/50 bg-red-500/25 text-red-100",
+    className: "border border-red-200 bg-red-50 text-red-700 font-medium",
   },
   AVAILABLE: {
     label: "AVAILABLE",
-    className: "border border-white/80 bg-white text-black font-semibold",
+    className: "border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold",
   },
   RESERVED: {
     label: "RESERVED",
-    className: "border border-amber-400/40 bg-amber-400/20 text-amber-100",
+    className: "border border-amber-200 bg-amber-50 text-amber-800 font-medium",
   },
   SERVICE_OR_TRANSFER: {
     label: "SERVICE / TRANSFER",
-    className: "border border-zinc-500/40 bg-zinc-500/20 text-zinc-200",
+    className: "border border-stone-300 bg-stone-100 text-stone-700 font-medium",
   },
   INACTIVE: {
     label: "INACTIVE",
-    className: "border border-zinc-600/40 bg-zinc-700/30 text-zinc-300",
+    className: "border border-stone-200 bg-stone-100 text-stone-500",
   },
 };
 
@@ -64,6 +66,11 @@ export function VehicleActionModalTrigger({
   };
   permissions: VehicleActionPermissionFlags;
 }) {
+  const t = useTranslations();
+  const tFleet = useTranslations("fleet");
+  const tWizard = useTranslations("fleet.wizard");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const [open, setOpen] = useState(false);
   const [viewInfo, setViewInfo] = useState(false);
   const [details, setDetails] = useState<Details | null>(null);
@@ -81,6 +88,7 @@ export function VehicleActionModalTrigger({
   });
 
   const badge = STATUS_BADGE[vehicle.operationalStatus];
+  const badgeText = translateStatus(tStatus, vehicle.operationalStatus);
 
   const loadInfo = () => {
     setViewInfo(true);
@@ -90,7 +98,8 @@ export function VehicleActionModalTrigger({
       try {
         setDetails(await getVehicleDetailsAction(vehicle.id));
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not load vehicle details.");
+        const raw = cause instanceof Error ? cause.message : "Could not load vehicle details.";
+        setError(translateValidation(t, raw));
       }
     });
   };
@@ -104,7 +113,7 @@ export function VehicleActionModalTrigger({
           setOpen(true);
         }}
         className="group flex w-full min-w-0 items-center gap-3 text-start focus-visible:outline-none"
-        title="Open vehicle actions"
+        title={tFleet("manage")}
       >
         <div className="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--edge)] bg-black/30">
           {vehicle.imageId ? (
@@ -116,7 +125,7 @@ export function VehicleActionModalTrigger({
             />
           ) : (
             <div className="grid h-full w-full place-items-center text-[10px] font-mono text-[var(--muted)]">
-              NO IMG
+              {tFleet("noImg")}
             </div>
           )}
         </div>
@@ -134,7 +143,7 @@ export function VehicleActionModalTrigger({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Actions for ${vehicle.brand} ${vehicle.model} (${vehicle.registration})`}
+          aria-label={`${vehicle.brand} ${vehicle.model} (${vehicle.registration})`}
           onMouseDown={() => setOpen(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
@@ -155,14 +164,14 @@ export function VehicleActionModalTrigger({
                     />
                   ) : (
                     <div className="grid h-full w-full place-items-center text-xs font-mono text-[var(--muted)]">
-                      NO PHOTO
+                      {tFleet("noPhoto")}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs ${badge.className}`}>
-                      {badge.label}
+                      {badgeText}
                     </span>
                     <span className="font-mono text-xs text-[var(--muted)]">
                       {vehicle.registration}
@@ -172,13 +181,14 @@ export function VehicleActionModalTrigger({
                     {vehicle.brand} {vehicle.model}
                   </h2>
                   <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    SI {vehicle.number} · {vehicle.branch} · {vehicle.odometer.toLocaleString()} KM
+                    {vehicle.number} · {vehicle.branch} · {vehicle.odometer.toLocaleString()}{" "}
+                    {tCommon("km")}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                aria-label="Close vehicle actions modal"
+                aria-label={tCommon("close")}
                 onClick={() => setOpen(false)}
                 className="min-h-11 px-3 text-lg"
               >
@@ -197,8 +207,8 @@ export function VehicleActionModalTrigger({
                 >
                   <p className="font-medium">
                     {vehicle.operationalStatus === "ON_RENT"
-                      ? "Active Rental Agreement"
-                      : "Pending Reservation"}
+                      ? tFleet("activeRentalAgreement")
+                      : tFleet("pendingReservation")}
                     :{" "}
                     <span className="font-mono text-[var(--accent)]">
                       {vehicle.activeAgreementNumber}
@@ -206,7 +216,8 @@ export function VehicleActionModalTrigger({
                   </p>
                   {vehicle.activeCustomerName && (
                     <p className="mt-0.5 text-xs text-[var(--muted)]">
-                      Customer: <span className="text-white">{vehicle.activeCustomerName}</span>
+                      {tCommon("customer")}:{" "}
+                      <span className="text-white">{vehicle.activeCustomerName}</span>
                     </p>
                   )}
                 </div>
@@ -215,11 +226,15 @@ export function VehicleActionModalTrigger({
               {!viewInfo ? (
                 <>
                   <p className="text-xs text-[var(--muted)]">
-                    Actions are enabled or disabled automatically based on the vehicle&apos;s
-                    current status ({badge.label}) and your account permissions.
+                    {tFleet("modalStatusHint", { status: badgeText })}
                   </p>
                   <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
                     {actions.map((action) => {
+                      const actionLabel = translateSafe(
+                        tFleet,
+                        `modalActions.${action.key}`,
+                        action.label,
+                      );
                       if (!action.enabled) {
                         return (
                           <button
@@ -229,8 +244,10 @@ export function VehicleActionModalTrigger({
                             title={action.reason}
                             className="min-h-12 cursor-not-allowed rounded-xl border border-[var(--edge)]/50 bg-black/15 px-3 py-2.5 text-start text-sm text-[var(--muted)] opacity-45"
                           >
-                            <span className="block font-medium">{action.label}</span>
-                            <span className="mt-0.5 block truncate text-[11px]">Unavailable</span>
+                            <span className="block font-medium">{actionLabel}</span>
+                            <span className="mt-0.5 block truncate text-[11px]">
+                              {tCommon("unavailable")}
+                            </span>
                           </button>
                         );
                       }
@@ -242,9 +259,9 @@ export function VehicleActionModalTrigger({
                             onClick={loadInfo}
                             className="min-h-12 rounded-xl border border-[var(--edge)] bg-[var(--surface)] px-3 py-2.5 text-start text-sm transition-colors hover:border-[var(--accent)] hover:bg-white/5"
                           >
-                            <span className="block font-medium text-white">{action.label}</span>
+                            <span className="block font-medium text-white">{actionLabel}</span>
                             <span className="mt-0.5 block text-[11px] text-[var(--accent)]">
-                              View full specs & rates
+                              {tFleet("viewSpecsRates")}
                             </span>
                           </button>
                         );
@@ -256,9 +273,9 @@ export function VehicleActionModalTrigger({
                           onClick={() => setOpen(false)}
                           className="min-h-12 content-center rounded-xl border border-[var(--edge)] bg-[var(--surface)] px-3 py-2.5 text-start text-sm transition-colors hover:border-[var(--accent)] hover:bg-white/5"
                         >
-                          <span className="block font-medium text-white">{action.label}</span>
+                          <span className="block font-medium text-white">{actionLabel}</span>
                           <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
-                            Open workflow →
+                            {tFleet("openWorkflow")}
                           </span>
                         </Link>
                       );
@@ -268,18 +285,18 @@ export function VehicleActionModalTrigger({
               ) : (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-base font-semibold">Retrieved Vehicle Information</h3>
+                    <h3 className="text-base font-semibold">{tFleet("retrievedInfo")}</h3>
                     <button
                       type="button"
                       onClick={() => setViewInfo(false)}
                       className="min-h-10 rounded-lg border border-[var(--edge)] px-3 text-sm text-[var(--accent)]"
                     >
-                      ← Back to actions
+                      {tFleet("backToActions")}
                     </button>
                   </div>
 
                   {loading && (
-                    <p className="text-sm text-[var(--muted)]">Loading latest vehicle details…</p>
+                    <p className="text-sm text-[var(--muted)]">{tFleet("loadingDetails")}</p>
                   )}
                   {error && (
                     <p role="alert" className="text-sm text-red-300">
@@ -302,31 +319,46 @@ export function VehicleActionModalTrigger({
 
                       <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                         {[
-                          ["SI / Vehicle No.", details.number],
-                          ["Brand & Model", `${details.brand} ${details.model}`],
-                          ["Registration", details.registration],
-                          ["Branch", details.branch],
-                          ["Year / Color", `${details.year} · ${details.color}`],
-                          ["Fuel / Gearbox", `${details.fuelType} · ${details.gearbox}`],
-                          ["Seats / Capacity", `${details.seatCount} seats · ${details.capacity}`],
-                          ["Chassis No.", details.chassis],
-                          ["Engine No.", details.engine],
-                          ["Current KM", `${details.odometer.toLocaleString()} km`],
+                          [tFleet("siNo"), details.number],
                           [
-                            "Insurance",
-                            `${details.insuranceCompany ?? "—"} (until ${details.insuranceUntil ?? "—"})`,
+                            `${tWizard("brand")} / ${tWizard("model")}`,
+                            `${details.brand} ${details.model}`,
                           ],
-                          ["Mulkiya Expiry", details.mulkiyaUntil ?? "—"],
+                          [tCommon("registration"), details.registration],
+                          [tCommon("branch"), details.branch],
                           [
-                            "Next Engine Service",
+                            `${tWizard("year")} / ${tWizard("color")}`,
+                            `${details.year} · ${details.color}`,
+                          ],
+                          [
+                            `${tWizard("fuel")} / ${tWizard("gearbox")}`,
+                            `${translateStatus(tStatus, details.fuelType)} · ${translateStatus(tStatus, details.gearbox)}`,
+                          ],
+                          [
+                            `${tWizard("seatCount")} / ${tWizard("capacity")}`,
+                            `${details.seatCount} · ${details.capacity}`,
+                          ],
+                          [tWizard("chassisNumber"), details.chassis],
+                          [tWizard("engineNumber"), details.engine],
+                          [
+                            tWizard("currentOdometerKm"),
+                            `${details.odometer.toLocaleString()} ${tCommon("km")}`,
+                          ],
+                          [
+                            tFleet("insurance"),
+                            `${details.insuranceCompany ?? "—"} (${details.insuranceUntil ?? "—"})`,
+                          ],
+                          [tWizard("mulkiyaExpiryDate"), details.mulkiyaUntil ?? "—"],
+                          [
+                            tFleet("nextServiceKm"),
                             details.lastEngineServiceKm != null && details.engineInterval
-                              ? `${(details.lastEngineServiceKm + details.engineInterval).toLocaleString()} km`
+                              ? `${(details.lastEngineServiceKm + details.engineInterval).toLocaleString()} ${tCommon("km")}`
                               : "—",
                           ],
                           [
-                            "Next Gear Oil",
+                            tStatus("GEAR_OIL"),
                             details.lastGearOilChangeKm != null && details.gearInterval
-                              ? `${(details.lastGearOilChangeKm + details.gearInterval).toLocaleString()} km`
+                              ? `${(details.lastGearOilChangeKm + details.gearInterval).toLocaleString()} ${tCommon("km")}`
                               : "—",
                           ],
                         ].map(([label, value]) => (
@@ -343,7 +375,7 @@ export function VehicleActionModalTrigger({
                       {details.pricing.length > 0 && (
                         <div>
                           <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            Rental Pricing Settings
+                            {tFleet("pricingSettings")}
                           </h4>
                           <div className="mt-2 grid gap-3 sm:grid-cols-3">
                             {details.pricing.map((tier) => (
@@ -351,11 +383,21 @@ export function VehicleActionModalTrigger({
                                 key={tier.id}
                                 className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-3 text-xs"
                               >
-                                <p className="font-semibold text-[var(--accent)]">{tier.period}</p>
-                                <p className="mt-1">Standard: {formatOMR(tier.listRentBaisa)}</p>
-                                <p>Minimum: {formatOMR(tier.minimumRentBaisa)}</p>
-                                <p>Included KM: {tier.includedKm.toLocaleString()}</p>
-                                <p>Excess KM: {formatOMR(tier.excessKmChargeBaisa)}</p>
+                                <p className="font-semibold text-[var(--accent)]">
+                                  {translateStatus(tStatus, tier.period)}
+                                </p>
+                                <p className="mt-1">
+                                  {tFleet("standardRate")}: {formatOMR(tier.listRentBaisa)}
+                                </p>
+                                <p>
+                                  {tFleet("minimumRate")}: {formatOMR(tier.minimumRentBaisa)}
+                                </p>
+                                <p>
+                                  {tFleet("includedKm")}: {tier.includedKm.toLocaleString()}
+                                </p>
+                                <p>
+                                  {tFleet("excessKm")}: {formatOMR(tier.excessKmChargeBaisa)}
+                                </p>
                               </div>
                             ))}
                           </div>
@@ -364,15 +406,17 @@ export function VehicleActionModalTrigger({
 
                       {details.activeBooking && (
                         <div className="rounded-xl border border-[var(--edge)] bg-[var(--surface)] p-4 text-sm">
-                          <h4 className="font-semibold">Current Booking Details</h4>
+                          <h4 className="font-semibold">{tFleet("currentBookingDetails")}</h4>
                           <p className="mt-1 text-xs text-[var(--muted)]">
-                            {details.activeBooking.agreementNumber} · {details.activeBooking.status}{" "}
-                            · {details.activeBooking.customerName} (
+                            {details.activeBooking.agreementNumber} ·{" "}
+                            {translateStatus(tStatus, details.activeBooking.status)} ·{" "}
+                            {details.activeBooking.customerName} (
                             {details.activeBooking.customerMobile})
                           </p>
                           <p className="mt-1 text-xs text-[var(--muted)]">
                             {formatDateTime(details.activeBooking.startsAt)} →{" "}
-                            {formatDateTime(details.activeBooking.expectedReturnAt)} (Oman)
+                            {formatDateTime(details.activeBooking.expectedReturnAt)} (
+                            {tCommon("omanTime")})
                           </p>
                         </div>
                       )}

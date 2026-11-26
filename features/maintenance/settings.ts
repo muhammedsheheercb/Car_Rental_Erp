@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { operationalSettings } from "@/db/schema";
+import { auditLogs, operationalSettings } from "@/db/schema";
 import { can, type Identity } from "@/lib/auth";
 import { DEFAULT_FLEET_ALERTS } from "./calculations";
 export async function fleetAlertSettings() {
@@ -28,4 +28,11 @@ export async function saveFleetAlerts(raw: unknown, actor: Identity) {
       target: operationalSettings.key,
       set: { ...values, updatedBy: actor.id, updatedAt: new Date() },
     });
+  await db.insert(auditLogs).values({
+    actorId: actor.id,
+    event: "SETTINGS_UPDATED",
+    entityType: "settings",
+    entityId: "fleet-alerts",
+    metadata: values,
+  });
 }

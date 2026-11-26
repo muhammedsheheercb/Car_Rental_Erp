@@ -1,13 +1,8 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
-
-const STATUS_OPTIONS = [
-  ["all", "All"],
-  ["active", "Active"],
-  ["removed", "Removed"],
-] as const;
 
 export function BlacklistControls({
   total,
@@ -18,6 +13,9 @@ export function BlacklistControls({
   activeCount: number;
   removedCount: number;
 }) {
+  const tBl = useTranslations("customers.blacklistPage");
+  const tCommon = useTranslations("common");
+  const tStatus = useTranslations("status");
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -25,6 +23,12 @@ export function BlacklistControls({
   const [query, setQuery] = useState(params.get("q") ?? "");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const status = params.get("status") ?? "all";
+
+  const statusOptions = [
+    ["all", tCommon("all")],
+    ["active", tStatus("ACTIVE")],
+    ["removed", tStatus("REMOVED")],
+  ] as const;
 
   const navigate = (nextQuery: string, nextStatus = status) => {
     const next = new URLSearchParams(params.toString());
@@ -58,7 +62,7 @@ export function BlacklistControls({
     <div className="mt-6 space-y-3" aria-busy={pending}>
       <div className="flex max-w-xl gap-2">
         <label className="min-w-0 flex-1 text-sm">
-          <span className="sr-only">Search blacklist</span>
+          <span className="sr-only">{tCommon("search")}</span>
           <input
             value={query}
             onChange={(event) => {
@@ -67,7 +71,7 @@ export function BlacklistControls({
               if (timer.current) clearTimeout(timer.current);
               timer.current = setTimeout(() => navigate(value), 300);
             }}
-            placeholder="Search customer, ID, mobile, reason, or description"
+            placeholder={tBl("searchPlaceholder")}
             className="min-h-11 w-full rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-3"
           />
         </label>
@@ -81,13 +85,13 @@ export function BlacklistControls({
             }}
             className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
           >
-            Clear
+            {tCommon("clear")}
           </button>
         )}
       </div>
 
       <div className="flex max-w-full flex-wrap items-center gap-2">
-        {STATUS_OPTIONS.map(([value, label]) => (
+        {statusOptions.map(([value, label]) => (
           <button
             key={value}
             type="button"
@@ -108,15 +112,13 @@ export function BlacklistControls({
             }}
             className="min-h-10 px-2 text-sm text-[var(--accent)]"
           >
-            Reset filters
+            {tCommon("resetFilters")}
           </button>
         )}
       </div>
 
       <p className="text-sm text-[var(--muted)]" role="status">
-        {pending
-          ? "Updating blacklist register…"
-          : `${total} matching record${total === 1 ? "" : "s"}`}
+        {pending ? tBl("updatingRegister") : tBl("matchingRecords", { count: total })}
       </p>
     </div>
   );

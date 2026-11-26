@@ -1,6 +1,9 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 export function PrintButton() {
+  const tCommon = useTranslations("common");
+  const tDoc = useTranslations("documents");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const print = async () => {
@@ -12,7 +15,7 @@ export function PrintButton() {
       await Promise.all(images.map((img) => img.decode()));
       window.print();
     } catch {
-      setError("A signature image is unavailable. Reload the document before printing.");
+      setError(tDoc("signatureUnavailableError"));
     } finally {
       setPending(false);
     }
@@ -20,7 +23,7 @@ export function PrintButton() {
   return (
     <div className="print:hidden">
       <button type="button" className="rounded-lg border p-3" disabled={pending} onClick={print}>
-        {pending ? "Preparing…" : "Print A4"}
+        {pending ? tCommon("preparing") : tCommon("printA4")}
       </button>
       {error && <p role="alert">{error}</p>}
     </div>

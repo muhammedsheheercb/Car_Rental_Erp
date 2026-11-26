@@ -1,5 +1,7 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { translateValidation } from "@/lib/i18n-helpers";
 import { compressImageFile } from "@/lib/image-compress";
 
 type Selected = { file: File; url: string; width: number; height: number };
@@ -9,7 +11,7 @@ export function DocumentPicker({
   required = false,
   existing,
   existingUrl: customExistingUrl,
-  hint = "Private R2 image · JPEG, PNG, or WebP · compressed automatically (max 5 MB)",
+  hint,
   onChange,
 }: {
   label: string;
@@ -19,6 +21,9 @@ export function DocumentPicker({
   hint?: string;
   onChange?: (file: File | null, width: number, height: number) => void;
 }) {
+  const t = useTranslations();
+  const tCommon = useTranslations("common");
+  const resolvedHint = hint ?? tCommon("privateR2Hint");
   const [selected, setSelected] = useState<Selected | null>(null);
   const [error, setError] = useState("");
   const [compressing, setCompressing] = useState(false);
@@ -55,7 +60,8 @@ export function DocumentPicker({
       });
       onChange?.(optimized.file, optimized.width, optimized.height);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "This image could not be read.");
+      const raw = cause instanceof Error ? cause.message : "This image could not be read.";
+      setError(translateValidation(t, raw));
     } finally {
       setCompressing(false);
     }
@@ -67,10 +73,10 @@ export function DocumentPicker({
         {label}
         {required ? " *" : ""}
       </p>
-      <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">{resolvedHint}</p>
       {compressing && (
         <p className="mt-2 text-xs text-[var(--muted)]" role="status">
-          Compressing image…
+          {tCommon("compressingImage")}
         </p>
       )}
       {selected ? (
@@ -78,7 +84,7 @@ export function DocumentPicker({
           {/* biome-ignore lint/performance/noImgElement: local object URLs require direct previews */}
           <img
             src={selected.url}
-            alt={`${label} preview`}
+            alt={label}
             className="h-20 w-28 rounded-lg border border-[var(--edge)] object-cover"
           />
           <div className="min-w-0 text-sm">
@@ -93,14 +99,14 @@ export function DocumentPicker({
                 onClick={() => setOpen(true)}
                 className="min-h-9 rounded border border-[var(--edge)] px-2"
               >
-                View
+                {tCommon("view")}
               </button>
               <button
                 type="button"
                 onClick={() => picker.current?.click()}
                 className="min-h-9 rounded border border-[var(--edge)] px-2"
               >
-                Replace
+                {tCommon("replace")}
               </button>
               <button
                 type="button"
@@ -111,7 +117,7 @@ export function DocumentPicker({
                 }}
                 className="min-h-9 px-2 text-red-300"
               >
-                Remove
+                {tCommon("remove")}
               </button>
             </div>
           </div>
@@ -121,19 +127,19 @@ export function DocumentPicker({
           {/* biome-ignore lint/performance/noImgElement: authenticated private images require direct previews */}
           <img
             src={existingUrl}
-            alt={`${label} preview`}
+            alt={label}
             onLoad={() => setPreviewFailed(false)}
             onError={() => setPreviewFailed(true)}
             className="h-20 w-28 shrink-0 rounded-lg border border-[var(--edge)] object-contain"
           />
           <div className="min-w-0 text-sm">
-            <p className="font-medium">Saved image</p>
+            <p className="font-medium">{tCommon("savedImage")}</p>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {(existing.sizeBytes / 1024 / 1024).toFixed(2)} MB
             </p>
             {previewFailed && (
               <p role="alert" className="mt-1 text-xs text-red-300">
-                Could not load the image preview.
+                {tCommon("imagePreviewFailed")}
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-2">
@@ -142,14 +148,14 @@ export function DocumentPicker({
                 onClick={() => setOpen(true)}
                 className="min-h-9 rounded border border-[var(--edge)] px-2"
               >
-                View
+                {tCommon("view")}
               </button>
               <button
                 type="button"
                 onClick={() => picker.current?.click()}
                 className="min-h-9 rounded border border-[var(--edge)] px-2"
               >
-                Replace
+                {tCommon("replace")}
               </button>
             </div>
           </div>
@@ -157,7 +163,7 @@ export function DocumentPicker({
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           <label className="min-h-10 cursor-pointer rounded-lg border border-[var(--edge)] px-3 py-2 text-sm">
-            Take photo
+            {tCommon("takePhoto")}
             <input
               className="sr-only"
               type="file"
@@ -174,7 +180,7 @@ export function DocumentPicker({
             onClick={() => picker.current?.click()}
             className="min-h-10 rounded-lg border border-[var(--edge)] px-3 text-sm"
           >
-            Upload file
+            {tCommon("uploadFile")}
           </button>
         </div>
       )}
@@ -197,7 +203,7 @@ export function DocumentPicker({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`${label} preview`}
+          aria-label={label}
           onMouseDown={() => setOpen(false)}
           className="fixed inset-0 z-[80] grid place-items-center bg-black/80 p-3"
         >
@@ -209,7 +215,7 @@ export function DocumentPicker({
             {/* biome-ignore lint/performance/noImgElement: local object URLs require direct previews */}
             <img
               src={previewUrl}
-              alt={`${label} full preview`}
+              alt={label}
               className="max-h-[80dvh] max-w-full rounded-xl object-contain"
             />
             <button
@@ -217,7 +223,7 @@ export function DocumentPicker({
               onClick={() => setOpen(false)}
               className="mt-3 min-h-11 rounded-lg bg-[var(--raised)] px-4"
             >
-              Close
+              {tCommon("close")}
             </button>
           </div>
         </div>

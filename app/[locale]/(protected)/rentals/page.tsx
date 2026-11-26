@@ -1,4 +1,19 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, not, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { BookingRowActions } from "@/components/booking-row-actions";
@@ -8,6 +23,7 @@ import { RentalBookingForm } from "@/components/rental-booking-form";
 import { db } from "@/db/client";
 import {
   branches,
+  customerBlacklist,
   customers,
   rentals,
   vehicleBrands,
@@ -18,9 +34,10 @@ import {
   vehicles,
 } from "@/db/schema";
 import { operationalBlocking } from "@/features/rentals/availability";
-import { parseOmanDateTime } from "@/features/rentals/booking-calculations";
+import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requirePermission } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
+import { translateStatus } from "@/lib/i18n-helpers";
 
 const PAGE_SIZE = 15;
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -42,9 +59,12 @@ export default async function RentalsPage({
   }>;
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
-  const [identity, t] = await Promise.all([
-    requirePermission("rentals", "read"),
+  const [identity, t, tRentals, tCommon, tStatus] = await Promise.all([
+    requirePagePermission(locale, "rentals", "read"),
     getTranslations(),
+    getTranslations("rentals"),
+    getTranslations("common"),
+    getTranslations("status"),
   ]);
   const scoped =
     identity.role === "SUPER_ADMIN" ? undefined : inArray(vehicles.branchId, identity.branchIds);
@@ -84,10 +104,13 @@ export default async function RentalsPage({
       : undefined,
   );
 
+  const today = formatOmanDateTime(new Date()).slice(0, 10);
+
   const [
     vehicleRows,
     customerRows,
     preselectedCustomer,
+    activeBlacklistRows,
     pricingRows,
     branchRows,
     recent,
@@ -170,6 +193,19 @@ export default async function RentalsPage({
       : Promise.resolve([]),
     db
       .select({
+        customerId: customerBlacklist.customerId,
+        reason: customerBlacklist.reason,
+      })
+      .from(customerBlacklist)
+      .where(
+        and(
+          eq(customerBlacklist.isActive, true),
+          or(isNull(customerBlacklist.startsAt), lte(customerBlacklist.startsAt, today)),
+          or(isNull(customerBlacklist.endsAt), gte(customerBlacklist.endsAt, today)),
+        ),
+      ),
+    db
+      .select({
         vehicleId: vehiclePricing.vehicleId,
         period: vehiclePricing.period,
         listRentBaisa: vehiclePricing.listRentBaisa,
@@ -239,10 +275,21 @@ export default async function RentalsPage({
       .where(and(inArray(rentals.status, ["RESERVED", "ACTIVE"]), scoped)),
   ]);
 
-  const mergedCustomers =
+  const blacklistByCustomer = new Map<string, string>();
+  for (const row of activeBlacklistRows) {
+    if (!blacklistByCustomer.has(row.customerId)) {
+      blacklistByCustomer.set(row.customerId, row.reason);
+    }
+  }
+
+  const mergedCustomers = (
     preselectedCustomer[0] && !customerRows.some((c) => c.id === preselectedCustomer[0].id)
       ? [preselectedCustomer[0], ...customerRows]
-      : customerRows;
+      : customerRows
+  ).map((c) => ({
+    ...c,
+    blacklistReason: blacklistByCustomer.get(c.id) ?? null,
+  }));
 
   const canCreate = can(identity, "rentals", "create");
   const defaultBranch = branchRows[0]?.id ?? "";
@@ -263,12 +310,9 @@ export default async function RentalsPage({
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-sm text-[var(--accent)]">OPERATIONS / RENTALS</p>
-        <h1 className="mt-2 text-3xl font-semibold">{t("rentals")}</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Reservations are checked against customer identity, blacklist status and vehicle conflicts
-          on the server.
-        </p>
+        <p className="text-sm text-[var(--accent)]">{tRentals("eyebrow")}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{t("nav.rentals")}</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">{tRentals("subtitle")}</p>
       </div>
       <OperationsLinks locale={locale} />
       {canCreate && (
@@ -295,21 +339,21 @@ export default async function RentalsPage({
       )}
       <section className="overflow-hidden rounded-2xl border border-[var(--edge)] bg-[var(--surface)]">
         <div className="border-b border-[var(--edge)] p-4">
-          <h2 className="font-semibold">Bookings & rental agreements</h2>
+          <h2 className="font-semibold">{tRentals("bookingsHeading")}</h2>
         </div>
         <BookingsControls total={total} branches={branchRows} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[66rem] text-start text-sm">
             <thead className="bg-[var(--raised)] text-[var(--muted)]">
               <tr>
-                <th className="p-3 text-start">Agreement</th>
-                <th className="p-3 text-start">Customer</th>
-                <th className="p-3 text-start">Vehicle</th>
-                <th className="p-3 text-start">Branch</th>
-                <th className="p-3 text-start">Period (Oman)</th>
-                <th className="p-3 text-center">Status</th>
-                <th className="p-3 text-end">Total</th>
-                <th className="p-3 text-center">Actions</th>
+                <th className="p-3 text-start">{tRentals("agreementCol")}</th>
+                <th className="p-3 text-start">{tCommon("customer")}</th>
+                <th className="p-3 text-start">{tCommon("vehicle")}</th>
+                <th className="p-3 text-start">{tCommon("branch")}</th>
+                <th className="p-3 text-start">{tRentals("periodCol")}</th>
+                <th className="p-3 text-center">{tCommon("status")}</th>
+                <th className="p-3 text-end">{tCommon("total")}</th>
+                <th className="p-3 text-center">{tCommon("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -348,7 +392,7 @@ export default async function RentalsPage({
                               : "bg-white/10 text-[var(--muted)]"
                       }`}
                     >
-                      {r.status}
+                      {translateStatus(tStatus, r.status)}
                     </span>
                   </td>
                   <td className="p-3 text-end font-mono">{formatOMR(r.total)}</td>
@@ -382,7 +426,7 @@ export default async function RentalsPage({
               {recent.length === 0 && (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-[var(--muted)]">
-                    No matching bookings found.
+                    {tRentals("noBookings")}
                   </td>
                 </tr>
               )}
@@ -391,7 +435,7 @@ export default async function RentalsPage({
         </div>
         {total > PAGE_SIZE && (
           <nav
-            aria-label="Booking pages"
+            aria-label={tRentals("bookingsHeading")}
             className="flex items-center justify-end gap-3 border-t border-[var(--edge)] p-4 text-sm"
           >
             {page > 1 && (
@@ -399,18 +443,18 @@ export default async function RentalsPage({
                 href={pageHref(page - 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Previous
+                {tCommon("previous")}
               </Link>
             )}
             <span className="text-[var(--muted)]">
-              Page {page} of {totalPages}
+              {tCommon("pageOf", { page, total: totalPages })}
             </span>
             {page < totalPages && (
               <Link
                 href={pageHref(page + 1) as never}
                 className="min-h-10 content-center rounded-lg border border-[var(--edge)] px-3"
               >
-                Next
+                {tCommon("next")}
               </Link>
             )}
           </nav>
