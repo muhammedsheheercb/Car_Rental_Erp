@@ -173,7 +173,11 @@ export async function createService(raw: unknown, actor: Identity) {
       throw new Error("Service By Customer requires an occupied booking and a completed service.");
     if (input.status !== "COMPLETED" && input.cost)
       throw new Error("Record the actual expense when service is completed.");
-    if (input.status === "IN_PROGRESS") await blockCheck(tx, v.id);
+    if (
+      input.serviceBy === "COMPANY" &&
+      (input.status === "IN_PROGRESS" || input.status === "COMPLETED")
+    )
+      await blockCheck(tx, v.id);
     if (input.status === "SCHEDULED" && !input.dueDate && !input.dueOdometerKm)
       throw new Error("Scheduled service requires a due date or due KM.");
     const dueDate = input.dueDate ? parseOmanDateTime(`${input.dueDate}T00:00`) : undefined;
@@ -286,7 +290,11 @@ export async function changeService(raw: unknown, actor: Identity) {
       throw new Error("Completed or cancelled service history is immutable.");
     if (input.status === "IN_PROGRESS" && s.status !== "SCHEDULED")
       throw new Error("Only scheduled services can start.");
-    if (input.status === "IN_PROGRESS") await blockCheck(tx, v.id, s.id);
+    if (
+      s.serviceBy === "COMPANY" &&
+      (input.status === "IN_PROGRESS" || input.status === "COMPLETED")
+    )
+      await blockCheck(tx, v.id, s.id);
     const at = input.status === "COMPLETED" ? parseOmanDateTime(input.completedAt) : null;
     if (at)
       await complete(tx, s, v, actor, input.serviceOdometerKm, at, input.cost, input.paymentMode);

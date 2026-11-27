@@ -399,8 +399,13 @@ export function paginateReportRows<T>(
  */
 export function escapeCsvCell(raw: string): string {
   let value = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const isNegativeNumber = /^-\d+(\.\d+)?$/.test(value);
-  if (/^[=+@\t\n]/.test(value) || (value.startsWith("-") && !isNegativeNumber)) {
+  const leadingTrimmed = value.trimStart();
+  const isNegativeNumber = /^-\d+(\.\d+)?$/.test(leadingTrimmed);
+  if (
+    /^[=+@|\t\n]/.test(value) ||
+    /^[=+@|]/.test(leadingTrimmed) ||
+    (leadingTrimmed.startsWith("-") && !isNegativeNumber)
+  ) {
     value = `'${value}`;
   }
   if (/[",\n]/.test(value)) {

@@ -246,31 +246,33 @@ export function OmanDateTimePicker({
 
           <div className="mt-3 flex items-center gap-2 border-t border-[var(--edge)] pt-3">
             <span className="text-xs text-[var(--muted)]">{tCommon("timeOman")}</span>
-            <select
-              aria-label={tCommon("hour")}
-              value={hour}
-              onChange={(e) => handleTimeChange(e.target.value, minute)}
-              className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
-            >
-              {Array.from({ length: 24 }, (_, h) => pad2(h)).map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-[var(--muted)]">:</span>
-            <select
-              aria-label={tCommon("minute")}
-              value={minute}
-              onChange={(e) => handleTimeChange(hour, e.target.value)}
-              className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
-            >
-              {minuteOptions.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+            <div dir="ltr" className="flex flex-1 items-center gap-2">
+              <select
+                aria-label={tCommon("hour")}
+                value={hour}
+                onChange={(e) => handleTimeChange(e.target.value, minute)}
+                className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
+              >
+                {Array.from({ length: 24 }, (_, h) => pad2(h)).map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-[var(--muted)]">:</span>
+              <select
+                aria-label={tCommon("minute")}
+                value={minute}
+                onChange={(e) => handleTimeChange(hour, e.target.value)}
+                className="min-h-9 flex-1 rounded-lg border border-[var(--edge)] bg-[var(--surface)] px-2 text-xs"
+              >
+                {minuteOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-2">

@@ -1,5 +1,6 @@
 import "server-only";
-import { and, eq, gt, inArray, lt, not, or } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, ne, not, or } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db/client";
 import {
   auditLogs,
@@ -66,6 +67,8 @@ export async function createReservation(rawInput: unknown, actor: Identity) {
       );
     if (!allowPriceOverride && input.dailyRateBaisa !== configuredPricing.listRentBaisa)
       throw new Error("Only an authorized admin can override configured rent.");
+    if (input.dailyRateBaisa < configuredPricing.minimumRentBaisa)
+      throw new Error("Rent rate cannot be below the vehicle's configured minimum rent.");
     if (
       input.includedKm !== configuredPricing.includedKm ||
       input.excessKmChargeBaisa !== configuredPricing.excessKmChargeBaisa ||
@@ -130,13 +133,15 @@ export async function createReservation(rawInput: unknown, actor: Identity) {
       amountBaisa: calculation.totalBaisa,
       createdBy: actorId,
     });
-    await tx.insert(customerLedger).values({
-      customerId: input.customerId,
-      rentalId: rental.id,
-      type: "RENT_CHARGE",
-      debitBaisa: calculation.totalBaisa,
-      description: `Agreement ${rental.agreementNumber}`,
-    });
+    if (calculation.totalBaisa > 0) {
+      await tx.insert(customerLedger).values({
+        customerId: input.customerId,
+        rentalId: rental.id,
+        type: "RENT_CHARGE",
+        debitBaisa: calculation.totalBaisa,
+        description: `Agreement ${rental.agreementNumber}`,
+      });
+    }
     if (input.depositBaisa > 0)
       await tx.insert(customerLedger).values({
         customerId: input.customerId,
@@ -218,6 +223,13 @@ export async function createReservation(rawInput: unknown, actor: Identity) {
 }
 
 export async function activateRental(rentalId: string, pickupOdometerKm: number, actorId: string) {
+  if (!z.string().uuid().safeParse(rentalId).success) throw new Error("Invalid booking ID.");
+  if (
+    !Number.isInteger(pickupOdometerKm) ||
+    pickupOdometerKm < 0 ||
+    pickupOdometerKm > 2_147_483_647
+  )
+    throw new Error("Pickup odometer is invalid.");
   return db.transaction(async (tx) => {
     const [candidate] = await tx.select().from(rentals).where(eq(rentals.id, rentalId));
     if (!candidate) throw new Error("Reservation not found.");
@@ -228,23 +240,50 @@ export async function activateRental(rentalId: string, pickupOdometerKm: number,
       .for("update");
     const [rental] = await tx.select().from(rentals).where(eq(rentals.id, rentalId)).for("update");
     if (rental?.status !== "RESERVED") throw new Error("Only a reservation can be checked out.");
-    if (!vehicle?.isActive || vehicle.status !== "AVAILABLE")
+    if (
+      !vehicle ||
+      rental.vehicleId !== vehicle.id ||
+      !vehicle.isActive ||
+      vehicle.status !== "AVAILABLE"
+    )
       throw new Error("Vehicle is unavailable.");
-    if (!Number.isInteger(pickupOdometerKm) || pickupOdometerKm < vehicle.currentOdometerKm)
+    if (pickupOdometerKm < vehicle.currentOdometerKm)
       throw new Error("Pickup odometer is invalid.");
-    const [active] = await tx
-      .select({ id: rentals.id })
+    await assertCustomerCanBeBooked(rental.customerId, tx);
+    const now = new Date();
+    const effectiveStart = now < rental.startsAt ? now : rental.startsAt;
+    const [conflict] = await tx
+      .select({ id: rentals.id, status: rentals.status })
       .from(rentals)
-      .where(and(eq(rentals.vehicleId, rental.vehicleId), eq(rentals.status, "ACTIVE")))
+      .where(
+        and(
+          eq(rentals.vehicleId, rental.vehicleId),
+          ne(rentals.id, rental.id),
+          or(
+            eq(rentals.status, "ACTIVE"),
+            and(
+              eq(rentals.status, "RESERVED"),
+              lt(rentals.startsAt, rental.expectedReturnAt),
+              gt(rentals.expectedReturnAt, effectiveStart),
+            ),
+          ),
+        ),
+      )
       .limit(1);
-    if (active) throw new Error("Vehicle is already on rent.");
+    if (conflict) {
+      throw new Error(
+        conflict.status === "ACTIVE"
+          ? "Vehicle is already on rent."
+          : "Cannot check out early: another reservation overlaps this period.",
+      );
+    }
     await tx
       .update(rentals)
-      .set({ status: "ACTIVE", pickupOdometerKm, updatedAt: new Date() })
+      .set({ status: "ACTIVE", pickupOdometerKm, updatedAt: now })
       .where(eq(rentals.id, rentalId));
     await tx
       .update(vehicles)
-      .set({ status: "INACTIVE", currentOdometerKm: pickupOdometerKm, updatedAt: new Date() })
+      .set({ status: "INACTIVE", currentOdometerKm: pickupOdometerKm, updatedAt: now })
       .where(eq(vehicles.id, rental.vehicleId));
     await tx.insert(auditLogs).values({
       actorId,

@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/features/customers/eligibility", () => ({ assertCustomerCanBeBooked: vi.fn() }));
 vi.mock("@/lib/r2", () => ({ putPrivateCustomerDocument: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
   can: (actor: Identity, module: string, action: string, branch?: string) =>
@@ -94,7 +95,12 @@ const baseRental = {
   totalBaisa: 20000,
 };
 
-const baseVehicle = { id: ID, currentOdometerKm: 10000 };
+const baseVehicle = {
+  id: ID,
+  currentOdometerKm: 10000,
+  isActive: true,
+  status: "AVAILABLE" as const,
+};
 
 describe("sanitizeReturnTo & bookingUpdateSchema (§21)", () => {
   it("accepts only safe same-origin relative returnTo paths", () => {
@@ -212,7 +218,7 @@ describe("updateBooking & deleteBooking lifecycle rules (§21)", () => {
   });
 
   it("deletes a clean RESERVED booking with no financial or operational records", async () => {
-    fixture.reads = [[baseRental], [baseVehicle], [baseRental], [], [], [], [], [], [], [], []];
+    fixture.reads = [[baseRental], [baseVehicle], [baseRental], [], [], [], [], [], [], [], [], []];
     await deleteBooking(ID, superAdmin);
     expect(fixture.writes.some((w) => w.table === rentals && w.op === "delete")).toBe(true);
     expect(fixture.writes.some((w) => w.table === customerLedger && w.op === "delete")).toBe(true);
@@ -224,6 +230,7 @@ describe("updateBooking & deleteBooking lifecycle rules (§21)", () => {
       [baseVehicle],
       [baseRental],
       [{ id: "payment-1" }],
+      [],
       [],
       [],
       [],

@@ -23,6 +23,7 @@ export function OperationalFilters({ direction = "down" }: { direction?: "down" 
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDetailsElement>(null);
   useEffect(
     () =>
       setValues(Object.fromEntries(fields.map(([name]) => [name, searchParams.get(name) ?? ""]))),
@@ -34,6 +35,23 @@ export function OperationalFilters({ direction = "down" }: { direction?: "down" 
     },
     [],
   );
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
   const apply = (next: Record<string, string>) => {
     const params = new URLSearchParams(searchParams);
     for (const [name] of fields)
@@ -43,6 +61,7 @@ export function OperationalFilters({ direction = "down" }: { direction?: "down" 
   };
   return (
     <details
+      ref={containerRef}
       open={open}
       onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
       className="relative"
@@ -51,8 +70,10 @@ export function OperationalFilters({ direction = "down" }: { direction?: "down" 
         {tNav("filters")}
       </summary>
       <div
-        className={`absolute z-50 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-[var(--edge)] bg-[var(--raised)] p-3.5 text-[var(--ink)] shadow-2xl ${
-          direction === "up" ? "bottom-12 start-0" : "end-0 top-12"
+        className={`z-50 rounded-2xl border border-[var(--edge)] bg-[var(--raised)] p-3.5 text-[var(--ink)] shadow-2xl ${
+          direction === "up"
+            ? "fixed inset-x-3 bottom-20 mx-auto max-w-sm sm:absolute sm:inset-x-auto sm:bottom-12 sm:start-0 sm:w-80"
+            : "fixed inset-x-3 top-16 mx-auto max-w-sm sm:absolute sm:inset-x-auto sm:end-0 sm:top-12 sm:w-80"
         }`}
       >
         <p className="mb-2 text-xs text-[var(--muted)]">{tFilters("operationalHint")}</p>

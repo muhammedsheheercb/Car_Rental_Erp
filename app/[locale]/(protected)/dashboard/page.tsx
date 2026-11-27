@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { OperationsLinks } from "@/components/operations-links";
@@ -7,6 +7,7 @@ import {
   branches,
   customerLedger,
   customers,
+  paymentCorrections,
   payments,
   rentalCharges,
   rentals,
@@ -28,7 +29,7 @@ import {
 } from "@/features/rentals/availability";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
-import { can, requireIdentity } from "@/lib/auth";
+import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
 
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -84,10 +85,10 @@ export default async function Dashboard({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ branch?: string }>;
 }) {
-  const [{ locale }, query, user, t, tCommon, tStatus] = await Promise.all([
-    params,
+  const { locale } = await params;
+  const [query, user, t, tCommon, tStatus] = await Promise.all([
     searchParams,
-    requireIdentity(),
+    requirePagePermission(locale, "dashboard", "read"),
     getTranslations("dashboard"),
     getTranslations("common"),
     getTranslations("status"),
@@ -226,7 +227,10 @@ export default async function Dashboard({
         and(
           vehicleScope,
           eq(vehicles.isActive, true),
-          sql`${vehicles.currentOdometerKm} + ${policy.nearServiceKm} >= ${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
+          or(
+            sql`${vehicles.currentOdometerKm} + ${policy.nearServiceKm} >= ${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
+            sql`${vehicles.currentOdometerKm} + ${policy.nearServiceKm} >= ${vehicleServiceSettings.lastGearOilChangeKm} + ${vehicleServiceSettings.gearOilIntervalKm}`,
+          ),
         ),
       ),
     db
@@ -236,7 +240,7 @@ export default async function Dashboard({
       .where(
         and(
           vehicleScope,
-          gte(vehicleRegistrations.mulkiyaExpiryDate, day),
+          eq(vehicles.isActive, true),
           lte(vehicleRegistrations.mulkiyaExpiryDate, expiryLimit),
         ),
       ),
@@ -247,30 +251,38 @@ export default async function Dashboard({
       .where(
         and(
           vehicleScope,
-          gte(vehicleInsurance.validUntil, day),
+          eq(vehicles.isActive, true),
           lte(vehicleInsurance.validUntil, expiryLimit),
         ),
       ),
     db.select({ value: count() }).from(customers).where(eq(customers.isActive, true)),
     db
       .select({
-        value: sql<number>`coalesce(sum(${customerLedger.debitBaisa}) - sum(${customerLedger.creditBaisa}), 0)::int`,
+        value: sql<string>`coalesce(sum(${customerLedger.debitBaisa}) - sum(${customerLedger.creditBaisa}), 0)::bigint`,
       })
       .from(customerLedger)
       .leftJoin(rentals, eq(customerLedger.rentalId, rentals.id))
       .where(rentalScope),
     db
-      .select({ value: sql<number>`coalesce(sum(${payments.amountBaisa}), 0)::int` })
+      .select({ value: sql<string>`coalesce(sum(${payments.amountBaisa}), 0)::bigint` })
       .from(payments)
       .innerJoin(rentals, eq(payments.rentalId, rentals.id))
-      .where(and(paymentScope, eq(payments.direction, "RECEIPT"), eq(rentals.status, "RESERVED"))),
+      .where(
+        and(
+          paymentScope,
+          eq(payments.direction, "RECEIPT"),
+          eq(rentals.status, "RESERVED"),
+          sql`not exists(select 1 from ${paymentCorrections} where ${paymentCorrections.originalPaymentId} = ${payments.id})`,
+        ),
+      ),
     db
-      .select({ value: sql<number>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::int` })
+      .select({ value: sql<string>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::bigint` })
       .from(rentalCharges)
       .innerJoin(rentals, eq(rentalCharges.rentalId, rentals.id))
       .where(
         and(
           rentalScope,
+          ne(rentals.status, "CANCELLED"),
           eq(rentalCharges.type, "RENT_CHARGE"),
           gte(rentalCharges.createdAt, currentMonthStart),
         ),
@@ -278,7 +290,7 @@ export default async function Dashboard({
     db
       .select({ id: branches.id, name: branches.name, code: branches.code })
       .from(branches)
-      .where(branchScope)
+      .where(and(eq(branches.isActive, true), branchScope))
       .orderBy(asc(branches.name)),
     db
       .select({
@@ -316,13 +328,14 @@ export default async function Dashboard({
     db
       .select({
         ym: sql<string>`to_char(${rentalCharges.createdAt} AT TIME ZONE 'Asia/Muscat', 'YYYY-MM')`,
-        totalBaisa: sql<number>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::int`,
+        totalBaisa: sql<string>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::bigint`,
       })
       .from(rentalCharges)
       .innerJoin(rentals, eq(rentalCharges.rentalId, rentals.id))
       .where(
         and(
           rentalScope,
+          ne(rentals.status, "CANCELLED"),
           eq(rentalCharges.type, "RENT_CHARGE"),
           gte(rentalCharges.createdAt, sixMonthsStart),
         ),
@@ -330,45 +343,69 @@ export default async function Dashboard({
       .groupBy(sql`to_char(${rentalCharges.createdAt} AT TIME ZONE 'Asia/Muscat', 'YYYY-MM')`),
   ]);
 
-  const branchSummary = await Promise.all(
-    branchRows.map(async (branch) => {
-      const [fleet, active, reservation, branchRev] = await Promise.all([
+  // Batched GROUP BY branch aggregates (3 queries total instead of 4 * N queries)
+  const visibleBranchIds = branchRows.map((b) => b.id);
+  const [branchFleetRows, branchRentalRows, branchRevRows] = visibleBranchIds.length
+    ? await Promise.all([
         db
-          .select({ value: count() })
+          .select({ branchId: vehicles.branchId, value: count() })
           .from(vehicles)
-          .where(and(eq(vehicles.branchId, branch.id), availableFleet)),
+          .where(and(inArray(vehicles.branchId, visibleBranchIds), availableFleet))
+          .groupBy(vehicles.branchId),
         db
-          .select({ value: count() })
+          .select({
+            branchId: rentals.branchId,
+            status: rentals.status,
+            value: count(),
+          })
           .from(rentals)
-          .where(and(eq(rentals.branchId, branch.id), eq(rentals.status, "ACTIVE"))),
+          .where(
+            and(
+              inArray(rentals.branchId, visibleBranchIds),
+              inArray(rentals.status, ["ACTIVE", "RESERVED"]),
+            ),
+          )
+          .groupBy(rentals.branchId, rentals.status),
         db
-          .select({ value: count() })
-          .from(rentals)
-          .where(and(eq(rentals.branchId, branch.id), eq(rentals.status, "RESERVED"))),
-        db
-          .select({ value: sql<number>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::int` })
+          .select({
+            branchId: rentals.branchId,
+            value: sql<string>`coalesce(sum(${rentalCharges.amountBaisa}), 0)::bigint`,
+          })
           .from(rentalCharges)
           .innerJoin(rentals, eq(rentalCharges.rentalId, rentals.id))
           .where(
             and(
-              eq(rentals.branchId, branch.id),
+              inArray(rentals.branchId, visibleBranchIds),
+              ne(rentals.status, "CANCELLED"),
               eq(rentalCharges.type, "RENT_CHARGE"),
               gte(rentalCharges.createdAt, currentMonthStart),
             ),
-          ),
-      ]);
-      return {
-        ...branch,
-        available: fleet[0]?.value ?? 0,
-        active: active[0]?.value ?? 0,
-        reserved: reservation[0]?.value ?? 0,
-        revenueBaisa: branchRev[0]?.value ?? 0,
-      };
-    }),
-  );
+          )
+          .groupBy(rentals.branchId),
+      ])
+    : [[], [], []];
+
+  const availByBranch = new Map(branchFleetRows.map((r) => [r.branchId, r.value]));
+  const activeByBranch = new Map<string, number>();
+  const reservedByBranch = new Map<string, number>();
+  for (const r of branchRentalRows) {
+    if (r.status === "ACTIVE") activeByBranch.set(r.branchId, r.value);
+    else if (r.status === "RESERVED") reservedByBranch.set(r.branchId, r.value);
+  }
+  const revByBranch = new Map(branchRevRows.map((r) => [r.branchId, Number(r.value ?? 0)]));
+
+  const branchSummary = branchRows.map((branch) => ({
+    ...branch,
+    available: availByBranch.get(branch.id) ?? 0,
+    active: activeByBranch.get(branch.id) ?? 0,
+    reserved: reservedByBranch.get(branch.id) ?? 0,
+    revenueBaisa: revByBranch.get(branch.id) ?? 0,
+  }));
 
   // Build real 6-month revenue curve coordinates
-  const revenueByYm = new Map(monthlyRevenueRows.map((row) => [row.ym, row.totalBaisa]));
+  const revenueByYm = new Map(
+    monthlyRevenueRows.map((row) => [row.ym, Number(row.totalBaisa ?? 0)]),
+  );
   const series = sixMonths.map((item) => ({
     ...item,
     baisa: revenueByYm.get(item.ym) ?? 0,
@@ -403,9 +440,9 @@ export default async function Dashboard({
     mulkiyaExpiring: mulkiyaExpiring[0]?.value ?? 0,
     insuranceExpiring: insuranceExpiring[0]?.value ?? 0,
     activeCustomers: activeCustomers[0]?.value ?? 0,
-    outstandingBaisa: outstanding[0]?.value ?? 0,
-    advancesBaisa: advances[0]?.value ?? 0,
-    revenueBaisa: revenue[0]?.value ?? 0,
+    outstandingBaisa: Number(outstanding[0]?.value ?? 0),
+    advancesBaisa: Number(advances[0]?.value ?? 0),
+    revenueBaisa: Number(revenue[0]?.value ?? 0),
   };
 
   const telemetryCards: Array<{
@@ -449,13 +486,13 @@ export default async function Dashboard({
       label: t("mulkiyaAlerts", { days: policy.expirySoonDays }),
       value: counts.mulkiyaExpiring,
       tone: counts.mulkiyaExpiring > 0 ? "warn" : "default",
-      href: `/${locale}/expiry`,
+      href: `/${locale}/expiry?docType=mulkiya`,
     },
     {
       label: t("insuranceAlerts", { days: policy.expirySoonDays }),
       value: counts.insuranceExpiring,
       tone: counts.insuranceExpiring > 0 ? "warn" : "default",
-      href: `/${locale}/expiry`,
+      href: `/${locale}/expiry?docType=insurance`,
     },
     { label: t("activeCustomers"), value: counts.activeCustomers, href: `/${locale}/customers` },
     {
@@ -736,7 +773,13 @@ export default async function Dashboard({
         <section className="flex flex-col justify-between rounded-[22px] border border-[var(--edge)] bg-[var(--surface)] p-5 shadow-[0_8px_28px_rgba(22,21,19,0.04)] sm:p-6">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-[#161513]">{t("revenuePace")}</h2>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-emerald-700">
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${
+                rawPct !== null && rawPct < 0
+                  ? "bg-red-50 text-red-700"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}
+            >
               {paceLabel}
             </span>
           </div>

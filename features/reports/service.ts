@@ -23,6 +23,7 @@ import {
   customerLedger,
   customers,
   invoices,
+  paymentCorrections,
   payments,
   rentals,
   roles,
@@ -221,8 +222,10 @@ async function buildVehicleListReport(ctx: ReportQueryContext): Promise<BuiltRep
     );
   }
   if (ctx.branchId) conditions.push(eq(vehicles.branchId, ctx.branchId));
-  if (ctx.status !== "ALL") {
-    conditions.push(eq(vehicles.status, ctx.status as "AVAILABLE" | "INACTIVE"));
+  if (ctx.status === "AVAILABLE") {
+    conditions.push(and(eq(vehicles.isActive, true), eq(vehicles.status, "AVAILABLE")) as SQL);
+  } else if (ctx.status === "INACTIVE") {
+    conditions.push(eq(vehicles.isActive, false));
   }
   if (ctx.fromDate) conditions.push(gte(vehicles.createdAt, ctx.fromDate));
   if (ctx.toExclusiveDate) conditions.push(lt(vehicles.createdAt, ctx.toExclusiveDate));
@@ -239,6 +242,7 @@ async function buildVehicleListReport(ctx: ReportQueryContext): Promise<BuiltRep
       chassisNumber: vehicles.chassisNumber,
       currentOdometerKm: vehicles.currentOdometerKm,
       status: vehicles.status,
+      isActive: vehicles.isActive,
       purchaseDate: vehicles.purchaseDate,
       brandName: vehicleBrands.name,
       modelName: vehicleModels.name,
@@ -281,8 +285,8 @@ async function buildVehicleListReport(ctx: ReportQueryContext): Promise<BuiltRep
   let rateCount = 0;
 
   for (const v of filtered) {
-    if (v.status === "AVAILABLE") availableCount += 1;
-    else inactiveCount += 1;
+    if (v.isActive && v.status === "AVAILABLE") availableCount += 1;
+    else if (!v.isActive) inactiveCount += 1;
     const rate = baisaToNumber(v.dailyRateBaisa);
     if (rate > 0) {
       totalDailyRate += rate;
@@ -337,8 +341,8 @@ async function buildVehicleListReport(ctx: ReportQueryContext): Promise<BuiltRep
           csvValue: rate > 0 ? formatOMR(rate) : "0.000",
         },
         status: {
-          text: v.status,
-          badgeTone: v.status === "AVAILABLE" ? "emerald" : "neutral",
+          text: !v.isActive ? "INACTIVE" : v.status === "AVAILABLE" ? "AVAILABLE" : "ON RENT",
+          badgeTone: !v.isActive ? "neutral" : v.status === "AVAILABLE" ? "emerald" : "amber",
         },
       },
     };
@@ -443,6 +447,7 @@ async function buildInvoiceListReport(ctx: ReportQueryContext): Promise<BuiltRep
       voidCount += 1;
       continue;
     }
+    if (ctx.status !== "DRAFT" && inv.status === "DRAFT") continue;
     activeGrandTotal += baisaToNumber(inv.grandTotalBaisa);
     activeCollected += baisaToNumber(inv.advanceBaisa) + baisaToNumber(inv.receivedBaisa);
     activeBalance += baisaToNumber(inv.balanceBaisa);
@@ -1265,7 +1270,7 @@ async function buildCustomerListReport(ctx: ReportQueryContext): Promise<BuiltRe
 
 /** 7. Receipt List */
 async function buildReceiptListReport(ctx: ReportQueryContext): Promise<BuiltReportData> {
-  const conditions: SQL[] = [eq(payments.kind, "RECEIPT")];
+  const conditions: SQL[] = [eq(payments.kind, "RECEIPT"), isNull(paymentCorrections.id)];
   if (!ctx.isSuper) {
     conditions.push(
       ctx.permittedBranchIds.length
@@ -1300,6 +1305,7 @@ async function buildReceiptListReport(ctx: ReportQueryContext): Promise<BuiltRep
     .innerJoin(branches, eq(branches.id, payments.branchId))
     .innerJoin(users, eq(users.id, payments.recordedBy))
     .leftJoin(rentals, eq(rentals.id, payments.rentalId))
+    .leftJoin(paymentCorrections, eq(paymentCorrections.originalPaymentId, payments.id))
     .where(and(...conditions))
     .orderBy(desc(payments.receivedAt), desc(payments.id));
 
@@ -1919,7 +1925,7 @@ async function buildServiceReport(ctx: ReportQueryContext): Promise<BuiltReportD
 
 /** 11. Advance Collection Report */
 async function buildAdvanceCollectionReport(ctx: ReportQueryContext): Promise<BuiltReportData> {
-  const conditions: SQL[] = [eq(payments.kind, "ADVANCE")];
+  const conditions: SQL[] = [eq(payments.kind, "ADVANCE"), isNull(paymentCorrections.id)];
   if (!ctx.isSuper) {
     conditions.push(
       ctx.permittedBranchIds.length
@@ -1960,6 +1966,7 @@ async function buildAdvanceCollectionReport(ctx: ReportQueryContext): Promise<Bu
     .innerJoin(branches, eq(branches.id, payments.branchId))
     .innerJoin(users, eq(users.id, payments.recordedBy))
     .leftJoin(rentals, eq(rentals.id, payments.rentalId))
+    .leftJoin(paymentCorrections, eq(paymentCorrections.originalPaymentId, payments.id))
     .where(and(...conditions))
     .orderBy(desc(payments.receivedAt), desc(payments.id));
 

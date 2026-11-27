@@ -36,7 +36,7 @@ self.addEventListener("fetch", (event) => {
     request.method !== "GET" ||
     url.origin !== self.location.origin ||
     url.pathname.startsWith("/api/") ||
-    url.pathname.includes("_rsc")
+    url.searchParams.has("_rsc")
   )
     return;
 
@@ -63,7 +63,9 @@ self.addEventListener("fetch", (event) => {
     caches.open(CACHE_NAME).then(async (cache) => {
       try {
         const response = await fetch(request);
-        if (response.ok && response.type === "basic") cache.put(request, response.clone());
+        if (response.ok && response.type === "basic") {
+          void cache.put(request, response.clone()).catch(() => undefined);
+        }
         return response;
       } catch {
         const cached = await cache.match(request);

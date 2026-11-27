@@ -8,6 +8,7 @@ import {
   getCustomerDetailsAction,
   setCustomerActiveAction,
 } from "@/app/[locale]/(protected)/customers/actions";
+import { formatOMR } from "@/features/rentals/calculations";
 import { translateValidation } from "@/lib/i18n-helpers";
 import { BlacklistDialog } from "./blacklist-dialog";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -237,7 +238,7 @@ export function CustomerActions({
                   [tCust("drivingLicence"), details.drivingLicenceNumber],
                   [tCust("sponsor"), details.sponsorDetails ?? "—"],
                   [tCust("account"), details.isActive ? tStatus("ACTIVE") : tStatus("INACTIVE")],
-                  [tCust("balance"), `${details.balance}`],
+                  [tCust("balance"), formatOMR(details.balance)],
                   [tCust("activeRentals"), String(details.activeRentals.length)],
                   [
                     tCust("blacklist"),

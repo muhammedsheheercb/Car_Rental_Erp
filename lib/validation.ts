@@ -3,11 +3,11 @@ import { parseOmanDateTime } from "@/features/rentals/booking-calculations";
 
 const trimmed = z.string().trim().min(1, "Required");
 export const loginSchema = z.object({
-  username: trimmed.min(3).max(64),
-  password: z.string().min(1),
+  username: trimmed.toLowerCase().min(3).max(64),
+  password: z.string().min(1).max(128),
 });
 export const passwordSchema = z.object({
-  currentPassword: z.string().min(1),
+  currentPassword: z.string().min(1).max(128),
   newPassword: z.string().min(12).max(128),
 });
 export const settingsPasswordSchema = passwordSchema
@@ -88,7 +88,8 @@ export const blacklistEntrySchema = z
       });
   });
 
-const nonnegative = z.coerce.number().int().min(0);
+const nonnegative = z.coerce.number().int().min(0).max(2_147_483_647);
+const nonnegativeBaisa = z.coerce.number().int().min(0).max(999_999_999_999_999);
 export const normalizeMasterName = (value: string) =>
   value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 export const brandSchema = z
@@ -103,10 +104,10 @@ export const brandSchema = z
     }
   });
 const pricing = z.object({
-  listRentBaisa: nonnegative,
-  minimumRentBaisa: nonnegative,
+  listRentBaisa: nonnegativeBaisa,
+  minimumRentBaisa: nonnegativeBaisa,
   includedKm: nonnegative,
-  excessKmChargeBaisa: nonnegative,
+  excessKmChargeBaisa: nonnegativeBaisa,
 });
 export const vehicleSchema = z
   .object({
@@ -137,15 +138,15 @@ export const vehicleSchema = z
     lastGearOilChangeKm: nonnegative,
     mulkiyaExpiryDate: z.coerce.date(),
     mulkiyaIssuingDetail: z.string().trim().max(100).optional(),
-    engineServiceIntervalKm: z.coerce.number().int().min(1),
-    gearOilIntervalKm: z.coerce.number().int().min(1),
+    engineServiceIntervalKm: z.coerce.number().int().min(1).max(2_147_483_647),
+    gearOilIntervalKm: z.coerce.number().int().min(1).max(2_147_483_647),
     daily: pricing,
     weekly: pricing,
     monthly: pricing,
-    lateFeeBaisa: nonnegative,
+    lateFeeBaisa: nonnegativeBaisa,
     lateGraceMinutes: z.coerce.number().int().min(0).max(120).default(60),
     lateWindowHours: z.coerce.number().int().min(0).max(20).default(4),
-    overdueFineBaisa: nonnegative.default(5000),
+    overdueFineBaisa: nonnegativeBaisa.default(5000),
     overrideReason: z.string().trim().max(500).optional(),
   })
   .superRefine((value, ctx) => {
@@ -299,6 +300,13 @@ export function sanitizeReturnTo(raw?: string): string | undefined {
   if (!raw) return undefined;
   const trimmedValue = raw.trim();
   if (!trimmedValue.startsWith("/") || trimmedValue.startsWith("//")) return undefined;
-  if (/[\r\n\\]/.test(trimmedValue)) return undefined;
-  return trimmedValue;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: reject ASCII control characters and backslashes to prevent open redirects
+  if (/[\u0000-\u001f\u007f\\]/.test(trimmedValue)) return undefined;
+  try {
+    const parsed = new URL(trimmedValue, "http://localhost");
+    if (parsed.origin !== "http://localhost") return undefined;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return undefined;
+  }
 }

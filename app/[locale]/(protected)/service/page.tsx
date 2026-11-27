@@ -23,7 +23,14 @@ export default async function ServicePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; status?: string; branch?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    branch?: string;
+    page?: string;
+    serviceBy?: string;
+    vehicleId?: string;
+  }>;
 }) {
   const { locale } = await params;
   const [actor, query, tService, tNav, tCommon, tStatus] = await Promise.all([
@@ -138,11 +145,13 @@ export default async function ServicePage({
         <ServiceForm
           actorId={actor.id}
           now={now}
+          initialServiceBy={query.serviceBy === "CUSTOMER" ? "CUSTOMER" : "COMPANY"}
+          initialVehicleId={query.vehicleId}
           vehicles={fleet
             .filter(({ v }) => can(actor, "fleet", "create", v.branchId))
             .map(({ v, brand, branch }) => ({
               id: v.id,
-              name: v.vehicleNumber,
+              name: `${v.vehicleNumber} · ${v.registrationNumber}`,
               registration: v.registrationNumber,
               brand,
               branch,

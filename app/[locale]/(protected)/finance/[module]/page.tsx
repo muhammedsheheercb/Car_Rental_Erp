@@ -6,7 +6,7 @@ import { FinanceForm } from "@/components/finance-form";
 import { db } from "@/db/client";
 import { branches, customers, financeFines, payments, rentals, users, vehicles } from "@/db/schema";
 import { bookingOption, bookingRows, financeModules } from "@/features/finance/queries";
-import { totals } from "@/features/finance/service";
+import { totalsBatch } from "@/features/finance/service";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { formatOMR } from "@/features/rentals/calculations";
 import { can, requirePagePermission } from "@/lib/auth";
@@ -131,12 +131,23 @@ export default async function FinancePage({
             ),
           )
       : [];
-  const payableRows =
+  const totalsMap =
     module === "payback"
-      ? await Promise.all(
-          rows.map(async (row) => ({ row, summary: await totals(db, row.rental.id) })),
+      ? await totalsBatch(
+          db,
+          rows.map((r) => r.rental.id),
         )
-      : [];
+      : null;
+  const payableRows = totalsMap
+    ? rows
+        .map((row) => ({ row, summary: totalsMap.get(row.rental.id) }))
+        .filter(
+          (
+            item,
+          ): item is { row: (typeof rows)[number]; summary: NonNullable<typeof item.summary> } =>
+            Boolean(item.summary),
+        )
+    : [];
   const options = rows
     .filter(
       (row) =>

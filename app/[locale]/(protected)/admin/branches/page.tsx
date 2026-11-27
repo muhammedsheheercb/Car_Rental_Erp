@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { BranchActions } from "@/components/branch-actions";
 import { BranchCodePreview } from "@/components/branch-code-preview";
@@ -14,7 +14,11 @@ export default async function BranchesPage({ params }: { params: Promise<{ local
     getTranslations("admin"),
     getTranslations("common"),
     getTranslations("status"),
-    db.select().from(branches).orderBy(desc(branches.createdAt)),
+    db
+      .select()
+      .from(branches)
+      .where(actor.role === "SUPER_ADMIN" ? undefined : inArray(branches.id, actor.branchIds))
+      .orderBy(desc(branches.createdAt)),
   ]);
   return (
     <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">

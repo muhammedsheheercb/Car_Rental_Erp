@@ -44,7 +44,7 @@ export function CustomerWizard({
   existingDocuments?: {
     id: string;
     type: string;
-    objectKey: string;
+    objectKey?: string;
     contentType: string;
     sizeBytes: number;
   }[];
@@ -67,7 +67,7 @@ export function CustomerWizard({
   const set = (key: string, value: string) => setData((old) => ({ ...old, [key]: value }));
   const saveDetails = () =>
     start(async () => {
-      const result = await saveCustomerAction(data, customerId);
+      const result = await saveCustomerAction(data, savedCustomerId);
       if (!result.ok) {
         setError(translateValidation(t, result.message));
         return;
@@ -205,10 +205,11 @@ export function CustomerWizard({
           {step === 1 ? (
             <button
               type="button"
+              disabled={pending}
               onClick={saveDetails}
-              className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-black"
+              className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-black disabled:opacity-60"
             >
-              {tCommon("continue")}
+              {pending ? tCommon("saving") : tCommon("continue")}
             </button>
           ) : (
             <button

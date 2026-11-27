@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
@@ -36,7 +36,13 @@ const schema = z.object({
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export async function invoicePayments(tx: Tx | typeof db, rentalId: string) {
   const rows = await tx.select().from(payments).where(eq(payments.rentalId, rentalId));
-  const corrections = await tx.select().from(paymentCorrections);
+  const paymentIds = rows.map((p) => p.id);
+  const corrections = paymentIds.length
+    ? await tx
+        .select()
+        .from(paymentCorrections)
+        .where(inArray(paymentCorrections.originalPaymentId, paymentIds))
+    : [];
   const corrected = new Set(corrections.map((c) => c.originalPaymentId));
   const effective = rows.filter((p) => !corrected.has(p.id) && p.kind !== "REVERSAL");
   return {
@@ -130,7 +136,7 @@ export async function saveInvoice(raw: unknown, actor: Identity) {
         depositBaisa: r.depositBaisa,
       },
       remarks: input.remarks,
-      createdBy: actor.id,
+      createdBy: old ? old.createdBy : actor.id,
     };
     const [invoice] = old
       ? await tx
@@ -172,9 +178,14 @@ export async function saveInvoice(raw: unknown, actor: Identity) {
       }
       if (Math.abs(r.totalBaisa + adjustment) > MAX_BAISA)
         throw new Error("Adjusted total is too large.");
+      const nextTotal = calc.grandTotal - (r.depositBaisa ?? 0);
       await tx
         .update(rentals)
-        .set({ totalBaisa: calc.grandTotal - (r.depositBaisa ?? 0), updatedAt: new Date() })
+        .set({
+          subtotalBaisa: Math.max(0, nextTotal - (r.taxBaisa ?? 0)),
+          totalBaisa: nextTotal,
+          updatedAt: new Date(),
+        })
         .where(eq(rentals.id, r.id));
       if (input.received) {
         const [p] = await tx
@@ -254,30 +265,56 @@ export async function voidInvoice(raw: unknown, actor: Identity) {
     )
       throw new Error("Invoice reversal permission is required.");
     if (invoice.status === "VOID") return;
-    if (invoice.adjustmentBaisa) {
-      const reverse = -invoice.adjustmentBaisa;
-      await tx.insert(customerLedger).values({
-        rentalId: r.id,
-        customerId: r.customerId,
-        type: "ADJUSTMENT",
-        debitBaisa: Math.max(0, reverse),
-        creditBaisa: Math.max(0, -reverse),
-        description: `Reversal ${invoice.invoiceNumber}: ${input.reason}`,
-      });
-      await tx.insert(rentalCharges).values({
-        rentalId: r.id,
-        type: "ADJUSTMENT",
-        component: "INVOICE_REVERSAL",
-        amountBaisa: reverse,
-        description: `Reversal ${invoice.invoiceNumber}`,
-        createdBy: actor.id,
-      });
-      const total = r.totalBaisa + reverse;
-      if (total < 0 || total > MAX_BAISA) throw new Error("Reversal total is invalid.");
-      await tx
-        .update(rentals)
-        .set({ totalBaisa: total, updatedAt: new Date() })
-        .where(eq(rentals.id, r.id));
+    const componentEntries = [
+      ["WASHING", -(invoice.washingBaisa ?? 0)],
+      ["PETROL", -(invoice.petrolBaisa ?? 0)],
+      ["DISCOUNT", invoice.discountBaisa ?? 0],
+    ] as const;
+    const hasComponentBreakdown = componentEntries.some(([, value]) => value !== 0);
+    if (invoice.status === "FINALIZED" && (hasComponentBreakdown || invoice.adjustmentBaisa)) {
+      if (hasComponentBreakdown) {
+        for (const [component, reverseValue] of componentEntries) {
+          if (!reverseValue) continue;
+          await tx.insert(rentalCharges).values({
+            rentalId: r.id,
+            type: "ADJUSTMENT",
+            component,
+            amountBaisa: reverseValue,
+            description: `Reversal ${invoice.invoiceNumber}: ${component}`,
+            createdBy: actor.id,
+          });
+        }
+      } else {
+        await tx.insert(rentalCharges).values({
+          rentalId: r.id,
+          type: "ADJUSTMENT",
+          component: "INVOICE_REVERSAL",
+          amountBaisa: -invoice.adjustmentBaisa,
+          description: `Reversal ${invoice.invoiceNumber}`,
+          createdBy: actor.id,
+        });
+      }
+      if (invoice.adjustmentBaisa) {
+        const reverse = -invoice.adjustmentBaisa;
+        await tx.insert(customerLedger).values({
+          rentalId: r.id,
+          customerId: r.customerId,
+          type: "ADJUSTMENT",
+          debitBaisa: Math.max(0, reverse),
+          creditBaisa: Math.max(0, -reverse),
+          description: `Reversal ${invoice.invoiceNumber}: ${input.reason}`,
+        });
+        const total = r.totalBaisa + reverse;
+        if (total < 0 || total > MAX_BAISA) throw new Error("Reversal total is invalid.");
+        await tx
+          .update(rentals)
+          .set({
+            subtotalBaisa: Math.max(0, total - (r.taxBaisa ?? 0)),
+            totalBaisa: total,
+            updatedAt: new Date(),
+          })
+          .where(eq(rentals.id, r.id));
+      }
     }
     await tx
       .update(invoices)

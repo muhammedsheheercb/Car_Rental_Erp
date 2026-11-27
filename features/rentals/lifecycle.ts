@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, inArray, lt, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
@@ -8,6 +8,7 @@ import {
   financeFines,
   invoices,
   payments,
+  refundApprovals,
   rentalCancellations,
   rentalCharges,
   rentalExtensions,
@@ -18,6 +19,7 @@ import {
   vehicleServices,
   vehicles,
 } from "@/db/schema";
+import { assertCustomerCanBeBooked } from "@/features/customers/eligibility";
 import { can, type Identity } from "@/lib/auth";
 import { validateEvidencePhoto } from "@/lib/image-file";
 import { putPrivateCustomerDocument } from "@/lib/r2";
@@ -87,6 +89,7 @@ export async function extendContract(raw: unknown, actor: Identity) {
     if (rental.status !== "ACTIVE") throw new Error("Only active contracts can be extended.");
     if (!can(actor, "rentals", "approve", rental.branchId))
       throw new Error("Extension approval permission is required.");
+    await assertCustomerCanBeBooked(rental.customerId, tx);
     const deadline = calculateExpectedReturn(
       rental.expectedReturnAt,
       rental.pricingPeriod,
@@ -256,6 +259,7 @@ export async function returnContract(
   raw: { rentalId: string; returnedAt: string; endingKm: string },
   actor: Identity,
 ) {
+  if (!z.string().uuid().safeParse(raw.rentalId).success) throw new Error("Invalid booking ID.");
   const returnedAt = parseOmanDateTime(raw.returnedAt);
   const endingKm = Number(raw.endingKm);
   if (!Number.isInteger(endingKm) || endingKm < 0 || endingKm > 2_147_483_647)
@@ -359,6 +363,18 @@ export async function updateBooking(raw: unknown, actor: Identity) {
         throw new Error("You do not have permission for the selected branch.");
 
     if (rental.status === "ACTIVE") {
+      if (!can(actor, "rentals", "update", input.returnBranchId))
+        throw new Error("You do not have permission for the selected branch.");
+      const changingKmAllowance = input.openKm !== rental.openKm || input.freeKm !== rental.freeKm;
+      if (
+        changingKmAllowance &&
+        !can(actor, "rentals", "override_price", rental.branchId) &&
+        !can(actor, "rentals", "approve", rental.branchId)
+      ) {
+        throw new Error(
+          "Approval or price override permission is required to change KM allowance on an active rental.",
+        );
+      }
       await tx
         .update(rentals)
         .set({
@@ -387,6 +403,10 @@ export async function updateBooking(raw: unknown, actor: Identity) {
       return;
     }
 
+    if (!vehicle.isActive || vehicle.status !== "AVAILABLE")
+      throw new Error("Vehicle is unavailable for booking.");
+    await assertCustomerCanBeBooked(rental.customerId, tx);
+
     const startsAt = input.startsAt ?? rental.startsAt;
     const pricingPeriod = input.pricingPeriod ?? rental.pricingPeriod;
     const rentDuration = input.rentDuration ?? rental.rentDuration;
@@ -404,8 +424,10 @@ export async function updateBooking(raw: unknown, actor: Identity) {
           eq(rentals.vehicleId, rental.vehicleId),
           ne(rentals.id, rental.id),
           inArray(rentals.status, ["RESERVED", "ACTIVE"]),
-          lt(rentals.startsAt, expectedReturnAt),
-          gt(rentals.expectedReturnAt, startsAt),
+          or(
+            eq(rentals.status, "ACTIVE"),
+            and(lt(rentals.startsAt, expectedReturnAt), gt(rentals.expectedReturnAt, startsAt)),
+          ),
         ),
       )
       .limit(1);
@@ -416,6 +438,9 @@ export async function updateBooking(raw: unknown, actor: Identity) {
     let excessKmChargeBaisa = rental.excessKmChargeBaisa;
     let lateFeeBaisa = rental.lateFeeBaisa;
     let additionalDayRentBaisa = rental.additionalDayRentBaisa;
+    let lateGraceMinutes = rental.lateGraceMinutes;
+    let lateWindowHours = rental.lateWindowHours;
+    let overdueFineBaisa = rental.overdueFineBaisa;
 
     if (pricingPeriod !== rental.pricingPeriod) {
       const [configuredPricing] = await tx
@@ -441,6 +466,9 @@ export async function updateBooking(raw: unknown, actor: Identity) {
       includedKm = configuredPricing.includedKm;
       excessKmChargeBaisa = configuredPricing.excessKmChargeBaisa;
       lateFeeBaisa = configuredPricing.lateFeeBaisa;
+      lateGraceMinutes = configuredPricing.lateGraceMinutes ?? 60;
+      lateWindowHours = configuredPricing.lateWindowHours ?? 4;
+      overdueFineBaisa = configuredPricing.overdueFineBaisa ?? 5000;
       additionalDayRentBaisa =
         pricingPeriod === "DAILY"
           ? configuredPricing.listRentBaisa
@@ -494,6 +522,9 @@ export async function updateBooking(raw: unknown, actor: Identity) {
         excessKmChargeBaisa,
         lateFeeBaisa,
         additionalDayRentBaisa,
+        lateGraceMinutes,
+        lateWindowHours,
+        overdueFineBaisa,
         freeKm: input.freeKm,
         openKm: input.openKm,
         subtotalBaisa: boundedMoney(calculation.subtotalBaisa),
@@ -538,49 +569,55 @@ export async function deleteBooking(rentalId: string, actor: Identity) {
       throw new Error(
         "Only pending reservations with no financial history can be deleted. Cancel active agreements instead.",
       );
-    const [paymentRef, invoiceRef, fineRef, extRef, cancelRef, swapRef, damageRef, serviceRef] =
-      await Promise.all([
-        tx
-          .select({ id: payments.id })
-          .from(payments)
-          .where(eq(payments.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: invoices.id })
-          .from(invoices)
-          .where(eq(invoices.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: financeFines.id })
-          .from(financeFines)
-          .where(eq(financeFines.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: rentalExtensions.id })
-          .from(rentalExtensions)
-          .where(eq(rentalExtensions.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: rentalCancellations.id })
-          .from(rentalCancellations)
-          .where(eq(rentalCancellations.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: rentalVehicleSwaps.id })
-          .from(rentalVehicleSwaps)
-          .where(eq(rentalVehicleSwaps.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: vehicleDamageEvidence.id })
-          .from(vehicleDamageEvidence)
-          .where(eq(vehicleDamageEvidence.rentalId, rentalId))
-          .limit(1),
-        tx
-          .select({ id: vehicleServices.id })
-          .from(vehicleServices)
-          .where(eq(vehicleServices.rentalId, rentalId))
-          .limit(1),
-      ]);
+    const [
+      paymentRef,
+      invoiceRef,
+      fineRef,
+      extRef,
+      cancelRef,
+      swapRef,
+      damageRef,
+      serviceRef,
+      refundRef,
+    ] = await Promise.all([
+      tx.select({ id: payments.id }).from(payments).where(eq(payments.rentalId, rentalId)).limit(1),
+      tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.rentalId, rentalId)).limit(1),
+      tx
+        .select({ id: financeFines.id })
+        .from(financeFines)
+        .where(eq(financeFines.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: rentalExtensions.id })
+        .from(rentalExtensions)
+        .where(eq(rentalExtensions.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: rentalCancellations.id })
+        .from(rentalCancellations)
+        .where(eq(rentalCancellations.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: rentalVehicleSwaps.id })
+        .from(rentalVehicleSwaps)
+        .where(eq(rentalVehicleSwaps.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: vehicleDamageEvidence.id })
+        .from(vehicleDamageEvidence)
+        .where(eq(vehicleDamageEvidence.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: vehicleServices.id })
+        .from(vehicleServices)
+        .where(eq(vehicleServices.rentalId, rentalId))
+        .limit(1),
+      tx
+        .select({ id: refundApprovals.id })
+        .from(refundApprovals)
+        .where(eq(refundApprovals.rentalId, rentalId))
+        .limit(1),
+    ]);
     if (
       paymentRef.length ||
       invoiceRef.length ||
@@ -589,7 +626,8 @@ export async function deleteBooking(rentalId: string, actor: Identity) {
       cancelRef.length ||
       swapRef.length ||
       damageRef.length ||
-      serviceRef.length
+      serviceRef.length ||
+      refundRef.length
     ) {
       throw new Error(
         "This booking has payments, invoices, fines, or operational records and cannot be deleted. Cancel the agreement instead.",

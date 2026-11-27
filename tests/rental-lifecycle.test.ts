@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   committed: false,
 }));
 vi.mock("server-only", () => ({}));
+vi.mock("@/features/customers/eligibility", () => ({ assertCustomerCanBeBooked: vi.fn() }));
 vi.mock("@/lib/r2", () => ({ putPrivateCustomerDocument: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
   can: (actor: Identity, module: string, action: string, branch?: string) =>

@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import {
   cancelAgreement,
   extendContract,
@@ -48,13 +49,17 @@ export async function rentalLifecycleAction(
         );
         break;
       case "checkout": {
+        if (!z.string().uuid().safeParse(id).success) throw new Error("Invalid booking ID.");
+        const startingKm = Number(form.get("startingKm"));
+        if (!Number.isInteger(startingKm) || startingKm < 0 || startingKm > 2_147_483_647)
+          throw new Error("Pickup odometer is invalid.");
         const { db } = await import("@/db/client");
         const { rentals } = await import("@/db/schema");
         const { eq } = await import("drizzle-orm");
         const [rental] = await db.select().from(rentals).where(eq(rentals.id, id)).limit(1);
         if (!rental || !can(actor, "rentals", "update", rental.branchId))
           throw new Error("Access denied.");
-        await activateRental(id, Number(form.get("startingKm")), actor.id);
+        await activateRental(id, startingKm, actor.id);
         break;
       }
       default:

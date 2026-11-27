@@ -38,6 +38,7 @@ export function TransferForm({
   const tStatus = useTranslations("status");
   const tFields = useTranslations("fieldLabels");
   const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
   const [state, action, pending] = useActionState(transferAction, { error: "", message: "" });
   const [requestId] = useState(() => crypto.randomUUID());
   const [vehicleId, setVehicleId] = useState("");
@@ -82,6 +83,13 @@ export function TransferForm({
     <form
       ref={formRef}
       action={action}
+      onSubmit={(event) => {
+        if (!confirmedRef.current) {
+          event.preventDefault();
+          return;
+        }
+        confirmedRef.current = false;
+      }}
       className="grid gap-4 rounded-xl border border-[var(--edge)] p-4"
     >
       <input type="hidden" name="rentalId" value={rental.id} />
@@ -196,6 +204,7 @@ export function TransferForm({
         pending={pending}
         processingLabel={tTransfers("transferring")}
         onConfirm={() => {
+          confirmedRef.current = true;
           formRef.current?.requestSubmit();
         }}
         trigger={

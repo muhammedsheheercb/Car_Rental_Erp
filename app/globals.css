@@ -273,26 +273,29 @@ input[type="time"]:-webkit-autofill {
 button,
 a,
 input,
-select {
+select,
+textarea {
   outline-offset: 3px;
 }
 
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent-ink);
 }
 
 [data-dark-surface] button:focus-visible,
 [data-dark-surface] a:focus-visible,
 [data-dark-surface] input:focus-visible,
-[data-dark-surface] select:focus-visible {
+[data-dark-surface] select:focus-visible,
+[data-dark-surface] textarea:focus-visible {
   outline: 2px solid var(--accent);
 }
 
 @media (max-width: 1023px) {
-  body {
+  body:has([data-app-shell]) {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 }

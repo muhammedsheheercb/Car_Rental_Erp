@@ -55,6 +55,7 @@ export function FinanceForm({
   const tStatus = useTranslations("status");
   const tFields = useTranslations("fieldLabels");
   const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
   const [state, action, pending] = useActionState(financeAction, { error: "", message: "" });
   const [bookingId, setBookingId] = useState("");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -125,6 +126,13 @@ export function FinanceForm({
     <form
       ref={formRef}
       action={action}
+      onSubmit={(event) => {
+        if (operation === "delete" && !confirmedRef.current) {
+          event.preventDefault();
+          return;
+        }
+        confirmedRef.current = false;
+      }}
       className="grid min-w-0 gap-4 rounded-xl border border-[var(--edge)] p-4 print:hidden"
     >
       <input type="hidden" name="operation" value={operation} />
@@ -331,6 +339,7 @@ export function FinanceForm({
           pending={pending}
           processingLabel={tCommon("saving")}
           onConfirm={() => {
+            confirmedRef.current = true;
             formRef.current?.requestSubmit();
           }}
           trigger={

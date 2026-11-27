@@ -195,7 +195,7 @@ export default async function NearServicePage({
                 <td className="p-3">
                   <span
                     className={`inline-flex rounded-full px-2.5 py-0.5 text-xs ${
-                      a.status === "Overdue"
+                      a.status === "Due / Overdue"
                         ? "bg-red-500/20 text-red-200"
                         : "bg-amber-400/20 text-amber-200"
                     }`}

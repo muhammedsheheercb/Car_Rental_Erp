@@ -61,7 +61,7 @@ export function BrandEditButton({
               <textarea
                 required
                 name="models"
-                defaultValue={models.split(", ").join("\n")}
+                defaultValue={(models ?? "").split(", ").filter(Boolean).join("\n")}
                 className="mt-2 min-h-28 w-full rounded-lg border border-[var(--edge)] bg-black/20 p-3"
               />
             </label>

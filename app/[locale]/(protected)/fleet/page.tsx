@@ -112,7 +112,7 @@ export default async function FleetPage({
                 operationalBlocking,
               )
             : filter === "inactive"
-              ? or(eq(vehicles.isActive, false), eq(vehicles.status, "INACTIVE"))
+              ? eq(vehicles.isActive, false)
               : filter === "unavailable"
                 ? not(availableFleet)
                 : filter === "mulkiya_expired"
@@ -162,7 +162,9 @@ export default async function FleetPage({
           odometer: vehicles.currentOdometerKm,
           mulkiyaExpiry: vehicleRegistrations.mulkiyaExpiryDate,
           insuranceExpiry: vehicleInsurance.validUntil,
-          nextServiceKm: sql<number>`${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
+          nextServiceKm: sql<
+            number | null
+          >`${vehicleServiceSettings.lastEngineServiceKm} + ${vehicleServiceSettings.engineServiceIntervalKm}`,
           rentalStatus: vehicleCommitmentStatus,
           operationallyBlocked: operationalBlocking,
           imageId: vehicleImages.id,
@@ -391,11 +393,13 @@ export default async function FleetPage({
               });
               const badge = BADGE_STYLES[operationalStatus];
               const serviceState =
-                vehicle.nextServiceKm <= vehicle.odometer
-                  ? "OVERDUE"
-                  : vehicle.nextServiceKm - vehicle.odometer <= policy.nearServiceKm
-                    ? "NEAR"
-                    : "NORMAL";
+                vehicle.nextServiceKm === null
+                  ? "NORMAL"
+                  : vehicle.nextServiceKm <= vehicle.odometer
+                    ? "OVERDUE"
+                    : vehicle.nextServiceKm - vehicle.odometer <= policy.nearServiceKm
+                      ? "NEAR"
+                      : "NORMAL";
               const commitment = activeByVehicle.get(vehicle.id);
 
               return (
@@ -467,6 +471,8 @@ export default async function FleetPage({
                       name={`${vehicle.brand} ${vehicle.model}`}
                       registration={vehicle.registration}
                       active={vehicle.isActive}
+                      canUpdate={can(actor, "fleet", "update", vehicle.branchId)}
+                      canDelete={can(actor, "fleet", "delete", vehicle.branchId)}
                     />
                   </td>
                 </tr>

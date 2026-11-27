@@ -209,11 +209,19 @@ export function VoidInvoiceForm({ invoiceId }: { invoiceId: string }) {
   const tInvoices = useTranslations("invoices");
   const tCommon = useTranslations("common");
   const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
   const [state, action, pending] = useActionState(invoiceAction, { error: "", message: "" });
   return (
     <form
       ref={formRef}
       action={action}
+      onSubmit={(event) => {
+        if (!confirmedRef.current) {
+          event.preventDefault();
+          return;
+        }
+        confirmedRef.current = false;
+      }}
       className="grid gap-3 rounded-xl border border-[var(--edge)] p-4 print:hidden"
     >
       <input type="hidden" name="operation" value="void" />
@@ -232,6 +240,7 @@ export function VoidInvoiceForm({ invoiceId }: { invoiceId: string }) {
         pending={pending}
         processingLabel={tCommon("saving")}
         onConfirm={() => {
+          confirmedRef.current = true;
           formRef.current?.requestSubmit();
         }}
         trigger={

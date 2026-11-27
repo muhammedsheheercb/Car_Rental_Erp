@@ -1,5 +1,6 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db/client";
 import {
   auditLogs,
@@ -37,14 +38,76 @@ export async function totals(tx: Tx | typeof db, id: string) {
   const approvals = await tx.select().from(refundApprovals).where(eq(refundApprovals.rentalId, id));
   const rows = await tx.select().from(payments).where(eq(payments.rentalId, id));
   const returned = rows.reduce((n, p) => n + (p.kind === "PAYBACK" ? p.amountBaisa : 0), 0);
+  const netCollectedBaisa = rows.reduce(
+    (n, p) => n + (p.direction === "RECEIPT" ? p.amountBaisa : -p.amountBaisa),
+    0,
+  );
   return {
     balance: Number(sum.balance),
+    netCollectedBaisa: Math.max(0, netCollectedBaisa),
     ...calculatePayback(
       approvals.reduce((n, a) => n + a.amountBaisa, 0),
       returned,
       Number(sum.balance),
     ),
   };
+}
+export async function totalsBatch(tx: Tx | typeof db, ids: string[]) {
+  const result = new Map<string, Awaited<ReturnType<typeof totals>>>();
+  if (!ids.length) return result;
+  const [ledgerRows, approvalRows, paymentRows] = await Promise.all([
+    tx
+      .select({
+        rentalId: customerLedger.rentalId,
+        balance: sql<number>`coalesce(sum(${customerLedger.debitBaisa}::bigint - ${customerLedger.creditBaisa}::bigint),0)::bigint`,
+      })
+      .from(customerLedger)
+      .where(inArray(customerLedger.rentalId, ids))
+      .groupBy(customerLedger.rentalId),
+    tx
+      .select({
+        rentalId: refundApprovals.rentalId,
+        approved: sql<number>`coalesce(sum(${refundApprovals.amountBaisa}::bigint),0)::bigint`,
+      })
+      .from(refundApprovals)
+      .where(inArray(refundApprovals.rentalId, ids))
+      .groupBy(refundApprovals.rentalId),
+    tx
+      .select({
+        rentalId: payments.rentalId,
+        kind: payments.kind,
+        direction: payments.direction,
+        amountBaisa: payments.amountBaisa,
+      })
+      .from(payments)
+      .where(inArray(payments.rentalId, ids)),
+  ]);
+  const balanceByRental = new Map(ledgerRows.map((r) => [r.rentalId ?? "", Number(r.balance)]));
+  const approvedByRental = new Map(approvalRows.map((r) => [r.rentalId, Number(r.approved)]));
+  const returnedByRental = new Map<string, number>();
+  const netByRental = new Map<string, number>();
+  for (const p of paymentRows) {
+    const rid = p.rentalId ?? "";
+    if (!rid) continue;
+    if (p.kind === "PAYBACK")
+      returnedByRental.set(rid, (returnedByRental.get(rid) ?? 0) + p.amountBaisa);
+    netByRental.set(
+      rid,
+      (netByRental.get(rid) ?? 0) + (p.direction === "RECEIPT" ? p.amountBaisa : -p.amountBaisa),
+    );
+  }
+  for (const id of ids) {
+    const balance = balanceByRental.get(id) ?? 0;
+    const approved = approvedByRental.get(id) ?? 0;
+    const returned = returnedByRental.get(id) ?? 0;
+    const netCollectedBaisa = Math.max(0, netByRental.get(id) ?? 0);
+    result.set(id, {
+      balance,
+      netCollectedBaisa,
+      ...calculatePayback(approved, returned, balance),
+    });
+  }
+  return result;
 }
 async function post(
   tx: Tx,
@@ -142,6 +205,10 @@ export async function approveRefund(raw: unknown, actor: Identity) {
       .where(eq(refundApprovals.requestId, input.requestId));
     if (existing) return;
     const s = await totals(tx, r.id);
+    if (s.balance > 0)
+      throw new Error("Refund cannot be approved while the booking still has an unpaid balance.");
+    if (s.approvedBaisa + input.amount > s.netCollectedBaisa)
+      throw new Error("Approved refunds cannot exceed net payments collected for this booking.");
     const credit = refundApprovalCredit(s.balance, s.remainingBaisa, input.amount);
     if (credit > 2147483647) throw new Error("Refund adjustment is too large.");
     await tx.insert(refundApprovals).values({
@@ -187,17 +254,37 @@ export async function correctPayment(raw: unknown, actor: Identity) {
       .from(paymentCorrections)
       .where(eq(paymentCorrections.originalPaymentId, p.id));
     if (done) throw new Error("This receipt has already been corrected.");
+    const [finalized] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.rentalId, r.id), eq(invoices.status, "FINALIZED")));
+    if (finalized) throw new Error("Reverse the finalized invoice before correcting a receipt.");
+    if (
+      !input.amount &&
+      !can(actor, "finance", "delete", r.branchId) &&
+      !can(actor, "finance", "approve", r.branchId)
+    )
+      throw new Error("Delete or approve permission is required to void a receipt.");
     const s = await totals(tx, r.id);
     if (s.returnedBaisa > 0 || s.approvedBaisa > 0)
       throw new Error(
         "Receipts with approved refunds require accountant review before correction.",
       );
     if (input.amount) assertPaymentAllowed(input.amount, Math.max(0, s.balance + p.amountBaisa));
+    const originalMethod = (
+      ["CASH", "CARD", "BANK_TRANSFER"].includes(p.method) ? p.method : input.method
+    ) as "CASH" | "CARD" | "BANK_TRANSFER";
     const reversal = await post(
       tx,
       r,
       actor,
-      { ...input, amount: p.amountBaisa, kind: "REVERSAL" },
+      {
+        amount: p.amountBaisa,
+        method: originalMethod,
+        reference: p.reference ?? undefined,
+        remarks: input.remarks,
+        kind: "REVERSAL",
+      },
       "PAYBACK",
     );
     const replacement = input.amount
@@ -323,7 +410,11 @@ export async function recordFine(raw: unknown, actor: Identity) {
       });
       await tx
         .update(rentals)
-        .set({ totalBaisa: r.totalBaisa + input.amount, updatedAt: new Date() })
+        .set({
+          subtotalBaisa: r.subtotalBaisa + input.amount,
+          totalBaisa: r.totalBaisa + input.amount,
+          updatedAt: new Date(),
+        })
         .where(eq(rentals.id, r.id));
     }
     await tx.insert(auditLogs).values({
@@ -343,7 +434,9 @@ export async function recordFine(raw: unknown, actor: Identity) {
   });
 }
 export async function changeLegalFine(raw: Record<string, unknown>, actor: Identity) {
-  const id = String(raw.fineId);
+  const parsedId = z.string().uuid().safeParse(raw.fineId);
+  if (!parsedId.success) throw new Error("Legal fine not found or access denied.");
+  const id = parsedId.data;
   return db.transaction(async (tx) => {
     const [f] = await tx.select().from(financeFines).where(eq(financeFines.id, id)).for("update");
     const deleting = raw.operation === "delete";
