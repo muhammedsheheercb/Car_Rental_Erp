@@ -16,7 +16,7 @@ export function DocumentPicker({
 }: {
   label: string;
   required?: boolean;
-  existing?: { id: string; objectKey: string; contentType: string; sizeBytes: number };
+  existing?: { id: string; objectKey?: string; contentType: string; sizeBytes: number };
   existingUrl?: string;
   hint?: string;
   onChange?: (file: File | null, width: number, height: number) => void;

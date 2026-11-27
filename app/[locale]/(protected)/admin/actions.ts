@@ -6,13 +6,19 @@ import { db } from "@/db/client";
 import {
   auditLogs,
   branches,
+  financeFines,
+  invoices,
+  payments,
+  rentals,
   roles,
   sessions,
   userBranches,
   userPermissions,
   userRoles,
   users,
+  vehicleServices,
   vehicles,
+  vehicleTransfers,
 } from "@/db/schema";
 import {
   canManageUserTarget,
@@ -35,6 +41,7 @@ function revalidateUsersPaths() {
 
 export async function createBranchAction(formData: FormData) {
   const actor = await requirePermission("branches", "create");
+  if (actor.role !== "SUPER_ADMIN") throw new Error("FORBIDDEN");
   const parsed = branchCreateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Enter valid branch details." };
@@ -72,12 +79,18 @@ export async function createBranchAction(formData: FormData) {
 }
 export async function deactivateBranchAction(id: string) {
   const actor = await requirePermission("branches", "delete");
-  const [activeCount] = await db
-    .select({ count: count() })
-    .from(branches)
-    .where(eq(branches.isActive, true));
-  if ((activeCount?.count ?? 0) <= 1)
-    return { ok: false, message: "The system must retain at least one active branch." };
+  if (actor.role !== "SUPER_ADMIN") throw new Error("FORBIDDEN");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Branch not found." };
+  const [target] = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
+  if (!target) return { ok: false, message: "Branch not found." };
+  if (target.isActive) {
+    const [activeCount] = await db
+      .select({ count: count() })
+      .from(branches)
+      .where(eq(branches.isActive, true));
+    if ((activeCount?.count ?? 0) <= 1)
+      return { ok: false, message: "The system must retain at least one active branch." };
+  }
   await db
     .update(branches)
     .set({ isActive: false, deactivatedAt: new Date(), updatedAt: new Date() })
@@ -88,14 +101,18 @@ export async function deactivateBranchAction(id: string) {
 }
 export async function updateBranchAction(id: string, formData: FormData) {
   const actor = await requirePermission("branches", "update");
+  if (actor.role !== "SUPER_ADMIN") throw new Error("FORBIDDEN");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Branch not found." };
   const parsed = branchSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Enter valid branch details." };
   try {
-    await db
+    const [updated] = await db
       .update(branches)
       .set({ name: parsed.data.name, location: parsed.data.location, updatedAt: new Date() })
-      .where(eq(branches.id, id));
+      .where(eq(branches.id, id))
+      .returning({ id: branches.id });
+    if (!updated) return { ok: false, message: "Branch not found." };
     await audit("BRANCH_UPDATED", "branch", id, actor.id, id, {
       name: parsed.data.name,
       location: parsed.data.location,
@@ -108,7 +125,21 @@ export async function updateBranchAction(id: string, formData: FormData) {
 }
 export async function deleteBranchAction(id: string) {
   const actor = await requirePermission("branches", "delete");
-  const [activeCount, userReference, vehicleReference] = await Promise.all([
+  if (actor.role !== "SUPER_ADMIN") throw new Error("FORBIDDEN");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Branch not found." };
+  const [
+    [target],
+    [activeCount],
+    userReference,
+    vehicleReference,
+    rentalReference,
+    paymentReference,
+    invoiceReference,
+    fineReference,
+    serviceReference,
+    transferReference,
+  ] = await Promise.all([
+    db.select().from(branches).where(eq(branches.id, id)).limit(1),
     db.select({ count: count() }).from(branches).where(eq(branches.isActive, true)),
     db
       .select({ id: userBranches.userId })
@@ -116,16 +147,52 @@ export async function deleteBranchAction(id: string) {
       .where(eq(userBranches.branchId, id))
       .limit(1),
     db.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.branchId, id)).limit(1),
+    db.select({ id: rentals.id }).from(rentals).where(eq(rentals.branchId, id)).limit(1),
+    db.select({ id: payments.id }).from(payments).where(eq(payments.branchId, id)).limit(1),
+    db.select({ id: invoices.id }).from(invoices).where(eq(invoices.branchId, id)).limit(1),
+    db
+      .select({ id: financeFines.id })
+      .from(financeFines)
+      .where(eq(financeFines.branchId, id))
+      .limit(1),
+    db
+      .select({ id: vehicleServices.id })
+      .from(vehicleServices)
+      .where(eq(vehicleServices.branchId, id))
+      .limit(1),
+    db
+      .select({ id: vehicleTransfers.id })
+      .from(vehicleTransfers)
+      .where(eq(vehicleTransfers.fromBranchId, id))
+      .limit(1),
   ]);
-  if ((activeCount[0]?.count ?? 0) <= 1)
+  if (!target) return { ok: false, message: "Branch not found." };
+  if (target.isActive && (activeCount?.count ?? 0) <= 1)
     return { ok: false, message: "The system must retain at least one active branch." };
-  if (userReference.length || vehicleReference.length)
+  if (
+    userReference.length ||
+    vehicleReference.length ||
+    rentalReference.length ||
+    paymentReference.length ||
+    invoiceReference.length ||
+    fineReference.length ||
+    serviceReference.length ||
+    transferReference.length
+  )
     return {
       ok: false,
       message:
         "This branch is connected to existing records and cannot be deleted. Deactivate it instead.",
     };
-  await db.delete(branches).where(eq(branches.id, id));
+  try {
+    await db.delete(branches).where(eq(branches.id, id));
+  } catch {
+    return {
+      ok: false,
+      message:
+        "This branch is connected to existing records and cannot be deleted. Deactivate it instead.",
+    };
+  }
   await audit("BRANCH_DELETED", "branch", id, actor.id);
   for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/admin/branches`);
   return { ok: true, message: "Branch deleted successfully." };

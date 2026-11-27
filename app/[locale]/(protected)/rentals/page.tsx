@@ -111,7 +111,6 @@ export default async function RentalsPage({
     customerRows,
     preselectedCustomer,
     activeBlacklistRows,
-    pricingRows,
     branchRows,
     recent,
     totalRows,
@@ -205,17 +204,6 @@ export default async function RentalsPage({
         ),
       ),
     db
-      .select({
-        vehicleId: vehiclePricing.vehicleId,
-        period: vehiclePricing.period,
-        listRentBaisa: vehiclePricing.listRentBaisa,
-        minimumRentBaisa: vehiclePricing.minimumRentBaisa,
-        includedKm: vehiclePricing.includedKm,
-        excessKmChargeBaisa: vehiclePricing.excessKmChargeBaisa,
-        lateFeeBaisa: vehiclePricing.lateFeeBaisa,
-      })
-      .from(vehiclePricing),
-    db
       .select({ id: branches.id, name: branches.name, code: branches.code })
       .from(branches)
       .where(
@@ -274,6 +262,22 @@ export default async function RentalsPage({
       .innerJoin(vehicles, eq(vehicles.id, rentals.vehicleId))
       .where(and(inArray(rentals.status, ["RESERVED", "ACTIVE"]), scoped)),
   ]);
+
+  const vehicleIds = vehicleRows.map((v) => v.id);
+  const pricingRows = vehicleIds.length
+    ? await db
+        .select({
+          vehicleId: vehiclePricing.vehicleId,
+          period: vehiclePricing.period,
+          listRentBaisa: vehiclePricing.listRentBaisa,
+          minimumRentBaisa: vehiclePricing.minimumRentBaisa,
+          includedKm: vehiclePricing.includedKm,
+          excessKmChargeBaisa: vehiclePricing.excessKmChargeBaisa,
+          lateFeeBaisa: vehiclePricing.lateFeeBaisa,
+        })
+        .from(vehiclePricing)
+        .where(inArray(vehiclePricing.vehicleId, vehicleIds))
+    : [];
 
   const blacklistByCustomer = new Map<string, string>();
   for (const row of activeBlacklistRows) {

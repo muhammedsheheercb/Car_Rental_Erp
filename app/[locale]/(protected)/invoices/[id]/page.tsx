@@ -43,9 +43,9 @@ export default async function InvoicePage({
       .where(eq(invoiceHistory.invoiceId, id))
       .orderBy(asc(invoiceHistory.createdAt)),
     totals(db, i.rentalId),
-    bookingRows(actor),
+    bookingRows(actor, { rentalId: i.rentalId }),
   ]);
-  const row = rows.find((r) => r.rental.id === i.rentalId);
+  const row = rows[0];
   if (!row) notFound();
   const options = i.status === "DRAFT" ? [await invoiceBooking(row, actor)] : [];
   const snapshot = i.snapshot as {

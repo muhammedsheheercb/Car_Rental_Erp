@@ -32,6 +32,7 @@ function ActionForm({
   const t = useTranslations();
   const tCommon = useTranslations("common");
   const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
   const [state, action, pending] = useActionState(rentalLifecycleAction, {
     error: "",
     message: "",
@@ -41,6 +42,13 @@ function ActionForm({
       ref={formRef}
       id={anchorId}
       action={action}
+      onSubmit={(event) => {
+        if (confirmDescription && !confirmedRef.current) {
+          event.preventDefault();
+          return;
+        }
+        confirmedRef.current = false;
+      }}
       className="grid min-w-0 gap-3 rounded-xl border border-[var(--edge)] p-4"
     >
       <h2 className="text-lg font-semibold">{title}</h2>
@@ -55,6 +63,7 @@ function ActionForm({
           pending={pending}
           processingLabel={tCommon("saving")}
           onConfirm={() => {
+            confirmedRef.current = true;
             formRef.current?.requestSubmit();
           }}
           trigger={

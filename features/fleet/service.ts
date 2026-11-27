@@ -1,11 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   auditLogs,
+  financeFines,
   rentals,
+  rentalVehicleSwaps,
   vehicleBrands,
+  vehicleDamageEvidence,
   vehicleImages,
   vehicleInsurance,
   vehicleModels,
@@ -13,8 +16,11 @@ import {
   vehiclePricing,
   vehicleRegistrations,
   vehicleServiceSettings,
+  vehicleServices,
   vehicles,
+  vehicleTransfers,
 } from "@/db/schema";
+import { operationalBlocking } from "@/features/rentals/availability";
 import { can, type Identity } from "@/lib/auth";
 import { validateEvidencePhoto } from "@/lib/image-file";
 import { putPrivateCustomerDocument } from "@/lib/r2";
@@ -120,7 +126,10 @@ export async function createVehicle(input: unknown, actor: Identity) {
   for (const price of [value.daily, value.weekly, value.monthly])
     if (
       price.listRentBaisa < price.minimumRentBaisa &&
-      !(actor.role === "ADMIN" || actor.role === "SUPER_ADMIN")
+      !(
+        (actor.role === "ADMIN" || actor.role === "SUPER_ADMIN") &&
+        can(actor, "fleet", "override_price", value.branchId)
+      )
     )
       throw new Error("Price cannot be below the configured minimum.");
   const belowMinimum = [value.daily, value.weekly, value.monthly].some(
@@ -229,13 +238,29 @@ export async function updateVehicle(id: string, input: unknown, actor: Identity)
   const prices = [value.daily, value.weekly, value.monthly];
   if (
     prices.some((price) => price.listRentBaisa < price.minimumRentBaisa) &&
-    !(actor.role === "ADMIN" || actor.role === "SUPER_ADMIN")
+    !(
+      (actor.role === "ADMIN" || actor.role === "SUPER_ADMIN") &&
+      can(actor, "fleet", "override_price", value.branchId)
+    )
   )
     throw new Error("Price cannot be below the configured minimum.");
   const belowMinimum = prices.some((price) => price.listRentBaisa < price.minimumRentBaisa);
   if (belowMinimum && !value.overrideReason)
     throw new Error("A price override reason is required.");
   return db.transaction(async (tx) => {
+    const [locked] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for("update");
+    if (!locked) throw new Error("Vehicle not found.");
+    const [activeRental] = await tx
+      .select({ id: rentals.id })
+      .from(rentals)
+      .where(and(eq(rentals.vehicleId, id), eq(rentals.status, "ACTIVE")))
+      .limit(1);
+    if (activeRental) {
+      if (value.currentOdometerKm < locked.currentOdometerKm)
+        throw new Error("Odometer cannot be reduced while the vehicle has an active rental.");
+      if (value.branchId !== locked.branchId)
+        throw new Error("Vehicle branch cannot be changed while the vehicle has an active rental.");
+    }
     await tx
       .update(vehicles)
       .set({
@@ -301,7 +326,7 @@ export async function updateVehicle(id: string, input: unknown, actor: Identity)
           updatedAt: new Date(),
         })
         .where(and(eq(vehiclePricing.vehicleId, id), eq(vehiclePricing.period, period)));
-    if (value.currentOdometerKm !== existing.currentOdometerKm)
+    if (value.currentOdometerKm !== locked.currentOdometerKm)
       await tx.insert(vehicleOdometerHistory).values({
         vehicleId: id,
         odometerKm: value.currentOdometerKm,
@@ -332,7 +357,17 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
     throw new Error("This vehicle is not available and cannot be deleted or deactivated.");
   if (deactivate) {
     await db.transaction(async (tx) => {
-      await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+      const [locked] = await tx
+        .select({ id: vehicles.id, status: vehicles.status, blocked: operationalBlocking })
+        .from(vehicles)
+        .where(eq(vehicles.id, id))
+        .for("update");
+      if (locked?.status !== "AVAILABLE")
+        throw new Error("This vehicle is not available and cannot be deleted or deactivated.");
+      if (locked.blocked)
+        throw new Error(
+          "Vehicle is in active service or branch transfer and cannot be deactivated.",
+        );
       const [commitment] = await tx
         .select({ id: rentals.id })
         .from(rentals)
@@ -371,13 +406,58 @@ export async function deleteVehicle(id: string, actor: Identity, deactivate = fa
       "This vehicle has operational history and cannot be deleted. Deactivate it instead.",
     );
   await db.transaction(async (tx) => {
-    await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
-    const [history] = await tx
-      .select({ id: rentals.id })
-      .from(rentals)
-      .where(eq(rentals.vehicleId, id))
-      .limit(1);
-    if (history) throw new Error("Vehicle has rental history. Deactivate it instead.");
+    const [locked] = await tx
+      .select({ id: vehicles.id, status: vehicles.status, blocked: operationalBlocking })
+      .from(vehicles)
+      .where(eq(vehicles.id, id))
+      .for("update");
+    if (locked?.status !== "AVAILABLE" || locked.blocked)
+      throw new Error("This vehicle is not available and cannot be deleted or deactivated.");
+    const [rentalHist, transferHist, serviceHist, swapHist, fineHist, damageHist] =
+      await Promise.all([
+        tx.select({ id: rentals.id }).from(rentals).where(eq(rentals.vehicleId, id)).limit(1),
+        tx
+          .select({ id: vehicleTransfers.id })
+          .from(vehicleTransfers)
+          .where(eq(vehicleTransfers.vehicleId, id))
+          .limit(1),
+        tx
+          .select({ id: vehicleServices.id })
+          .from(vehicleServices)
+          .where(eq(vehicleServices.vehicleId, id))
+          .limit(1),
+        tx
+          .select({ id: rentalVehicleSwaps.id })
+          .from(rentalVehicleSwaps)
+          .where(
+            or(
+              eq(rentalVehicleSwaps.previousVehicleId, id),
+              eq(rentalVehicleSwaps.newVehicleId, id),
+            ),
+          )
+          .limit(1),
+        tx
+          .select({ id: financeFines.id })
+          .from(financeFines)
+          .where(eq(financeFines.vehicleId, id))
+          .limit(1),
+        tx
+          .select({ id: vehicleDamageEvidence.id })
+          .from(vehicleDamageEvidence)
+          .where(eq(vehicleDamageEvidence.vehicleId, id))
+          .limit(1),
+      ]);
+    if (
+      rentalHist[0] ||
+      transferHist[0] ||
+      serviceHist[0] ||
+      swapHist[0] ||
+      fineHist[0] ||
+      damageHist[0]
+    )
+      throw new Error(
+        "This vehicle has operational history and cannot be deleted. Deactivate it instead.",
+      );
     await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, id));
     await tx.delete(vehiclePricing).where(eq(vehiclePricing.vehicleId, id));
     await tx.delete(vehicleRegistrations).where(eq(vehicleRegistrations.vehicleId, id));
@@ -466,13 +546,19 @@ export async function setVehicleActive(id: string, active: boolean, actor: Ident
   if (active && vehicle.status !== "INACTIVE")
     throw new Error("Only an inactive vehicle can be activated.");
   await db.transaction(async (tx) => {
-    const [current] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for("update");
+    const [current] = await tx
+      .select({ status: vehicles.status, blocked: operationalBlocking })
+      .from(vehicles)
+      .where(eq(vehicles.id, id))
+      .for("update");
     const [commitment] = await tx
       .select({ id: rentals.id })
       .from(rentals)
       .where(and(eq(rentals.vehicleId, id), inArray(rentals.status, ["RESERVED", "ACTIVE"])))
       .limit(1);
     if (commitment) throw new Error("Vehicle has a pending reservation or active rental.");
+    if (!active && current?.blocked)
+      throw new Error("Vehicle is in active service or branch transfer and cannot be deactivated.");
     if (!current || (active ? current.status !== "INACTIVE" : current.status !== "AVAILABLE"))
       throw new Error("Vehicle status changed. Refresh the fleet page.");
     await tx

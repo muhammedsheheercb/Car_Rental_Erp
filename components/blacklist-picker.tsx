@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   blacklistCustomerAction,
   searchCustomersAction,
@@ -28,18 +28,46 @@ export function BlacklistPicker() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [error, setError] = useState("");
-  const [pending, start] = useTransition();
+  const [searching, setSearching] = useState(false);
+  const [saving, startSave] = useTransition();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeqRef = useRef(0);
   const { show } = useToast();
   const router = useRouter();
 
+  useEffect(
+    () => () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    },
+    [],
+  );
+
   const search = (value: string) => {
     setQ(value);
-    start(async () => setRows(value.trim() ? await searchCustomersAction(value) : []));
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    const seq = ++searchSeqRef.current;
+    if (!value.trim()) {
+      setRows([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await searchCustomersAction(value);
+        if (searchSeqRef.current === seq) setRows(result);
+      } finally {
+        if (searchSeqRef.current === seq) setSearching(false);
+      }
+    }, 300);
   };
 
   const reset = () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchSeqRef.current += 1;
     setQ("");
     setRows([]);
+    setSearching(false);
     setSelected(null);
     setReason("");
     setDescription("");
@@ -55,7 +83,7 @@ export function BlacklistPicker() {
     if (!description.trim()) return setError(translateValidation(t, "Description is required."));
     if (startsAt && endsAt && endsAt < startsAt)
       return setError(translateValidation(t, "End date cannot be before start date."));
-    start(async () => {
+    startSave(async () => {
       const result = await blacklistCustomerAction({
         customerId: selected.id,
         reason,
@@ -88,7 +116,7 @@ export function BlacklistPicker() {
           role="dialog"
           aria-modal="true"
           aria-label={tBl("addBlacklistCustomer")}
-          onMouseDown={() => !pending && setOpen(false)}
+          onMouseDown={() => !saving && setOpen(false)}
           className="fixed inset-0 z-50 grid place-items-end bg-black/75 sm:place-items-center sm:p-4"
         >
           <section
@@ -101,7 +129,7 @@ export function BlacklistPicker() {
               <button
                 type="button"
                 aria-label={tCommon("close")}
-                onClick={() => setOpen(false)}
+                onClick={() => !saving && setOpen(false)}
                 className="min-h-10 px-2 text-lg"
               >
                 ×
@@ -124,7 +152,9 @@ export function BlacklistPicker() {
                 </button>
               )}
             </div>
-            {pending && <p className="mt-2 text-xs text-[var(--muted)]">{tCommon("searching")}</p>}
+            {searching && (
+              <p className="mt-2 text-xs text-[var(--muted)]">{tCommon("searching")}</p>
+            )}
             <div className="mt-2 max-h-36 overflow-auto rounded-lg">
               {rows.map((row) => (
                 <button
@@ -181,7 +211,7 @@ export function BlacklistPicker() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                disabled={pending}
+                disabled={saving}
                 onClick={() => setOpen(false)}
                 className="min-h-11 rounded-lg border border-[var(--edge)] px-4 text-sm"
               >
@@ -189,11 +219,11 @@ export function BlacklistPicker() {
               </button>
               <button
                 type="button"
-                disabled={pending}
+                disabled={saving}
                 onClick={save}
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-black disabled:opacity-60"
               >
-                {pending ? tCommon("saving") : tCommon("save")}
+                {saving ? tCommon("saving") : tCommon("save")}
               </button>
             </div>
           </section>

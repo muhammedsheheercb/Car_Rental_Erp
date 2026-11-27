@@ -31,6 +31,30 @@ import { brandSchema, vehicleSchema } from "@/lib/validation";
 
 const uuidSchema = z.string().uuid();
 
+function fleetErrorMessage(error: unknown, fallback: string) {
+  const cause =
+    error && typeof error === "object" && "cause" in error
+      ? (error.cause as { code?: string; constraint?: string } | undefined)
+      : undefined;
+  const code =
+    cause?.code ??
+    (error && typeof error === "object" && "code" in error ? String(error.code) : undefined);
+  const constraint = cause?.constraint ?? "";
+  if (code === "23505") {
+    if (constraint.includes("registration"))
+      return "A vehicle with this registration number already exists.";
+    if (constraint.includes("chassis")) return "A vehicle with this chassis number already exists.";
+    if (constraint.includes("number")) return "A vehicle with this vehicle number already exists.";
+    return "A vehicle with these unique identifiers already exists.";
+  }
+  if (code === "23503") return "Referenced record is in use or does not exist.";
+  if (error instanceof Error) {
+    if (error.message === "FORBIDDEN") return "You do not have permission to change this vehicle.";
+    if (error.name !== "DrizzleQueryError") return error.message;
+  }
+  return fallback;
+}
+
 function revalidateFleetPaths() {
   for (const locale of ["en", "ar"]) {
     revalidatePath(`/${locale}/fleet`);
@@ -86,7 +110,7 @@ export async function createVehicleAction(input: unknown) {
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "We could not create this vehicle.",
+      message: fleetErrorMessage(error, "We could not create this vehicle."),
     };
   }
 }
@@ -116,6 +140,7 @@ export async function uploadVehicleImageAction(vehicleId: string, formData: Form
 }
 export async function updateVehicleAction(id: string, input: unknown) {
   const actor = await requirePermission("fleet", "update");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid vehicle." };
   const parsed = vehicleSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the vehicle details." };
@@ -129,14 +154,13 @@ export async function updateVehicleAction(id: string, input: unknown) {
       message:
         error instanceof Error && error.message === "FORBIDDEN"
           ? "You do not have permission to update this vehicle."
-          : error instanceof Error
-            ? error.message
-            : "We could not update this vehicle.",
+          : fleetErrorMessage(error, "We could not update this vehicle."),
     };
   }
 }
 export async function deleteVehicleAction(id: string, deactivate = false) {
   const actor = await requirePermission("fleet", deactivate ? "update" : "delete");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid vehicle." };
   try {
     const result = await deleteVehicle(id, actor, deactivate);
     revalidateFleetPaths();
@@ -150,17 +174,13 @@ export async function deleteVehicleAction(id: string, deactivate = false) {
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error && error.message === "FORBIDDEN"
-          ? "You do not have permission to change this vehicle."
-          : error instanceof Error
-            ? error.message
-            : "We could not delete this vehicle.",
+      message: fleetErrorMessage(error, "We could not delete this vehicle."),
     };
   }
 }
 export async function setVehicleActiveAction(id: string, active: boolean) {
   const actor = await requirePermission("fleet", "update");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid vehicle." };
   try {
     await setVehicleActive(id, active, actor);
     revalidateFleetPaths();
@@ -171,17 +191,13 @@ export async function setVehicleActiveAction(id: string, active: boolean) {
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error && error.message === "FORBIDDEN"
-          ? "You do not have permission to change this vehicle."
-          : error instanceof Error
-            ? error.message
-            : "We could not change this vehicle status.",
+      message: fleetErrorMessage(error, "We could not change this vehicle status."),
     };
   }
 }
 export async function deleteBrandAction(id: string, deactivate = false) {
   const actor = await requirePermission("fleet", "delete");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid brand." };
   try {
     await deleteBrand(id, actor, deactivate);
     for (const locale of ["en", "ar"]) revalidatePath(`/${locale}/fleet/master`);
@@ -194,12 +210,13 @@ export async function deleteBrandAction(id: string, deactivate = false) {
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "We could not delete this brand.",
+      message: fleetErrorMessage(error, "We could not delete this brand."),
     };
   }
 }
 export async function updateBrandAction(id: string, input: unknown) {
   const actor = await requirePermission("fleet", "update");
+  if (!uuidSchema.safeParse(id).success) return { ok: false, message: "Invalid brand." };
   const parsed = brandSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Enter valid brand details." };
@@ -213,6 +230,8 @@ export async function updateBrandAction(id: string, input: unknown) {
 }
 export async function getVehicleDetailsAction(id: string) {
   const actor = await requirePermission("fleet", "read");
+  if (!uuidSchema.safeParse(id).success)
+    throw new Error("Vehicle not found or access is restricted.");
   const [vehicle] = await db
     .select({
       id: vehicles.id,

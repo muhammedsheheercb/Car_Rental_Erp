@@ -27,11 +27,18 @@ export async function createReservationAction(_previous: { error: string }, form
     const parsed = reservationSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success)
       return { error: parsed.error.issues[0]?.message ?? "Check the reservation details." };
+    if (parsed.data.startsAt.getTime() < Date.now() - 15 * 60 * 1000)
+      return { error: "Pickup date and time cannot be in the past." };
     // The service owns parsing and return-date calculation; never trust a client-computed total.
     await createReservation(Object.fromEntries(formData), actor);
   } catch (error) {
     if (error instanceof Error && "digest" in error) throw error;
-    return { error: error instanceof Error ? error.message : "Could not create reservation." };
+    return {
+      error:
+        error instanceof Error && error.name !== "DrizzleQueryError"
+          ? error.message
+          : "Could not create reservation.",
+    };
   }
   revalidateRentalPaths();
   redirect(`/${locale}/rentals`);

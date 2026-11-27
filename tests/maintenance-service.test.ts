@@ -96,7 +96,7 @@ const input = {
   remarks: "Oil and filter",
 };
 function completedReads() {
-  fixture.reads = [[vehicle], [], [{ id }], [{ name: "Brand" }], [settings]];
+  fixture.reads = [[vehicle], [], [{ id }], [], [], [{ name: "Brand" }], [settings]];
 }
 beforeEach(() => {
   fixture.reads = [];
@@ -140,6 +140,13 @@ it("blocks company service in progress on a rented vehicle", async () => {
   await expect(
     createService({ ...input, status: "IN_PROGRESS", cost: "0" }, actor),
   ).rejects.toThrow("active rental");
+  expect(fixture.writes).toHaveLength(0);
+});
+it("blocks completed company service on a vehicle with an active rental", async () => {
+  fixture.reads = [[vehicle], [], [{ id }], [{ id: "active" }]];
+  await expect(createService({ ...input, status: "COMPLETED" }, actor)).rejects.toThrow(
+    "active rental",
+  );
   expect(fixture.writes).toHaveLength(0);
 });
 it("rejects backwards odometer readings", async () => {

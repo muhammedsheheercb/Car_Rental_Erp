@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { auditLogs, userBranches, userSignatures, users } from "@/db/schema";
+import { auditLogs, roles, userBranches, userRoles, userSignatures, users } from "@/db/schema";
 import { can, type Identity } from "@/lib/auth";
 import { validateEvidencePhoto } from "@/lib/image-file";
 import { getPrivateCustomerDocument, putPrivateCustomerDocument } from "@/lib/r2";
@@ -11,6 +11,12 @@ export const canManageOtherSignatures = (actor: Identity) =>
   can(actor, "settings", "update") &&
   can(actor, "users", "update");
 export async function signatureUsers(actor: Identity) {
+  const branchList = actor.branchIds.length
+    ? sql.join(
+        actor.branchIds.map((id) => sql`${id}`),
+        sql`, `,
+      )
+    : null;
   return db
     .select({ id: users.id, name: users.displayName })
     .from(users)
@@ -22,11 +28,12 @@ export async function signatureUsers(actor: Identity) {
             ? undefined
             : or(
                 eq(users.id, actor.id),
-                actor.branchIds.length
-                  ? sql`exists(select 1 from ${userBranches} where ${userBranches.userId}=${users.id} and ${userBranches.branchId} in (${sql.join(
-                      actor.branchIds.map((id) => sql`${id}`),
-                      sql`, `,
-                    )}))`
+                branchList
+                  ? and(
+                      sql`not exists(select 1 from ${userRoles} inner join ${roles} on ${roles.id}=${userRoles.roleId} where ${userRoles.userId}=${users.id} and ${roles.name}='SUPER_ADMIN')`,
+                      sql`exists(select 1 from ${userBranches} where ${userBranches.userId}=${users.id} and ${userBranches.branchId} in (${branchList}))`,
+                      sql`not exists(select 1 from ${userBranches} where ${userBranches.userId}=${users.id} and ${userBranches.branchId} not in (${branchList}))`,
+                    )
                   : undefined,
               )
           : eq(users.id, actor.id),

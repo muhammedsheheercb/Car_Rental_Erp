@@ -19,7 +19,7 @@ export default async function RecordPage({
 }) {
   const { locale, module, id } = await params;
   const config = financeModules[module];
-  if (!config || !/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  if (!config || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) notFound();
   const [actor, tFinance, tCommon, tStatus, tRentals, tFields] = await Promise.all([
     requirePagePermission(locale, "finance", "read"),
     getTranslations("finance"),
@@ -56,8 +56,8 @@ export default async function RecordPage({
           ),
         );
   if (!record?.rentalId) notFound();
-  const rows = await bookingRows(actor);
-  const row = rows.find((r) => r.rental.id === record.rentalId);
+  const rows = await bookingRows(actor, { rentalId: record.rentalId });
+  const row = rows[0];
   if (!row) notFound();
   const s = await totals(db, row.rental.id);
   const legal = fine && "bookingSnapshot" in record;

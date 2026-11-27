@@ -6,7 +6,7 @@ import { db } from "@/db/client";
 import { customers, invoices, rentals, vehicles } from "@/db/schema";
 import { bookingRows } from "@/features/finance/queries";
 import { omrInput } from "@/features/invoices/calculations";
-import { invoiceBooking } from "@/features/invoices/queries";
+import { invoiceBookingsBatch } from "@/features/invoices/queries";
 import { formatOmanDateTime, parseOmanDateTime } from "@/features/rentals/booking-calculations";
 import { can, requirePagePermission } from "@/lib/auth";
 import { translateStatus } from "@/lib/i18n-helpers";
@@ -83,11 +83,16 @@ export default async function InvoicesPage({
     .innerJoin(customers, eq(customers.id, rentals.customerId))
     .innerJoin(vehicles, eq(vehicles.id, rentals.vehicleId))
     .where(where);
-  const allBookings = query.new || query.booking ? await bookingRows(actor) : [];
-  const options = await Promise.all(
-    allBookings
-      .filter((r) => can(actor, "finance", "create", r.rental.branchId))
-      .map((r) => invoiceBooking(r, actor)),
+  const uuidRe = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+  const bookingIdFilter =
+    !query.new && query.booking && uuidRe.test(query.booking) ? query.booking : undefined;
+  const allBookings =
+    query.new || query.booking
+      ? await bookingRows(actor, bookingIdFilter ? { rentalId: bookingIdFilter } : undefined)
+      : [];
+  const options = await invoiceBookingsBatch(
+    allBookings.filter((r) => can(actor, "finance", "create", r.rental.branchId)),
+    actor,
   );
   const href = (n: number) => {
     const p = new URLSearchParams();

@@ -6,7 +6,7 @@ export default function LocaleErrorPage({ reset }: { error: Error; reset: () => 
   return (
     <main className="grid min-h-screen place-items-center p-6 text-center">
       <div>
-        <p className="text-[var(--accent)]">{t("errorEyebrow")}</p>
+        <p className="font-semibold text-[var(--accent-ink)]">{t("errorEyebrow")}</p>
         <h1 className="mt-3 text-3xl font-semibold">{t("errorTitle")}</h1>
         <button
           type="button"

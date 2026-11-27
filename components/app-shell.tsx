@@ -39,6 +39,9 @@ export async function AppShell({
         lateVehicles: 0,
         nearService: 0,
         expiringDocs: 0,
+        canViewFinance: can(identity, "finance", "read"),
+        canViewFleet: can(identity, "fleet", "read"),
+        canViewRentals: can(identity, "rentals", "read"),
       }))
     : null;
 
@@ -130,33 +133,54 @@ export async function AppShell({
     }))
     .filter((group) => group.items.length > 0);
 
+  const alertHref =
+    summary && summary.lateVehicles > 0 && summary.canViewRentals
+      ? `/${locale}/operations/late-car`
+      : summary && summary.expiringDocs > 0 && summary.canViewFleet
+        ? `/${locale}/expiry`
+        : summary && summary.nearService > 0 && summary.canViewFleet
+          ? `/${locale}/near-to-service`
+          : summary?.canViewFleet
+            ? `/${locale}/expiry`
+            : `/${locale}/dashboard`;
+
   const sidebarBody = (
     <>
-      {/* Live Executive Summary Card */}
-      {summary && (
+      {/* Live Executive Summary Card (only metrics the signed-in user is permitted to view) */}
+      {summary && (summary.canViewFinance || summary.canViewFleet) && (
         <div className="rounded-2xl border border-[#CFA968]/30 bg-gradient-to-br from-[#CFA968]/15 via-[#CFA968]/8 to-transparent p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#CFA968]">
-            {tDash("monthlyRevenue")}
-          </p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight tabular-nums text-[#FAF8F5]">
-            {formatOMR(summary.monthlyRevenueBaisa)}
-          </p>
-          <div className="mt-3.5 space-y-1.5 border-t border-white/10 pt-3 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[#A8A196]">{tDash("outstandingShort")}</span>
-              <span className="font-semibold tabular-nums text-[#F6F3EC]">
-                {formatOMR(summary.outstandingBaisa)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[#A8A196]">{tDash("fleetAvailable")}</span>
-              <span className="font-semibold tabular-nums text-[#6EE7B7]">
-                {tDash("readyCount", {
-                  available: summary.availableVehicles,
-                  total: summary.totalVehicles,
-                })}
-              </span>
-            </div>
+          {summary.canViewFinance && (
+            <>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#CFA968]">
+                {tDash("monthlyRevenue")}
+              </p>
+              <p className="mt-1.5 text-2xl font-bold tracking-tight tabular-nums text-[#FAF8F5]">
+                {formatOMR(summary.monthlyRevenueBaisa)}
+              </p>
+            </>
+          )}
+          <div
+            className={`${summary.canViewFinance ? "mt-3.5 border-t border-white/10 pt-3" : ""} space-y-1.5 text-xs`}
+          >
+            {summary.canViewFinance && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[#A8A196]">{tDash("outstandingShort")}</span>
+                <span className="font-semibold tabular-nums text-[#F6F3EC]">
+                  {formatOMR(summary.outstandingBaisa)}
+                </span>
+              </div>
+            )}
+            {summary.canViewFleet && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[#A8A196]">{tDash("fleetAvailable")}</span>
+                <span className="font-semibold tabular-nums text-[#6EE7B7]">
+                  {tDash("readyCount", {
+                    available: summary.availableVehicles,
+                    total: summary.totalVehicles,
+                  })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -165,13 +189,9 @@ export async function AppShell({
       <ConciergeSidebarNav locale={locale} groups={groups} />
 
       {/* Attention Required Alert Card */}
-      {summary && (
+      {summary && (summary.canViewFleet || summary.canViewRentals) && (
         <Link
-          href={
-            (summary.lateVehicles > 0
-              ? `/${locale}/operations/late-car`
-              : `/${locale}/expiry`) as never
-          }
+          href={alertHref as never}
           className={`block rounded-2xl border p-3.5 text-xs transition-colors ${
             totalAlerts > 0
               ? "border-red-500/35 bg-red-600/12 text-red-200 hover:bg-red-600/20"

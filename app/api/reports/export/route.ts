@@ -5,6 +5,7 @@ import { can, getIdentity } from "@/lib/auth";
 export async function GET(request: Request) {
   const actor = await getIdentity();
   if (!actor) return new Response("Unauthorized", { status: 401 });
+  if (actor.mustChangePassword) return new Response("Password change required", { status: 403 });
   if (!can(actor, "reports", "read") || !can(actor, "reports", "export")) {
     return new Response("Forbidden", { status: 403 });
   }

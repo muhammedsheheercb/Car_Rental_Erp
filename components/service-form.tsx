@@ -1,6 +1,6 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { serviceAction } from "@/app/[locale]/(protected)/service/actions";
 import { translateFieldLabel, translateValidation } from "@/lib/i18n-helpers";
 import { SearchableCombobox } from "./searchable-combobox";
@@ -19,10 +19,14 @@ export function ServiceForm({
   vehicles,
   actorId,
   now,
+  initialServiceBy = "COMPANY",
+  initialVehicleId = "",
 }: {
   vehicles: ServiceVehicle[];
   actorId: string;
   now: string;
+  initialServiceBy?: "COMPANY" | "CUSTOMER";
+  initialVehicleId?: string;
 }) {
   const tRoot = useTranslations();
   const tService = useTranslations("service");
@@ -30,11 +34,15 @@ export function ServiceForm({
   const tStatus = useTranslations("status");
   const tFields = useTranslations("fieldLabels");
   const [state, action, pending] = useActionState(serviceAction, { error: "", message: "" });
-  const [vehicleId, setVehicleId] = useState("");
-  const [rentalId, setRentalId] = useState("");
+  const initialVehicle = vehicles.find((item) => item.id === initialVehicleId);
+  const [vehicleId, setVehicleId] = useState(initialVehicle?.id ?? "");
+  const [rentalId, setRentalId] = useState(initialVehicle?.bookings[0]?.id ?? "");
   const [status, setStatus] = useState("COMPLETED");
-  const [serviceBy, setServiceBy] = useState("COMPANY");
-  const [requestId] = useState(() => crypto.randomUUID());
+  const [serviceBy, setServiceBy] = useState<string>(initialServiceBy);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  useEffect(() => {
+    if (state.message) setRequestId(crypto.randomUUID());
+  }, [state]);
   const v = vehicles.find((v) => v.id === vehicleId);
   const r = v?.bookings.find((r) => r.id === rentalId);
   return (
@@ -246,8 +254,8 @@ export function ServiceForm({
       </label>
       {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
       {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
-      <button type="submit" className="btn" disabled={pending || !v || !!state.message}>
-        {tService("saveService")}
+      <button type="submit" className="btn" disabled={pending || !v}>
+        {pending ? tCommon("saving") : tService("saveService")}
       </button>
     </form>
   );
@@ -268,13 +276,20 @@ export function ServiceStatusForm({
   const tCommon = useTranslations("common");
   const tStatus = useTranslations("status");
   const [state, action, pending] = useActionState(serviceAction, { error: "", message: "" });
+  const [nextStatus, setNextStatus] = useState("COMPLETED");
+  const isCompleting = nextStatus === "COMPLETED";
   return (
     <form action={action} className="mt-3 grid gap-3 rounded-lg border border-[var(--edge)] p-3">
       <input type="hidden" name="operation" value="update" />
       <input type="hidden" name="serviceId" value={serviceId} />
       <label>
         {tService("nextStatus")}
-        <select name="status" className="input mt-1">
+        <select
+          name="status"
+          value={nextStatus}
+          onChange={(e) => setNextStatus(e.target.value)}
+          className="input mt-1"
+        >
           <option value="COMPLETED">{tService("completeService")}</option>
           {status === "SCHEDULED" && (
             <option value="IN_PROGRESS">{tService("startService")}</option>
@@ -282,41 +297,49 @@ export function ServiceStatusForm({
           <option value="CANCELLED">{tService("cancelService")}</option>
         </select>
       </label>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label>
-          {tService("serviceKmReading")}
-          <input
-            name="serviceOdometerKm"
-            inputMode="numeric"
-            pattern="[0-9]+"
-            defaultValue={currentKm}
-            required
-            className="input mt-1"
-          />
-        </label>
-        <label>
-          {tService("completedDateTime")}
-          <input
-            name="completedAt"
-            type="datetime-local"
-            defaultValue={now}
-            required
-            className="input mt-1"
-          />
-        </label>
-        <label>
-          {tService("expenseAmount")}
-          <input name="cost" inputMode="decimal" defaultValue="0" required className="input mt-1" />
-        </label>
-        <label>
-          {tCommon("paymentMode")}
-          <select name="paymentMode" className="input mt-1">
-            <option value="CASH">{tStatus("CASH")}</option>
-            <option value="CARD">{tStatus("CARD")}</option>
-            <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
-          </select>
-        </label>
-      </div>
+      {isCompleting && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label>
+            {tService("serviceKmReading")}
+            <input
+              name="serviceOdometerKm"
+              inputMode="numeric"
+              pattern="[0-9]+"
+              defaultValue={currentKm}
+              required
+              className="input mt-1"
+            />
+          </label>
+          <label>
+            {tService("completedDateTime")}
+            <input
+              name="completedAt"
+              type="datetime-local"
+              defaultValue={now}
+              required
+              className="input mt-1"
+            />
+          </label>
+          <label>
+            {tService("expenseAmount")}
+            <input
+              name="cost"
+              inputMode="decimal"
+              defaultValue="0"
+              required
+              className="input mt-1"
+            />
+          </label>
+          <label>
+            {tCommon("paymentMode")}
+            <select name="paymentMode" className="input mt-1">
+              <option value="CASH">{tStatus("CASH")}</option>
+              <option value="CARD">{tStatus("CARD")}</option>
+              <option value="BANK_TRANSFER">{tStatus("BANK_TRANSFER")}</option>
+            </select>
+          </label>
+        </div>
+      )}
       <label>
         {tService("remarksReason")}
         <textarea name="remarks" required className="input mt-1" maxLength={2000} />
@@ -324,7 +347,7 @@ export function ServiceStatusForm({
       {state.error && <p role="alert">{translateValidation(tRoot, state.error)}</p>}
       {state.message && <p role="status">{translateValidation(tRoot, state.message)}</p>}
       <button type="submit" className="btn" disabled={pending || !!state.message}>
-        {tService("updateService")}
+        {pending ? tCommon("saving") : tService("updateService")}
       </button>
     </form>
   );

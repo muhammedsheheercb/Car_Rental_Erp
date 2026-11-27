@@ -99,6 +99,8 @@ export async function swapVehicle(raw: unknown, actor: Identity) {
       throw new Error("An active rental and a different replacement vehicle are required.");
     if (!can(actor, "rentals", "update", next.branchId))
       throw new Error("Replacement branch access denied.");
+    if (input.received > 0 && !can(actor, "finance", "create", r.branchId))
+      throw new Error("Finance create permission is required to collect payment during transfer.");
     if (
       input.transferredAt < (r.segmentStartedAt ?? r.startsAt) ||
       input.transferredAt > new Date() ||
@@ -203,6 +205,20 @@ export async function swapVehicle(raw: unknown, actor: Identity) {
         type: "PAYMENT",
         creditBaisa: input.received,
         description: p.receiptNumber,
+      });
+      await tx.insert(auditLogs).values({
+        actorId: actor.id,
+        event: "RECEIPT_RECORDED",
+        entityType: "payment",
+        entityId: p.id,
+        branchId: r.branchId,
+        metadata: {
+          receiptNumber: p.receiptNumber,
+          agreementNumber: r.agreementNumber,
+          amountBaisa: input.received,
+          method: input.method,
+          kind: "RECEIPT",
+        },
       });
     }
     const [c] = await tx.select().from(customers).where(eq(customers.id, r.customerId));

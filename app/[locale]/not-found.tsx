@@ -7,7 +7,7 @@ export default async function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center p-6 text-center">
       <div>
-        <p className="text-[var(--accent)]">404</p>
+        <p className="font-semibold text-[var(--accent-ink)]">404</p>
         <h1 className="mt-3 text-3xl font-semibold">{t("notFoundTitle")}</h1>
         <Link
           href={`/${locale}/dashboard`}

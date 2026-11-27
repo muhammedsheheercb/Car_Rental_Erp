@@ -1,10 +1,16 @@
 import "server-only";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { branches, customers, rentals, users, vehicles } from "@/db/schema";
 import { formatOmanDateTime } from "@/features/rentals/booking-calculations";
 import type { Identity } from "@/lib/auth";
-export async function bookingRows(actor: Identity) {
+export async function bookingRows(
+  actor: Identity,
+  filter?: {
+    rentalId?: string;
+    status?: "RESERVED" | "ACTIVE" | "RETURNED" | "CANCELLED";
+  },
+) {
   return db
     .select({
       rental: rentals,
@@ -18,7 +24,13 @@ export async function bookingRows(actor: Identity) {
     .innerJoin(vehicles, eq(vehicles.id, rentals.vehicleId))
     .innerJoin(branches, eq(branches.id, rentals.branchId))
     .innerJoin(users, eq(users.id, rentals.createdBy))
-    .where(actor.role === "SUPER_ADMIN" ? undefined : inArray(rentals.branchId, actor.branchIds));
+    .where(
+      and(
+        actor.role === "SUPER_ADMIN" ? undefined : inArray(rentals.branchId, actor.branchIds),
+        filter?.rentalId ? eq(rentals.id, filter.rentalId) : undefined,
+        filter?.status ? eq(rentals.status, filter.status) : undefined,
+      ),
+    );
 }
 export function bookingOption(row: Awaited<ReturnType<typeof bookingRows>>[number]) {
   const { rental: r, customer: c, vehicle: v } = row;

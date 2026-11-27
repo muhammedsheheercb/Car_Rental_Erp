@@ -1,16 +1,50 @@
 "use server";
 import { randomUUID } from "node:crypto";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { auditLogs, customerBlacklist, customerDocuments, customers, users } from "@/db/schema";
-import { requirePermission } from "@/lib/auth";
+import {
+  auditLogs,
+  customerBlacklist,
+  customerDocuments,
+  customerLedger,
+  customers,
+  financeFines,
+  payments,
+  rentals,
+  users,
+  vehicleDamageEvidence,
+  vehicleServices,
+} from "@/db/schema";
+import { can, requireIdentity, requirePermission } from "@/lib/auth";
 import { validateEvidencePhoto } from "@/lib/image-file";
 import { putPrivateCustomerDocument } from "@/lib/r2";
 import { blacklistEntrySchema, customerSchema } from "@/lib/validation";
 
 const uuidSchema = z.string().uuid();
+
+function customerUniqueErrorMessage(error: unknown) {
+  const cause =
+    error && typeof error === "object" && "cause" in error
+      ? (error.cause as { code?: string; constraint?: string } | undefined)
+      : undefined;
+  const code =
+    cause?.code ??
+    (error && typeof error === "object" && "code" in error ? String(error.code) : undefined);
+  const constraint = cause?.constraint ?? "";
+  if (code === "23505") {
+    if (constraint.includes("mobile")) return "A customer with that mobile number already exists.";
+    if (constraint.includes("driving_licence"))
+      return "A customer with that driving licence number already exists.";
+    if (constraint.includes("civil_id"))
+      return "A customer with that Civil ID number already exists.";
+    if (constraint.includes("passport"))
+      return "A customer with that passport number already exists.";
+    return "A customer with those unique details already exists.";
+  }
+  return "Could not save customer.";
+}
 
 function revalidateCustomerPaths() {
   for (const locale of ["en", "ar"]) {
@@ -21,25 +55,34 @@ function revalidateCustomerPaths() {
 
 export async function saveCustomerAction(input: unknown, id?: string) {
   const actor = await requirePermission("customers", id ? "update" : "create");
+  if (id && !uuidSchema.safeParse(id).success)
+    return { ok: false, message: "Invalid customer identifier." };
   const parsed = customerSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the customer details." };
   const value = parsed.data;
   const databaseValue = {
     ...value,
-    email: value.email || null,
-    civilIdExpiry: value.civilIdExpiry?.toISOString().slice(0, 10),
-    passportExpiry: value.passportExpiry?.toISOString().slice(0, 10),
-    visaExpiry: value.visaExpiry?.toISOString().slice(0, 10),
+    email: value.email?.trim() || null,
+    remarks: value.remarks?.trim() || null,
+    civilIdNumber: value.civilIdNumber?.trim() || null,
+    passportNumber: value.passportNumber?.trim() || null,
+    visaNumber: value.visaNumber?.trim() || null,
+    sponsorDetails: value.sponsorDetails?.trim() || null,
+    civilIdExpiry: value.civilIdExpiry ? value.civilIdExpiry.toISOString().slice(0, 10) : null,
+    passportExpiry: value.passportExpiry ? value.passportExpiry.toISOString().slice(0, 10) : null,
+    visaExpiry: value.visaExpiry ? value.visaExpiry.toISOString().slice(0, 10) : null,
     drivingLicenceExpiry: value.drivingLicenceExpiry.toISOString().slice(0, 10),
   };
   try {
     if (id) {
-      await db.transaction(async (tx) => {
-        await tx
+      const updated = await db.transaction(async (tx) => {
+        const rows = await tx
           .update(customers)
           .set({ ...databaseValue, updatedAt: new Date() })
-          .where(eq(customers.id, id));
+          .where(eq(customers.id, id))
+          .returning({ id: customers.id });
+        if (!rows[0]) return null;
         await tx.insert(auditLogs).values({
           actorId: actor.id,
           event: "CUSTOMER_UPDATED",
@@ -47,7 +90,9 @@ export async function saveCustomerAction(input: unknown, id?: string) {
           entityId: id,
           metadata: { name: value.name, mobile: value.mobile },
         });
+        return rows[0];
       });
+      if (!updated) return { ok: false, message: "Customer not found." };
       revalidateCustomerPaths();
       return { ok: true, id, message: "Customer updated successfully." };
     }
@@ -76,10 +121,7 @@ export async function saveCustomerAction(input: unknown, id?: string) {
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error
-          ? "A customer with that mobile number already exists."
-          : "Could not save customer.",
+      message: customerUniqueErrorMessage(error),
     };
   }
 }
@@ -90,13 +132,21 @@ export async function uploadCustomerDocumentAction(
   width: number,
   height: number,
 ) {
-  await requirePermission("customers", "update");
+  const actor = await requireIdentity();
+  if (!can(actor, "customers", "update") && !can(actor, "customers", "create"))
+    throw new Error("FORBIDDEN");
   if (!uuidSchema.safeParse(customerId).success)
     return { ok: false, message: "Invalid customer identifier." };
   if (!["LICENCE_FRONT", "LICENCE_BACK", "SIGNATURE"].includes(type))
     return { ok: false, message: "Invalid document type." };
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1)
     return { ok: false, message: "The document image is invalid." };
+  const [customerExists] = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!customerExists) return { ok: false, message: "Customer not found." };
   try {
     await validateEvidencePhoto(file);
   } catch (error) {
@@ -137,7 +187,10 @@ export async function uploadCustomerDocumentAction(
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "Could not upload document.",
+      message:
+        error instanceof Error && error.name !== "DrizzleQueryError"
+          ? error.message
+          : "Could not upload document.",
     };
   }
 }
@@ -267,16 +320,18 @@ export async function unblacklistCustomerAction(id: string) {
     .where(eq(customerBlacklist.id, id))
     .limit(1);
   if (!entry) return { ok: false, message: "Blacklist entry not found." };
-  await db
-    .update(customerBlacklist)
-    .set({ isActive: false, deactivatedAt: new Date(), updatedAt: new Date() })
-    .where(eq(customerBlacklist.id, id));
-  await db.insert(auditLogs).values({
-    actorId: actor.id,
-    event: "BLACKLIST_REMOVED",
-    entityType: "customer_blacklist",
-    entityId: id,
-    metadata: { action: "BLACKLIST_REMOVED", active: false },
+  await db.transaction(async (tx) => {
+    await tx
+      .update(customerBlacklist)
+      .set({ isActive: false, deactivatedAt: new Date(), updatedAt: new Date() })
+      .where(eq(customerBlacklist.id, id));
+    await tx.insert(auditLogs).values({
+      actorId: actor.id,
+      event: "BLACKLIST_REMOVED",
+      entityType: "customer_blacklist",
+      entityId: id,
+      metadata: { action: "BLACKLIST_REMOVED", active: false },
+    });
   });
   revalidateCustomerPaths();
   return { ok: true, message: "Customer removed from the active blacklist." };
@@ -323,23 +378,89 @@ export async function getCustomerBlacklistHistoryAction(customerId: string) {
   };
 }
 export async function getCustomerDetailsAction(id: string) {
-  await requirePermission("customers", "read");
+  const actor = await requirePermission("customers", "read");
+  if (!uuidSchema.safeParse(id).success) throw new Error("Invalid customer.");
   const [customer] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
   if (!customer) throw new Error("Customer not found.");
-  const [documents, blacklist] = await Promise.all([
-    db.select().from(customerDocuments).where(eq(customerDocuments.customerId, id)),
+  const isSuper = actor.role === "SUPER_ADMIN";
+  const ledgerBranchScope = isSuper
+    ? undefined
+    : actor.branchIds.length
+      ? or(inArray(rentals.branchId, actor.branchIds), inArray(payments.branchId, actor.branchIds))
+      : sql`false`;
+  const [documents, blacklist, activeRentals, ledgerSum] = await Promise.all([
+    db
+      .select({
+        id: customerDocuments.id,
+        type: customerDocuments.type,
+        contentType: customerDocuments.contentType,
+        sizeBytes: customerDocuments.sizeBytes,
+        width: customerDocuments.width,
+        height: customerDocuments.height,
+      })
+      .from(customerDocuments)
+      .where(eq(customerDocuments.customerId, id)),
     db
       .select()
       .from(customerBlacklist)
       .where(eq(customerBlacklist.customerId, id))
       .orderBy(customerBlacklist.createdAt),
+    db
+      .select({
+        id: rentals.id,
+        agreementNumber: rentals.agreementNumber,
+        expectedReturnAt: rentals.expectedReturnAt,
+      })
+      .from(rentals)
+      .where(
+        and(
+          eq(rentals.customerId, id),
+          eq(rentals.status, "ACTIVE"),
+          isSuper
+            ? undefined
+            : actor.branchIds.length
+              ? inArray(rentals.branchId, actor.branchIds)
+              : sql`false`,
+        ),
+      ),
+    db
+      .select({
+        balance: sql<number>`coalesce(sum(${customerLedger.debitBaisa}::bigint - ${customerLedger.creditBaisa}::bigint), 0)::bigint`,
+      })
+      .from(customerLedger)
+      .leftJoin(rentals, eq(rentals.id, customerLedger.rentalId))
+      .leftJoin(payments, eq(payments.id, customerLedger.paymentId))
+      .where(and(eq(customerLedger.customerId, id), ledgerBranchScope)),
   ]);
-  return { ...customer, documents, blacklist, activeRentals: [], balance: 0 };
+  return {
+    ...customer,
+    documents,
+    blacklist,
+    activeRentals: activeRentals.map((r) => ({
+      ...r,
+      expectedReturnAt: r.expectedReturnAt.toISOString(),
+    })),
+    balance: Number(ledgerSum[0]?.balance ?? 0),
+  };
 }
 export async function setCustomerActiveAction(id: string, active: boolean) {
   const actor = await requirePermission("customers", "update");
+  if (!uuidSchema.safeParse(id).success)
+    return { ok: false, message: "Invalid customer identifier." };
   const [customer] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
   if (!customer) return { ok: false, message: "Customer not found." };
+  if (!active) {
+    const [commitment] = await db
+      .select({ id: rentals.id })
+      .from(rentals)
+      .where(and(eq(rentals.customerId, id), inArray(rentals.status, ["ACTIVE", "RESERVED"])))
+      .limit(1);
+    if (commitment)
+      return {
+        ok: false,
+        message: "Customer has an active rental or pending reservation and cannot be deactivated.",
+      };
+  }
   await db.transaction(async (tx) => {
     await tx
       .update(customers)
@@ -361,37 +482,69 @@ export async function setCustomerActiveAction(id: string, active: boolean) {
 }
 export async function deleteCustomerAction(id: string) {
   const actor = await requirePermission("customers", "delete");
+  if (!uuidSchema.safeParse(id).success)
+    return { ok: false, message: "Invalid customer identifier." };
   const [customerRow] = await db
     .select({ name: customers.name, customerNumber: customers.customerNumber })
     .from(customers)
     .where(eq(customers.id, id))
     .limit(1);
-  const [documentCounts, blacklistCounts] = await Promise.all([
+  if (!customerRow) return { ok: false, message: "Customer not found." };
+  const [
+    documentCounts,
+    blacklistCounts,
+    rentalCounts,
+    paymentCounts,
+    ledgerCounts,
+    fineCounts,
+    serviceCounts,
+    damageCounts,
+  ] = await Promise.all([
+    db.select({ n: count() }).from(customerDocuments).where(eq(customerDocuments.customerId, id)),
+    db.select({ n: count() }).from(customerBlacklist).where(eq(customerBlacklist.customerId, id)),
+    db.select({ n: count() }).from(rentals).where(eq(rentals.customerId, id)),
+    db.select({ n: count() }).from(payments).where(eq(payments.customerId, id)),
+    db.select({ n: count() }).from(customerLedger).where(eq(customerLedger.customerId, id)),
+    db.select({ n: count() }).from(financeFines).where(eq(financeFines.customerId, id)),
+    db.select({ n: count() }).from(vehicleServices).where(eq(vehicleServices.customerId, id)),
     db
-      .select({ documents: count() })
-      .from(customerDocuments)
-      .where(eq(customerDocuments.customerId, id)),
-    db
-      .select({ blacklist: count() })
-      .from(customerBlacklist)
-      .where(eq(customerBlacklist.customerId, id)),
+      .select({ n: count() })
+      .from(vehicleDamageEvidence)
+      .where(eq(vehicleDamageEvidence.customerId, id)),
   ]);
-  if ((documentCounts[0]?.documents ?? 0) || (blacklistCounts[0]?.blacklist ?? 0))
+  if (
+    (documentCounts[0]?.n ?? 0) ||
+    (blacklistCounts[0]?.n ?? 0) ||
+    (rentalCounts[0]?.n ?? 0) ||
+    (paymentCounts[0]?.n ?? 0) ||
+    (ledgerCounts[0]?.n ?? 0) ||
+    (fineCounts[0]?.n ?? 0) ||
+    (serviceCounts[0]?.n ?? 0) ||
+    (damageCounts[0]?.n ?? 0)
+  )
     return {
       ok: false,
       message:
-        "This customer has documents or blacklist history and cannot be deleted. Deactivate the customer instead.",
+        "This customer has operational, financial, document, or blacklist history and cannot be deleted. Deactivate the customer instead.",
     };
-  await db.transaction(async (tx) => {
-    await tx.delete(customers).where(eq(customers.id, id));
-    await tx.insert(auditLogs).values({
-      actorId: actor.id,
-      event: "CUSTOMER_DELETED",
-      entityType: "customer",
-      entityId: id,
-      metadata: { name: customerRow?.name, customerNumber: customerRow?.customerNumber },
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(customers).where(eq(customers.id, id));
+      await tx.insert(auditLogs).values({
+        actorId: actor.id,
+        event: "CUSTOMER_DELETED",
+        entityType: "customer",
+        entityId: id,
+        metadata: { name: customerRow.name, customerNumber: customerRow.customerNumber },
+      });
     });
-  });
+  } catch {
+    return {
+      ok: false,
+      message:
+        "This customer has linked records and cannot be deleted. Deactivate the customer instead.",
+    };
+  }
   revalidateCustomerPaths();
   return { ok: true, message: "Customer deleted successfully." };
 }

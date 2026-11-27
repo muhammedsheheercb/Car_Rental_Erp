@@ -7,6 +7,7 @@ import { getPrivateCustomerDocument } from "@/lib/r2";
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const identity = await getIdentity();
   if (!identity) return new Response("Unauthorized", { status: 401 });
+  if (identity.mustChangePassword) return new Response("Password change required", { status: 403 });
   if (!can(identity, "customers", "read")) return new Response("Forbidden", { status: 403 });
   const { id } = await context.params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))

@@ -64,11 +64,15 @@ export function VehicleActions({
   name,
   registration,
   active,
+  canUpdate = true,
+  canDelete = true,
 }: {
   id: string;
   name: string;
   registration: string;
   active: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
 }) {
   const t = useTranslations();
   const tFleet = useTranslations("fleet");
@@ -148,64 +152,70 @@ export function VehicleActions({
             <circle cx="12" cy="12" r="2.5" strokeWidth="1.8" />
           </svg>
         </button>
-        <button
-          type="button"
-          aria-label={`${tCommon("edit")} ${name}`}
-          title={tCommon("edit")}
-          onClick={() => open("edit")}
-          className="min-h-10 rounded-lg px-2 text-sm font-medium text-[var(--accent)]"
-        >
-          {tCommon("edit")}
-        </button>
-        <ConfirmDialog
-          trigger={
+        {canUpdate && (
+          <>
             <button
               type="button"
-              disabled={changingStatus}
-              className="min-h-10 rounded-lg border border-[var(--edge)] px-2 text-sm font-medium disabled:opacity-60"
+              aria-label={`${tCommon("edit")} ${name}`}
+              title={tCommon("edit")}
+              onClick={() => open("edit")}
+              className="min-h-10 rounded-lg px-2 text-sm font-medium text-[var(--accent)]"
             >
-              {changingStatus
-                ? isActive
-                  ? tCommon("deactivating")
-                  : tCommon("activating")
-                : isActive
-                  ? tCommon("deactivate")
-                  : tCommon("activate")}
+              {tCommon("edit")}
             </button>
-          }
-          title={
-            isActive
-              ? tFleet("deactivateVehicleTitle", { name })
-              : tFleet("activateVehicleTitle", { name })
-          }
-          description={
-            isActive
-              ? tFleet("deactivateVehicleDesc", { reg: registration })
-              : tFleet("activateVehicleDesc", { reg: registration })
-          }
-          confirmLabel={isActive ? tCommon("deactivate") : tCommon("activate")}
-          processingLabel={isActive ? tCommon("deactivating") : tCommon("activating")}
-          onConfirm={changeStatus}
-        />
-        <ConfirmDialog
-          trigger={
-            <button
-              type="button"
-              aria-label={`${tCommon("delete")} ${name}`}
-              title={tCommon("delete")}
-              disabled={deleting}
-              className="min-h-10 rounded-lg px-2 text-sm font-medium text-red-300 disabled:opacity-60"
-            >
-              {tCommon("delete")}
-            </button>
-          }
-          title={tFleet("deleteVehicleTitle", { name })}
-          description={tFleet("deleteVehicleDesc", { reg: registration })}
-          confirmLabel={deleting ? tCommon("deleting") : tCommon("delete")}
-          pending={deleting}
-          processingLabel={tCommon("deleting")}
-          onConfirm={remove}
-        />
+            <ConfirmDialog
+              trigger={
+                <button
+                  type="button"
+                  disabled={changingStatus}
+                  className="min-h-10 rounded-lg border border-[var(--edge)] px-2 text-sm font-medium disabled:opacity-60"
+                >
+                  {changingStatus
+                    ? isActive
+                      ? tCommon("deactivating")
+                      : tCommon("activating")
+                    : isActive
+                      ? tCommon("deactivate")
+                      : tCommon("activate")}
+                </button>
+              }
+              title={
+                isActive
+                  ? tFleet("deactivateVehicleTitle", { name })
+                  : tFleet("activateVehicleTitle", { name })
+              }
+              description={
+                isActive
+                  ? tFleet("deactivateVehicleDesc", { reg: registration })
+                  : tFleet("activateVehicleDesc", { reg: registration })
+              }
+              confirmLabel={isActive ? tCommon("deactivate") : tCommon("activate")}
+              processingLabel={isActive ? tCommon("deactivating") : tCommon("activating")}
+              onConfirm={changeStatus}
+            />
+          </>
+        )}
+        {canDelete && (
+          <ConfirmDialog
+            trigger={
+              <button
+                type="button"
+                aria-label={`${tCommon("delete")} ${name}`}
+                title={tCommon("delete")}
+                disabled={deleting}
+                className="min-h-10 rounded-lg px-2 text-sm font-medium text-red-300 disabled:opacity-60"
+              >
+                {tCommon("delete")}
+              </button>
+            }
+            title={tFleet("deleteVehicleTitle", { name })}
+            description={tFleet("deleteVehicleDesc", { reg: registration })}
+            confirmLabel={deleting ? tCommon("deleting") : tCommon("delete")}
+            pending={deleting}
+            processingLabel={tCommon("deleting")}
+            onConfirm={remove}
+          />
+        )}
       </div>
       {mode && (
         <div

@@ -1651,6 +1651,21 @@
     "Could not load blacklist history": "تعذر تحميل تاريخ القائمة السوداء.",
     "We could not add this customer to the blacklist Please retry": "تعذر إدراج العميل في القائمة السوداء. يرجى المحاولة مجدداً.",
     "We could not update this blacklist record Please retry": "تعذر تحديث سجل القائمة السوداء. يرجى المحاولة مجدداً.",
-    "During-rental evidence requires an active rental": "يتطلب تسجيل الأضرار أثناء التأجير وجود عقد إيجار نشط."
+    "During-rental evidence requires an active rental": "يتطلب تسجيل الأضرار أثناء التأجير وجود عقد إيجار نشط.",
+    "Fleet alert thresholds saved": "تم حفظ حدود تنبيهات الأسطول بنجاح.",
+    "Your current password is incorrect": "كلمة المرور الحالية غير صحيحة.",
+    "Pickup date and time cannot be in the past": "لا يمكن أن يكون تاريخ ووقت الاستلام في الماضي.",
+    "Rent rate cannot be below the vehicle's configured minimum rent": "لا يمكن أن يقل سعر الإيجار عن الحد الأدنى المحدد للمركبة.",
+    "Refund cannot be approved while the booking still has an unpaid balance": "لا يمكن اعتماد استرداد بينما لا يزال على الحجز رصيد غير مدفوع.",
+    "Approved refunds cannot exceed net payments collected for this booking": "لا يمكن أن تتجاوز الاستردادات المعتمدة صافي المدفوعات المحصّلة لهذا الحجز.",
+    "Reverse the finalized invoice before correcting a receipt": "يجب إلغاء الفاتورة المعتمدة قبل تصحيح الإيصال.",
+    "Delete or approve permission is required to void a receipt": "تتطلب عملية إلغاء الإيصال صلاحية الحذف أو الاعتماد.",
+    "Finance create permission is required to collect payment during transfer": "تتطلب عملية تحصيل الدفعة أثناء الاستبدال صلاحية إنشاء معاملات مالية.",
+    "Cannot check out early: another reservation overlaps this period": "لا يمكن تسليم المركبة مبكراً لوجود حجز آخر متداخل مع هذه الفترة.",
+    "Approval or price override permission is required to change KM allowance on an active rental": "تتطلب تعديل حد الكيلومترات لعقد نشط صلاحية الاعتماد أو تجاوز السعر.",
+    "Odometer cannot be reduced while the vehicle has an active rental": "لا يمكن تقليل قراءة العداد أثناء وجود عقد إيجار نشط للمركبة.",
+    "Vehicle branch cannot be changed while the vehicle has an active rental": "لا يمكن تغيير فرع المركبة أثناء وجود عقد إيجار نشط لها.",
+    "Vehicle is in active service or branch transfer and cannot be deactivated": "المركبة في صيانة جارية أو نقل بين الفروع ولا يمكن إلغاء تفعيلها.",
+    "Customer has an active rental or pending reservation and cannot be deactivated": "لدى العميل عقد إيجار نشط أو حجز قائم ولا يمكن إلغاء تفعيله."
   }
 }

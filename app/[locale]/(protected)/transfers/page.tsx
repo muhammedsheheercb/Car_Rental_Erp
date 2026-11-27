@@ -35,15 +35,21 @@ export default async function TransfersPage({
     getTranslations("rentals"),
     getTranslations("fieldLabels"),
   ]);
-  const rows = await bookingRows(actor);
-  const selected = rows.find((row) => row.rental.id === query.booking);
-  const filtered = rows.filter(
-    (row) =>
-      row.rental.status === "ACTIVE" &&
-      `${row.rental.agreementNumber} ${row.customer.name} ${row.vehicle.registrationNumber}`
-        .toLowerCase()
-        .includes((query.q ?? "").toLowerCase()),
-  );
+  const bookingUuid =
+    query.booking && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(query.booking)
+      ? query.booking
+      : undefined;
+  const rows = bookingUuid
+    ? await bookingRows(actor, { rentalId: bookingUuid })
+    : await bookingRows(actor, { status: "ACTIVE" });
+  const selected = bookingUuid ? rows[0] : undefined;
+  const filtered = selected
+    ? []
+    : rows.filter((row) =>
+        `${row.rental.agreementNumber} ${row.customer.name} ${row.vehicle.registrationNumber}`
+          .toLowerCase()
+          .includes((query.q ?? "").toLowerCase()),
+      );
   if (!selected)
     return (
       <div className="space-y-4">

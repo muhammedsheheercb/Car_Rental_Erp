@@ -872,9 +872,12 @@ export function resolveActivityHref(
       if (row.entityId && canRead("finance", "print")) {
         return `/${locale}/documents/receipt/${row.entityId}`;
       }
-      return canRead("finance") ? `/${locale}/finance/receipt` : null;
+      return canRead("finance") ? `/${locale}/finance/receipts` : null;
     case "fine":
-      return canRead("finance") ? `/${locale}/finance/fines` : null;
+      if (!canRead("finance")) return null;
+      return row.effectiveEvent.startsWith("LEGAL_FINE_")
+        ? `/${locale}/finance/legal-fine`
+        : `/${locale}/finance/fine`;
     case "customer":
       if (row.effectiveEvent === "CUSTOMER_DELETED") {
         return canRead("customers") ? `/${locale}/customers` : null;
